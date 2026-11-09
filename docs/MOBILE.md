@@ -15,7 +15,7 @@ an Android emulator in Expo Go, not on iOS or a physical phone. See
 - **Pair** with your server by scanning a QR code (the main way) or typing the server
   address and a pairing code. The screen lists the three steps. As you type the address the
   app asks the server's public status route, before any code is sent, whether it found a
-  server, cannot reach it, was refused, got something that is not a Suparagent server, or
+  server, cannot reach it, was refused, got something that is not a Chief of Noumenon server, or
   reached one with no owner account yet; Connect stays available either way. After pairing the
   list says once which server this is and what the phone can and cannot do, until you dismiss
   it. A list that cannot load has a Try again button.
@@ -124,7 +124,7 @@ in **Settings → Devices**; the app notices and returns to pairing.
 | That code is wrong, expired or already used | Create a new chat-only code. |
 | Too many wrong codes from this network | Wait the time shown; ten wrong codes lock an address out for ten minutes. |
 | Your server does not accept this address | Add the name to `TRUSTED_HOSTS` on the server. |
-| That address answered, but it does not look like an Open Duet server | Check the address and any proxy in front of it. |
+| That address answered, but it does not look like an Chief of Noumenon server | Check the address and any proxy in front of it. |
 | Could not reach the server | Check the connection and that the HTTPS certificate is trusted by the phone. |
 | This app only connects over HTTPS | Use the server's HTTPS address. |
 | That code gives full access | Create a code with Access set to **Chat only** or **Chat and files**. |

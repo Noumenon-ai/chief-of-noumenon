@@ -22,7 +22,7 @@ function whenLabel(iso: string, translate: (key: string, params?: Record<string,
 export type RowActions = {
   onRename: (id: number, title: string) => void;
   onArchive: (id: number, archived: boolean) => void;
-  onDelete: (id: number) => void;
+  onDelete?: (id: number) => void;
 };
 
 // One conversation in the Recent list: the agent's avatar, the title, when it last moved, and
@@ -74,7 +74,7 @@ export function ThreadRow({
         <p className="font-medium">{t("sidebar.deleteTitle")}</p>
         <p className="text-xs text-muted">{t("sidebar.deleteBody")}</p>
         <div className="flex gap-2">
-          <Button size="sm" variant="danger" onClick={() => { setConfirming(false); actions.onDelete(thread.id); }}>
+          <Button size="sm" variant="danger" onClick={() => { setConfirming(false); actions.onDelete?.(thread.id); }}>
             {t("common.delete")}
           </Button>
           <Button size="sm" onClick={() => setConfirming(false)}>{t("common.cancel")}</Button>
@@ -162,8 +162,8 @@ export function ThreadRow({
           >
             {archived ? t("sidebar.unarchive") : t("sidebar.archive")}
           </MenuItem>
-          <MenuSeparator />
-          <MenuItem onSelect={() => setConfirming(true)} danger icon={<Trash2 size={14} />}>{t("sidebar.deleteAsk")}</MenuItem>
+          {actions.onDelete && <><MenuSeparator />
+          <MenuItem onSelect={() => setConfirming(true)} danger icon={<Trash2 size={14} />}>{t("sidebar.deleteAsk")}</MenuItem></>}
         </Menu>
       </div>
     </li>

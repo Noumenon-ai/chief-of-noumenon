@@ -19,7 +19,7 @@ const subscribe = (listener: () => void) => {
   return () => void listeners.delete(listener);
 };
 const snapshot = (): ThemeChoice => parseChoice(document.documentElement.dataset.themeChoice);
-const serverSnapshot = (): ThemeChoice => "system";
+const serverSnapshot = (): ThemeChoice => "light";
 
 // System / Light / Dark. The choice is remembered in this browser only; when it is "system"
 // the page follows the operating system live.

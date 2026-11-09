@@ -23,7 +23,7 @@ export function StatusDot({ status, unread = false, className }: { status: RowSt
         role="status"
         aria-label={label}
         title={label}
-        className={cn("inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-warning text-[11px] font-black leading-none text-app", className)}
+        className={cn("inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-signal text-[11px] font-black leading-none text-signal-fg", className)}
       >
         <span aria-hidden="true">!</span>
       </span>
@@ -36,7 +36,7 @@ export function StatusDot({ status, unread = false, className }: { status: RowSt
       title={label}
       className={cn(
         "inline-block size-2.5 shrink-0 rounded-full",
-        status === "working" ? "animate-pulse bg-success" : status === "unread" ? "bg-accent" : "bg-faint",
+        status === "working" ? "animate-pulse bg-ink" : status === "unread" ? "bg-accent" : "bg-faint",
         className,
       )}
     />

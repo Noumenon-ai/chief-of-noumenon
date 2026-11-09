@@ -1,5 +1,7 @@
 "use client";
 
+import { identityVar } from "@/lib/identity";
+
 import { Select } from "@/components/ui/Select";
 
 import { useCallback, useEffect, useId, useState } from "react";
@@ -77,12 +79,11 @@ function DockerComputerView({
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [limits, setLimits] = useState<Limits | null>(null);
-  const [kind, setKind] = useState<ComputerKind>("shell");
+  const [kind, setKind] = useState<ComputerKind>("desktop");
   const [advanced, setAdvanced] = useState(false);
-  const [network, setNetwork] = useState<ComputerNetwork>("none");
-  const [provider, setProvider] = useState<"docker" | "boat">("docker");
-  const [boatConfigured, setBoatConfigured] = useState<boolean | null>(null);
-  const [boatKey, setBoatKey] = useState("");
+  const [network, setNetwork] = useState<ComputerNetwork>("default");
+  const provider = "docker";
+  const [buildProgress, setBuildProgress] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -91,7 +92,13 @@ function DockerComputerView({
 
   const load = useCallback(async () => {
     try {
-      const computer = await api.getAgentComputer(agent.id);
+      const computers = await api.listComputers();
+      const computer = computers.find(item => item.agent_id === agent.id);
+      if (!computer) {
+        const health = await api.computersHealth().catch(() => null);
+        setPhase({ kind: "none", health });
+        return;
+      }
       setPhase({ kind: "ready", computer });
       setLimits((current) => current ?? limitsOf(computer));
     } catch (err) {
@@ -115,17 +122,6 @@ function DockerComputerView({
     return () => clearInterval(timer);
   }, [load]);
 
-  useEffect(() => {
-    if (phase.kind !== "none" || phase.health?.hosted) return;
-    let active = true;
-    void api.boatCredentialStatus().then((result) => {
-      if (active) setBoatConfigured(result.configured);
-    }).catch(() => {
-      if (active) setBoatConfigured(false);
-    });
-    return () => { active = false; };
-  }, [phase.kind, phase.kind === "none" ? phase.health?.hosted : false]);
-
   const act = async (action: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
@@ -147,9 +143,9 @@ function DockerComputerView({
     }
   };
 
-  if (phase.kind === "loading") return <p className="text-sm text-muted">Loading the computer…</p>;
+  if (phase.kind === "loading") return error ? <div role="alert"><p className="text-danger">{error}</p><button className={SMALL} onClick={() => void load()}>Try again</button></div> : <p role="status" className="text-sm text-muted">Reading the computer…</p>;
   if (phase.kind === "unsupported")
-    return <p className="text-sm text-muted">This backend does not offer computers yet. Update it to give agents their own computer.</p>;
+    return <p className="text-sm text-muted">This backend does not offer computers yet. Update it to give bots their own computer.</p>;
 
   const alert = error && (
     <p role="alert" className="text-sm text-danger">
@@ -171,53 +167,19 @@ function DockerComputerView({
     return (
       <div className="space-y-3 text-sm">
         {alert}
+        <svg className="computer-drawing" viewBox="0 0 120 88" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: identityVar(agent.id) }} aria-hidden="true">
+          <rect x="10" y="8" width="100" height="62" rx="7" />
+          <path d="M10 57h100M48 70v10m24-10v10M36 80h48M26 26h24m-24 9h40" />
+        </svg>
         <p className="text-muted">
-          {agent.name} can use an isolated computer. Choose where it runs; computer calls follow the agent&apos;s approval mode and any applicable saved rule.
+          Give {agent.name} a computer with a browser. The bot will still ask when your approval is needed.
         </p>
-        <fieldset className="space-y-1">
-          <legend className="text-xs text-muted">Location</legend>
-          <label className="mr-4 inline-flex items-center gap-2">
-            <input type="radio" name="computer-provider" checked={provider === "docker"} onChange={() => setProvider("docker")} />
-            Local
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <input type="radio" name="computer-provider" checked={provider === "boat"} onChange={() => setProvider("boat")} />
-            Cloud
-          </label>
-        </fieldset>
-        {provider === "docker" && docker && !docker.available && (
-          <p className="text-warning">Docker is not available: {docker.error}</p>
-        )}
-        {provider === "docker" ? (
-          <p className="text-xs text-muted">Local uses an isolated Docker computer on this machine. Only its workspace folder is shared with the agent.</p>
-        ) : (
-          <div className="space-y-2 rounded-md border border-line p-3">
-            <p className="text-xs text-muted">Cloud computers run in your Boat account, have internet access, and may incur usage charges. They auto-archive one hour after creation or resume; an agent can resume one on a later turn when auto-start is enabled. Commands and files go to the cloud computer; screenshots can be returned to the selected engine. Its files are not synced with this machine&apos;s workspace. The API key is encrypted in this Desktop profile and sent by the local backend only to authenticate Boat API requests over HTTPS; it is not sent to the agent or cloud computer.</p>
-            {boatConfigured ? (
-              <p className="text-xs text-muted">Boat API key saved on this device. Enter a new key to replace it.</p>
-            ) : (
-              <p className="text-xs text-muted">Add a Boat API key to enable cloud computers.</p>
-            )}
-            <form className="flex flex-wrap gap-2" onSubmit={async (event) => {
-              event.preventDefault();
-              if (!boatKey.trim()) return;
-              setBusy(true); setError(null);
-              try {
-                await api.saveBoatCredential(boatKey.trim());
-                setBoatConfigured(true); setBoatKey("");
-              } catch (err) { setError(errorText(err)); }
-              finally { setBusy(false); }
-            }}>
-              <input type="password" autoComplete="off" spellCheck={false} aria-label="Boat API key" placeholder="Boat API key" value={boatKey} onChange={(event) => setBoatKey(event.target.value)} className={`${FIELD} min-w-48 flex-1`} />
-              <button type="submit" disabled={busy || !boatKey.trim()} className={SMALL}>Save key on this device</button>
-            </form>
-            {boatConfigured && <button type="button" disabled={busy} className={SMALL} onClick={() => void act(async () => {
-              await api.deleteBoatCredential();
-              setBoatConfigured(false);
-              setBoatKey("");
-            })}>Remove saved key</button>}
-          </div>
-        )}
+        {docker && !docker.available && <p className="text-warning">Docker is not available: {docker.error}</p>}
+        <button className={PRIMARY} disabled={busy || !createGate.enabled || !docker?.available} title={!createGate.enabled ? createGate.reason ?? undefined : !docker?.available ? "Docker must be available first." : undefined} onClick={() => void act(() => api.createAgentComputer(agent.id, { provider: "docker", kind: "desktop", network: "default", browser_enabled: true, start: true }))}>{busy ? "Setting up…" : "Set up a computer"}</button>
+        {!createGate.enabled && <p className="text-xs text-muted">{createGate.reason}</p>}
+        <details className="computer-setup">
+          <summary>Advanced</summary>
+        <p className="text-xs text-muted">This computer runs separately from the rest of your machine. Only this bot’s files are shared with it.</p>
         <fieldset className="space-y-1">
           <legend className="text-xs text-muted">Computer</legend>
           {(["shell", "desktop"] as const).map((value) => (
@@ -226,8 +188,7 @@ function DockerComputerView({
               {value === "shell" ? "Shell only" : "Desktop"}
             </label>
           ))}
-          {kind === "desktop" && provider === "docker" && <p className="text-xs text-muted">Linux desktop with a browser. Build the image locally first; see desktop-image/README.md. The first build downloads several hundred MB.</p>}
-          {kind === "desktop" && provider === "boat" && <p className="text-xs text-muted">Cloud Linux desktop. The first start provisions a remote desktop and installs its screen-control tools. The live view uses a secret provider link that Open Dots clears when you hand control back; the provider does not expose a link revocation control.</p>}
+          {kind === "desktop" && provider === "docker" && <p className="text-xs text-muted">Linux desktop with a browser. If the image is missing, build it here after giving the bot a computer. The first build downloads several hundred MB.</p>}
         </fieldset>
         {provider === "docker" && <fieldset className="space-y-1">
           <legend className="text-xs text-muted">Network</legend>
@@ -247,13 +208,14 @@ function DockerComputerView({
           </p>
         )}
         <button
-          disabled={busy || !createGate.enabled || (provider === "boat" && !boatConfigured)}
+          disabled={busy || !createGate.enabled}
           aria-describedby={!createGate.enabled ? capabilityHelpId : undefined}
           className={PRIMARY}
-          onClick={() => act(() => api.createAgentComputer(agent.id, { provider, ...(provider === "docker" ? { network } : {}), kind }))}
+          onClick={() => act(() => api.createAgentComputer(agent.id, { provider, ...(provider === "docker" ? { network, browser_enabled: kind === "desktop" } : {}), kind, start: provider === "docker" }))}
         >
           {busy ? "Working…" : "Give it a computer"}
         </button>
+        </details>
       </div>
     );
   }
@@ -278,22 +240,39 @@ function DockerComputerView({
   return (
     <div className="space-y-3 text-sm">
       {alert}
-      {computer.kind === "desktop" && <><DesktopPicture computer={computer} />{computer.provider === "boat" ? <BoatDesktop computerId={computer.id} /> : <LiveDesktop computerId={computer.id} />}</>}
+      <p className="text-xs text-muted">Blocking an app does not block its website. Sessions signed in on this bot&apos;s computer are available to this bot. Sign in by hand; never send passwords in chat.</p>
+      {computer.provider === "docker" && computer.kind === "desktop" && computer.image === "open-dots-desktop:local" && /image.*(missing|not)|build bundled desktop image/i.test(`${computer.problem ?? ""} ${computer.last_error ?? ""}`) && (
+        <div className="space-y-2">
+          <button className={SMALL} disabled={busy} onClick={() => void act(async () => {
+            let progress = await api.buildComputerImage(computer.id);
+            setBuildProgress(progress.output);
+            while (progress.status === "building") {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              progress = await api.computerImageProgress(computer.id);
+              setBuildProgress(progress.output);
+            }
+            if (progress.status !== "succeeded") throw new Error("Desktop image build failed. Review the build output and retry.");
+            return api.computerAction(computer.id, "start");
+          })}>{busy && buildProgress ? "Building desktop image…" : "Build bundled desktop image"}</button>
+          {buildProgress && <pre role="status" className="max-h-40 overflow-auto whitespace-pre-wrap text-xs">{buildProgress}</pre>}
+        </div>
+      )}
+      {computer.kind === "desktop" && <><DesktopPicture computer={computer} onStart={actions.includes("start") ? () => void run("start") : undefined} busy={busy} />{computer.provider === "boat" ? <BoatDesktop computerId={computer.id} running={state === "running"} /> : <LiveDesktop computerId={computer.id} running={state === "running"} />}</>}
       <div className="rounded-md border border-line p-3">
         <p className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{computerStateLabel(state)}</span>
           {computer.screen_busy && <span role="status" className="text-xs text-muted">A conversation is using the screen. Other chats must wait, then take a fresh screenshot. Refused input is never queued.</span>}
           {computer.busy && <span className="rounded bg-hover px-1.5 text-xs">in use by a turn</span>}
-          {computer.provider === "docker" && <span className="font-mono text-xs text-muted" title={computer.image}>
+          {advanced && computer.provider === "docker" && <span className="font-mono text-xs text-muted" title={computer.image}>
             {imageLabel(computer.image)}
             {computer.image_pinned ? " · pinned" : " · not pinned"}
           </span>}
         </p>
-        <p className="mt-1 text-xs text-muted">
+        {advanced && <p className="mt-1 text-xs text-muted">
           {computer.provider === "boat" ? "Cloud · Internet enabled · auto-archives after 1 hour · resources managed by provider" : `${computer.provider} · ${NETWORK_MODES.find((m) => m.value === computer.network)?.label ?? computer.network} · ${limitsText(computer)}`}
           {computer.idle_minutes > 0 ? ` · stops after ${computer.idle_minutes} idle min` : " · never stops on its own"}
-        </p>
-        {computer.workspace_path && (
+        </p>}
+        {advanced && computer.workspace_path && (
           <p className="mt-1 truncate text-xs text-muted" title={computer.workspace_path}>
             {computer.workspace_path} → {computer.guest_workspace}
           </p>
@@ -407,7 +386,7 @@ function DockerComputerView({
       <div className="border-t border-line pt-3">
         {confirmRemove ? (
           <p className="flex flex-wrap items-center gap-2 text-xs">
-            {computer.provider === "boat" ? "Permanently remove the cloud computer and its provider data? Boat deletion runs in the background while Open Dots waits for confirmation." : "Remove the computer? Everything inside it is lost; the workspace folder stays."} {agent.name} then works on this machine again.
+            {computer.provider === "boat" ? "Permanently remove the cloud computer and its provider data? Boat deletion runs in the background while Chief of Noumenon waits for confirmation." : "Remove the computer? Everything inside it is lost; the workspace folder stays."} {agent.name} then works on this machine again.
             <button disabled={busy} className={SMALL} onClick={() => act(() => api.deleteComputer(computer.id)).then(() => setConfirmRemove(false))}>
               Remove
             </button>

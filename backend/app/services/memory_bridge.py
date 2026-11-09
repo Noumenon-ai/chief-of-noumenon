@@ -101,7 +101,7 @@ class MemoryBridge:
             if path.stat().st_size > 16_000:
                 result = {"error": "The request is too large."}
             else:
-                request = json.loads(path.read_text(encoding="utf-8"))
+                request = await asyncio.to_thread(lambda: json.loads(path.read_text(encoding="utf-8")))
                 name, args = request["name"], request["arguments"]
                 if not isinstance(name, str) or not isinstance(args, dict):
                     raise ValueError("invalid")
@@ -111,7 +111,7 @@ class MemoryBridge:
             result = {"error": "The search could not be completed."}
         response = self.folder / path.name.replace("req-", "resp-").replace(".working", ".json")
         tmp = response.with_suffix(".tmp")
-        tmp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+        await asyncio.to_thread(lambda: tmp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8"))
         os.replace(tmp, response)
         path.unlink(missing_ok=True)
 

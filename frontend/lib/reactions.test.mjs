@@ -88,3 +88,18 @@ test("loadThreadReactions and saveThreadReaction handle mock localStorage and to
   }
 });
 
+
+
+test("blocked localStorage getter does not break chat", () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    get localStorage() { throw new Error("Storage blocked"); },
+  } });
+  try {
+    assert.deepEqual(loadThreadReactions(1), {});
+    assert.deepEqual(saveThreadReaction(1, "message", "thumbs_up"), { message: "thumbs_up" });
+  } finally {
+    if (previous) Object.defineProperty(globalThis, "window", previous);
+    else delete globalThis.window;
+  }
+});

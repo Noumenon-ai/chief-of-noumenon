@@ -10,10 +10,10 @@ function memoryStorage(initial = {}) {
 const blocked = () => { throw new Error("storage blocked"); };
 const fakeDoc = () => ({ documentElement: { dataset: {}, style: {} } });
 
-test("anything but light or dark means follow the system", () => {
+test("the default is light; explicit system still follows the system", () => {
   assert.equal(parseChoice("light"), "light");
   assert.equal(parseChoice("dark"), "dark");
-  for (const raw of [null, undefined, "", "system", "blue", 3]) assert.equal(parseChoice(raw), "system");
+  for (const raw of [null, undefined, "", "blue", 3]) assert.equal(parseChoice(raw), "light");
 });
 
 test("system resolves by the operating system, a fixed choice never does", () => {
@@ -23,20 +23,20 @@ test("system resolves by the operating system, a fixed choice never does", () =>
   assert.equal(resolveTheme("dark", false), "dark");
 });
 
-test("the choice is remembered, and system clears it", () => {
+test("all three choices are remembered", () => {
   const store = memoryStorage();
   assert.equal(writeChoice(() => store, "dark"), true);
   assert.equal(store.map.get(THEME_KEY), "dark");
   assert.equal(readChoice(() => store), "dark");
   writeChoice(() => store, "system");
-  assert.equal(store.map.has(THEME_KEY), false);
+  assert.equal(store.map.get(THEME_KEY), "system");
 });
 
-test("blocked storage still works: reads say system, writes report failure", () => {
-  assert.equal(readChoice(blocked), "system");
+test("blocked storage still works: reads say light, writes report failure", () => {
+  assert.equal(readChoice(blocked), "light");
   assert.equal(writeChoice(blocked, "dark"), false);
   const store = { getItem: blocked, setItem: blocked, removeItem: blocked };
-  assert.equal(readChoice(() => store), "system");
+  assert.equal(readChoice(() => store), "light");
   assert.equal(writeChoice(() => store, "light"), false);
 });
 
@@ -60,7 +60,7 @@ test("the pre-paint script gives the same result as applyTheme", () => {
         };
         vm.runInNewContext(THEME_INIT_SCRIPT, sandbox);
         const expected = fakeDoc();
-        applyTheme(expected, storageBroken ? "system" : parseChoice(value), systemDark);
+        applyTheme(expected, storageBroken ? "light" : parseChoice(value), systemDark);
         const label = `${value} dark=${systemDark} broken=${storageBroken}`;
         assert.deepEqual({ ...doc.documentElement.dataset }, { ...expected.documentElement.dataset }, label);
         assert.equal(doc.documentElement.style.colorScheme, expected.documentElement.style.colorScheme, label);

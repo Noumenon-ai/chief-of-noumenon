@@ -812,7 +812,7 @@ async def import_agent(payload: AgentImportRequest, rt: ThreadRuntime = Depends(
 async def preview_openbot_database(file: UploadFile = File(...)):
     """Read the local OpenBot database and return normalized agent fields for review."""
     if settings.HOST_EXECUTION_DISABLED:
-        raise _error(403, "openbot_import_unavailable", "OpenBot migration is available only in the local Open Dots app.")
+        raise _error(403, "openbot_import_unavailable", "OpenBot migration is available only in the local Chief of Noumenon app.")
     try:
         data = await file.read(openbot_database_import.MAX_SOURCE_DATABASE_BYTES + 1)
     finally:

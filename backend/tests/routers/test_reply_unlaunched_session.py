@@ -97,12 +97,11 @@ def boat_api():
 async def test_reply_uses_existing_remote_session_only(
     db_session, user_id, monkeypatch, boat_api, parent_launched
 ):
-    async def save_credential():
-        await user_credential_service.save_token(
-            db_session, user_id=user_id, provider="claude",
-            file_path=".claude/.credentials.json",
-            plaintext=json.dumps({"claudeAiOauth": {"expiresAt": 1}}),
-        )
+    from app.services import task_execution_service
+    from boat_sdk.exceptions import ApiException
+    original_ensure = task_execution_service._ensure_box_running
+    async def unavailable(box_id):
+        raise ApiException(status=503, reason="synthetic startup failure")
 
     base_url, state = boat_api
     monkeypatch.setattr(settings, "BOAT_BASE_URL", base_url)
@@ -116,8 +115,8 @@ async def test_reply_uses_existing_remote_session_only(
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://owned"
     ) as client:
-        if parent_launched:
-            await save_credential()
+        if not parent_launched:
+            monkeypatch.setattr(task_execution_service, "_ensure_box_running", unavailable)
         parent_response = await client.post("/api/v1/tasks", json=request)
         parent = (await db_session.execute(
             select(Tasks).where(Tasks.user_id == user_id)
@@ -128,11 +127,11 @@ async def test_reply_uses_existing_remote_session_only(
             assert completed.json()["status"] == "succeeded"
             assert state["launches"] == 1
         else:
-            assert parent_response.status_code == 400
+            assert parent_response.status_code == 502
             assert parent.status == "failed"
             assert parent.prompt_id is None
             assert state["launches"] == 0
-            await save_credential()
+            monkeypatch.setattr(task_execution_service, "_ensure_box_running", original_ensure)
         reply = await client.post("/api/v1/tasks", json={
             **request, "prompt_text": "continue report", "parent_task_id": parent.id,
         })

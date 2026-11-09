@@ -11,6 +11,9 @@ import {
 } from "./settings-registry.ts";
 
 const pageMarkupFiles = [
+  "../components/settings/DaySettings.tsx",
+  "../components/settings/AdvancedSettings.tsx",
+  "../components/settings/PhoneSettings.tsx",
   "../components/settings/GeneralSettings.tsx",
   "../components/settings/ProfileSettings.tsx",
   "../components/settings/EnginesSettings.tsx",

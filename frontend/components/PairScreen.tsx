@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { withBase } from "@/lib/paths";
@@ -19,13 +19,24 @@ export function PairScreen() {
   const [busy, setBusy] = useState(false);
   const [paired, setPaired] = useState(false);
 
+  const attempted = useRef(false);
   useEffect(() => {
+    if (attempted.current) return;
+    attempted.current = true;
     const fromLink = pairingCodeFromHash(window.location.hash);
     if (fromLink) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCode(fromLink);
       // Out of the address bar and history once read.
       window.history.replaceState(null, "", window.location.pathname);
+      setBusy(true);
+      auth.pair(fromLink, "My phone").then(() => {
+        setPaired(true);
+        window.location.replace(withBase("/chat/"));
+      }).catch(err => {
+        setError(err instanceof Error ? err.message : "Could not sign in. Make a new code on your computer.");
+        setBusy(false);
+      });
     }
   }, []);
 
@@ -44,7 +55,7 @@ export function PairScreen() {
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-inset px-4">
+    <div className="flex min-h-dvh items-center justify-center bg-app px-4">
       <main className="w-full max-w-sm space-y-5 rounded-card border border-line bg-raised p-6 shadow-(--shadow-card)">
         <h1 className="text-title font-semibold">Pair this browser</h1>
         <p className="text-sm text-muted">Enter the code shown in Settings → Account & privacy → Devices on a signed-in browser. Codes work once and expire after five minutes.</p>
@@ -65,7 +76,7 @@ export function PairScreen() {
             <Button type="submit" variant="primary" className="w-full" loading={busy} disabled={!code.trim()}>{busy ? "Pairing…" : "Pair"}</Button>
           </form>
         )}
-        <p className="text-xs text-muted">Are you the owner? <Link href="/login/" className="underline">Sign in with the passphrase</Link>.</p>
+        <p className="text-xs text-muted">Have the sign-in code from installation? <Link href="/login/" className="underline">Use that code instead</Link>.</p>
       </main>
     </div>
   );

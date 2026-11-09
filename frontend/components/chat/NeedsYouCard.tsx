@@ -6,7 +6,7 @@ const SOURCE_STATUS: Record<string, string> = {
   available: "checked", quiet: "checked; no matching records",
   partial: "partial snapshot; more records or unreadable items may exist",
   failed: "check failed; contents unknown",
-  unavailable: "unavailable; check the lead’s app access and connected account",
+  unavailable: "not connected",
 };
 
 // A current Today snapshot, shown in the brief panel and in the lead's chat.
@@ -47,7 +47,7 @@ export function NeedsYouCard({ item }: { item: NeedsYouItem }) {
       {item.checkedAt && <p className="text-xs text-muted">Updated <time dateTime={item.checkedAt}>{new Date(item.checkedAt).toLocaleString(undefined, { timeZone: item.timeZone || "UTC" })}</time>{item.timeZone && ` (${item.timeZone})`}</p>}
       {item.providerCheckedAt && <p className="text-xs text-muted">Apps last checked <time dateTime={item.providerCheckedAt}>{new Date(item.providerCheckedAt).toLocaleString(undefined, { timeZone: item.timeZone || "UTC" })}</time> · Refreshes at most every 5 minutes.</p>}
       {(["calendar", "gmail"] as const).map((source) => item.sources?.[source] && <p key={source} className="text-xs text-muted">
-        {source === "gmail" ? "Gmail inbox (last 7 days)" : "Primary calendar (today)"}: {SOURCE_STATUS[item.sources[source]] || "unknown"}.
+        {item.sources[source] === "unavailable" ? <>{source === "gmail" ? "Gmail not connected" : "Calendar not connected"}. <Link href="/apps/" className="underline">Connect in Apps</Link></> : <>{source === "gmail" ? "Gmail inbox (last 7 days)" : "Calendar today"}: {SOURCE_STATUS[item.sources[source]] || "unknown"}.</>}
       </p>)}
     </section>
   );

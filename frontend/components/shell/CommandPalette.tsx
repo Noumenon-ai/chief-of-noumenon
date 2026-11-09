@@ -60,8 +60,8 @@ export function CommandPalette({
       list.push({
         id: `setting-${entry.id}`,
         group: t("palette.settings"),
-        label: `${t("palette.settings")}: ${entry.title}`,
-        hint: page ? `${page.label} · ${entry.section}` : entry.section,
+        label: entry.title,
+        hint: page && page.label !== entry.title ? page.label : undefined,
         keywords: entry.keywords,
         icon: <Settings size={16} />,
         run: go(() => {
@@ -84,7 +84,7 @@ export function CommandPalette({
         run: go(() => router.push(`/chat?thread=${thread.id}`)),
       });
     }
-    return list;
+    return list.sort((a, b) => Number(a.id.startsWith("setting-")) - Number(b.id.startsWith("setting-")));
   }, [agents, threads, onNewChat, router, t]);
 
   const results = useMemo(() => {
@@ -95,7 +95,7 @@ export function CommandPalette({
     if (found.length <= MAX_RESULTS) return found;
     const settingCommands = found.filter((command) => command.group === t("palette.settings"));
     const otherCommands = found.filter((command) => command.group !== t("palette.settings")).slice(0, MAX_RESULTS);
-    return [...settingCommands, ...otherCommands];
+    return [...otherCommands, ...settingCommands].slice(0, MAX_RESULTS);
   }, [commands, query, t]);
 
   const current = Math.min(active, Math.max(results.length - 1, 0));

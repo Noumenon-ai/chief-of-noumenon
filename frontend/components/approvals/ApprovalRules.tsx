@@ -109,7 +109,7 @@ export function ApprovalRules({
             <li key={rule.id} className="flex items-start gap-3 px-3 py-2">
               <div className="min-w-0 flex-1">
                 <p className="break-all font-mono text-xs">{rule.command}</p>
-                <p className="mt-0.5 break-all text-xs text-muted">
+                <p title={rule.workspace ?? undefined} className="mt-0.5 break-all text-xs text-muted">
                   {ruleMatchLabel(rule)} · {ruleScopeLabel(rule)}
                 </p>
               </div>
@@ -148,6 +148,7 @@ export function ApprovalRules({
             autoComplete="off"
           />
         </div>
+        <details><summary className="cursor-pointer text-sm">Advanced: folder for this rule</summary>
         <input
           aria-label={t("approvals.folder")}
           className={`${FIELD} font-mono`}
@@ -157,6 +158,7 @@ export function ApprovalRules({
           spellCheck={false}
           autoComplete="off"
         />
+        </details>
         <SaveBar
           dirty={dirty}
           saving={busy}

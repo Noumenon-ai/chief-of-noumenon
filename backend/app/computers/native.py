@@ -19,6 +19,12 @@ from app.desktop import profile
 
 
 def durable_input(tool: str, value: dict) -> dict:
+    if tool.startswith("mcp__team__"):
+        from app.services.chat_card_schema import TOOLS
+        if tool.removeprefix("mcp__team__") in TOOLS:
+            from app.services.connector_service import safe
+            from app.services.agent_memory import redact_secrets
+            return json.loads(redact_secrets(json.dumps(safe(value)))[0])
     if tool.startswith("mcp__computer__native_"):
         # Tool arguments may contain typed secrets or accessibility labels.
         return {key: (item if key in ("pid", "window_id", "x", "y", "direction", "button", "count") else "[redacted]") for key, item in value.items()}

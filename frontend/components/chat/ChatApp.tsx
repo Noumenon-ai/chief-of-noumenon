@@ -1,10 +1,11 @@
 "use client";
+import { channelOrder, engineName, previewText } from "@/lib/control-room";
 
 import Link from "next/link";
-import { RefreshCw } from "lucide-react";
+import { Monitor, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, isLaunchTokenMissing, type Agent, type Engine, type LocalStatus, type Thread } from "@/lib/api";
+import { api, request, ApiError, isLaunchTokenMissing, type Agent, type Engine, type LocalStatus, type Thread } from "@/lib/api";
 import { activeAgents, approvalModeLabel, modelLabel } from "@/lib/agents";
 import { pendingApprovals, type NeedsYouItem } from "@/lib/transcript";
 import { attachmentProblem, conversationUsage, formatCost, formatTokens, MAX_ATTACHMENTS } from "@/lib/everyday";
@@ -14,10 +15,10 @@ import { SkillsPanel } from "./SkillsPanel";
 import { Inspector } from "@/components/shell/Inspector";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { computerPanelOpen, readComputerPanel, writeComputerPanel } from "@/lib/computer-panel";
 import { computerChip } from "@/lib/computers";
 import { AgentsPanel } from "./AgentsPanel";
 import { NotificationBell } from "./NotificationBell";
-import { LanguageSelect } from "@/components/settings/LanguageSelect";
 import { RoutinesPanel } from "./RoutinesPanel";
 import { PlannerPanel } from "./PlannerPanel";
 import { EngineModelFields } from "./EngineModelFields";
@@ -31,7 +32,11 @@ import { ChatHeader } from "./ChatHeader";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Drawer } from "@/components/ui/Drawer";
-import { SIDEBAR_AND_PANEL_FIT, SIDEBAR_INLINE, useMediaQuery } from "@/lib/use-media-query";
+import { useMediaQuery } from "@/lib/use-media-query";
+import { agentTarget } from "@/lib/sidebar";
+import { BotRail } from "@/components/shell/BotRail";
+import { ComputerThumbnail } from "./ComputerThumbnail";
+import { useChannelSnapshots } from "./useChannelSnapshots";
 import { useT } from "@/lib/use-i18n";
 import { reportPresence } from "@/lib/presence";
 import { readCachedPreference, resolveEngineModel, writeCachedPreference } from "@/lib/engine-selection";
@@ -67,7 +72,7 @@ function manageErrorText(err: unknown): string {
     if (err.code === "turn_running") return "Stop the running answer first.";
     return err.message || "That did not work.";
   }
-  return "Could not reach the backend.";
+  return "Could not reach the app on your computer. Check that it is running and try again.";
 }
 
 // Says what went wrong in words a person can act on.
@@ -84,7 +89,7 @@ function sendErrorText(err: unknown): string {
       return "The engine can no longer find this conversation. Start a new session to continue.";
     return err.message || "Could not send the message.";
   }
-  return "Could not reach the backend.";
+  return "Could not reach the app on your computer. Check that it is running and try again.";
 }
 
 function Notice({
@@ -132,18 +137,20 @@ export function ChatApp() {
   const [teamState, setTeamState] = useState<TeamState | null>(null);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
   const { session } = useSession();
+  const admin = session?.scopes.includes("admin") === true;
+  const canReadFiles = admin || session?.scopes.includes("files") === true;
 
   const [gate, setGate] = useState<Gate>({ phase: "loading" });
   // Bumped by "Check again": Claude may have been installed or signed in since.
   const [statusTick, setStatusTick] = useState(0);
   const [threads, setThreads] = useState<Thread[] | null>(null);
+  const channelSnapshots = useChannelSnapshots(threads);
   const [openedThread, setOpenedThread] = useState<Thread | null>(null);
   // Bumped to ask for a fresh thread list (after a send, a reset, a poll).
   const [listTick, setListTick] = useState(0);
   // Below the sidebar breakpoint the conversation list is a drawer.
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const sidebarInline = useMediaQuery(SIDEBAR_INLINE);
-  const inspectorInline = useMediaQuery(SIDEBAR_AND_PANEL_FIT);
+  const computerInline = useMediaQuery("(min-width: 721px)");
   // The right-hand inspector page, kept in the address (?panel=usage) so a reload reopens it.
   const panel = parsePanel(params.get("panel"));
   const setPanel = (next: Panel | null) => router.replace(chatHref(params.toString(), next));
@@ -151,6 +158,7 @@ export function ChatApp() {
   const [sending, setSending] = useState(false);
   const [focusComposer, setFocusComposer] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const answeringNow = useRef(false);
   const [answering, setAnswering] = useState<string | null>(null);
   const [approvalErrors, setApprovalErrors] = useState<Record<string, string>>({});
   const [resetting, setResetting] = useState(false);
@@ -200,7 +208,7 @@ export function ChatApp() {
   const [audioUrl, setAudioUrl] = useState("");
   const [audioConsent, setAudioConsent] = useState(false);
   const [audioCapability, setAudioCapability] = useState<{ provider_label: string; available: boolean; retention: string } | null>(null);
-  useEffect(() => { api.audioCapabilities().then(setAudioCapability).catch(() => setAudioCapability(null)); }, []);
+  useEffect(() => { if (!admin) return; api.audioCapabilities().then(setAudioCapability).catch(() => setAudioCapability(null)); }, [admin]);
   const [attachNotice, setAttachNotice] = useState<string | null>(null);
   // Skills picked for the next message only, and the text a Save as skill opened the editor with.
   // Both are tied to the agent they were made for, so another agent starts clean.
@@ -210,7 +218,26 @@ export function ChatApp() {
   // What "Always allow this command" did, by approval id, and rules undone here.
   const [remembered, setRemembered] = useState<Record<string, Remembered>>({});
   const [undoneRules, setUndoneRules] = useState<number[]>([]);
-  // The agent a new chat will start with (null: a plain chat).
+  // Keep the shell above the software keyboard as the visual viewport changes.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const resize = () => {
+      if (!viewport || viewport.scale !== 1) return;
+      document.documentElement.style.setProperty("--app-height", `${viewport.height}px`);
+      document.documentElement.style.setProperty("--viewport-top", `${viewport.offsetTop}px`);
+    };
+    resize();
+    viewport?.addEventListener("resize", resize);
+    viewport?.addEventListener("scroll", resize);
+    return () => {
+      viewport?.removeEventListener("resize", resize);
+      viewport?.removeEventListener("scroll", resize);
+      document.documentElement.style.removeProperty("--app-height");
+      document.documentElement.style.removeProperty("--viewport-top");
+    };
+  }, []);
+  const [audioOpen, setAudioOpen] = useState(false);
+  // Null selects the lead or the most recently active bot.
   const [newAgentId, setNewAgentId] = useState<number | null>(() => parseThreadId(params.get("agent")));
   const [engines, setEngines] = useState<Engine[] | null>(null);
   const cachedPref = readCachedPreference();
@@ -228,6 +255,15 @@ export function ChatApp() {
   const stream = useThreadStream(ready ? threadId : null);
   const { transcript } = stream;
 
+  const welcomeAttempted = useRef(false);
+  useEffect(() => {
+    if (!ready || threads === null || !agents?.length || !session?.scopes.includes("admin") || welcomeAttempted.current) return;
+    welcomeAttempted.current = true;
+    request<{ thread_id: number | null }>("/chief/welcome", { method: "POST" }).then(result => {
+      if (result.thread_id && threadId === null) { setListTick(n => n + 1); router.replace(`/chat/?thread=${result.thread_id}`); }
+    }).catch(() => { welcomeAttempted.current = false; });
+  }, [ready, threadId, threads, agents, session, router]);
+
   useEffect(() => {
     if (params.get("onboarding") !== "1" || threadId !== null) return;
     let live = true;
@@ -243,19 +279,7 @@ export function ChatApp() {
     void onboarding.firstReply(threadId).catch(() => {});
   }, [threadId, transcript.runningTurnId, transcript.items]);
 
-  useEffect(() => {
-    let live = true;
-    api.getEnginePreference().then((saved) => {
-      if (!live || !saved?.provider) return;
-      writeCachedPreference({ provider: saved.provider, model: saved.model, effort: saved.effort });
-      if (!params.get("engine") && threadId === null && startingAgentId === null) {
-        setNewProvider(saved.provider);
-        if (!params.get("model")) setNewModel(saved.model);
-        if (!params.get("effort")) setNewEffort(saved.effort ?? null);
-      }
-    }).catch(() => {});
-    return () => { live = false; };
-  }, [threadId, transcript.runningTurnId, transcript.items]);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -286,7 +310,7 @@ export function ChatApp() {
         if (cancelled) return;
         if (isLaunchTokenMissing(err)) return setGate({ phase: "locked" });
         // An answer that is an error (an older backend without the route) is not "unreachable".
-        setGate(err instanceof ApiError ? { phase: "ready", status: { enabled: false, available: false, reason: null, cli_version: null } } : { phase: "unreachable" });
+        setGate(err instanceof ApiError && err.status === 404 ? { phase: "ready", status: { enabled: false, available: false, reason: null, cli_version: null } } : { phase: "unreachable" });
       });
     return () => {
       cancelled = true;
@@ -297,7 +321,7 @@ export function ChatApp() {
   // today's Needs you card). It names the card's chat only on a return or the
   // first visit of the day, and never moves a chat that is already open.
   useEffect(() => {
-    if (!ready) return;
+    if (!admin || !ready) return;
     let cancelled = false;
     const ping = () => {
       if (document.visibilityState === "hidden") return;
@@ -315,7 +339,7 @@ export function ChatApp() {
       cancelled = true;
       document.removeEventListener("visibilitychange", ping);
     };
-  }, [ready, router]);
+  }, [admin, ready, router]);
 
   const checkAgain = () => {
     setGate({ phase: "loading" });
@@ -361,6 +385,12 @@ export function ChatApp() {
   }, []);
 
   useEffect(() => {
+    const refresh = () => setAgentTick(value => value + 1);
+    window.addEventListener("chief:team-added", refresh);
+    return () => window.removeEventListener("chief:team-added", refresh);
+  }, []);
+
+  useEffect(() => {
     if (!ready) return;
     let cancelled = false;
     api
@@ -386,6 +416,7 @@ export function ChatApp() {
     const openAgent = (event: Event) => {
       const detail = (event as CustomEvent<{ id: number; edit: boolean }>).detail;
       if (detail.edit) {
+        if (!admin) return;
         const target = agents?.find(agent => agent.id === detail.id);
         if (target) { setEditAgent(target); setAgentsCreate(false); setAgentsOpen(true); }
       } else {
@@ -394,7 +425,7 @@ export function ChatApp() {
     };
     window.addEventListener("open-dots:open-agent", openAgent);
     return () => window.removeEventListener("open-dots:open-agent", openAgent);
-  }, [agents, router, setAgentsOpen]);
+  }, [agents, router, setAgentsOpen, admin]);
 
   useEffect(() => {
     if (!ready) return;
@@ -406,18 +437,40 @@ export function ChatApp() {
 
   const thread = (openedThread?.id === threadId ? openedThread : null) ?? threads?.find((t) => t.id === threadId) ?? null;
   const threadAgent = thread?.agent_id != null ? (agents?.find((a) => a.id === thread.agent_id) ?? null) : null;
+  const choosable = activeAgents(agents);
+  // Fall back to the lead or most recently active bot if the selection was archived.
+  const startingAgentId = choosable.some((a) => a.id === newAgentId) ? newAgentId : channelOrder(choosable, threads, teamState?.team?.lead_agent_id ?? null)[0]?.id ?? null;
+  const startingAgent = choosable.find((agent) => agent.id === startingAgentId);
+
+  useEffect(() => {
+    let live = true;
+    if (!admin) return;
+    api.getEnginePreference().then((saved) => {
+      if (!live || !saved?.provider) return;
+      writeCachedPreference({ provider: saved.provider, model: saved.model, effort: saved.effort });
+      if (!params.get("engine") && threadId === null && startingAgentId === null) {
+        setNewProvider(saved.provider);
+        if (!params.get("model")) setNewModel(saved.model);
+        if (!params.get("effort")) setNewEffort(saved.effort ?? null);
+      }
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [admin, params, threadId, startingAgentId]);
+  const activeBot = threadId === null ? startingAgent : threadAgent;
   // The computer this conversation's tools run in; older backends send none.
-  const threadComputer = thread?.computer ?? threadAgent?.computer ?? null;
+  const threadComputer = thread?.computer ?? activeBot?.computer ?? null;
+  const computerAgentId = activeBot?.id;
+  const computerId = threadComputer?.id;
   const [liveComputer, setLiveComputer] = useState<{ id: number; state: string } | null>(null);
   const liveComputerState = liveComputer && liveComputer.id === threadComputer?.id ? liveComputer.state : null;
 
   useEffect(() => {
-    if (!ready || !threadAgent || !threadComputer) return;
+    if (!admin || !ready || computerAgentId === undefined || computerId === undefined) return;
     let cancelled = false;
     const refreshComputer = async () => {
       try {
-        const computer = await api.getAgentComputer(threadAgent.id);
-        if (!cancelled) setLiveComputer({ id: computer.id, state: computer.live_state ?? computer.state });
+        const computer = (await api.listComputers()).find(item => item.agent_id === computerAgentId);
+        if (!cancelled) setLiveComputer(computer ? { id: computer.id, state: computer.live_state ?? computer.state } : null);
       } catch {
         if (!cancelled) setLiveComputer(null);
       }
@@ -435,36 +488,40 @@ export function ChatApp() {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [ready, threadAgent?.id, threadComputer?.id]);
+  }, [admin, ready, computerAgentId, computerId]);
 
-  const choosable = activeAgents(agents);
-  // The chosen agent may have been archived since: then the chat starts plain.
-  const startingAgentId = choosable.some((a) => a.id === newAgentId) ? newAgentId : null;
-  const startingAgent = choosable.find((agent) => agent.id === startingAgentId);
   const selectedProvider = thread?.provider ?? startingAgent?.provider ?? newProvider;
   const selectedEngine = engines?.find((engine) => engine.id === selectedProvider);
   const selectedAgent = threadId === null ? startingAgent : threadAgent?.provider === thread?.provider ? threadAgent : null;
   const selectedModel = (threadId === null ? newModel : thread?.model) ?? selectedAgent?.model ?? null;
-  const selectedEffort = (threadId === null ? newEffort : thread?.effort) ?? null;
   const skillAgent = threadId === null ? startingAgent : threadAgent;
   const skillAgentId = skillAgent?.id ?? null;
   const [skillsTick, setSkillsTick] = useState(0);
   useEffect(() => {
-    if (!ready || skillAgentId === null) return;
+    if (!admin || !ready || skillAgentId === null) return;
     let live = true;
     api.listSkills(skillAgentId).then(
       (list) => live && setLoadedSkills({ agentId: skillAgentId, list }),
       () => live && setLoadedSkills({ agentId: skillAgentId, list: [] }),
     );
     return () => { live = false; };
-  }, [ready, skillAgentId, skillsTick]);
+  }, [admin, ready, skillAgentId, skillsTick]);
   const agentSkills = loadedSkills !== null && loadedSkills.agentId === skillAgentId ? loadedSkills.list : [];
   const chosenSkills = picked.agentId === skillAgentId ? picked.names.filter((n) => agentSkills.some((s) => s.name === n && s.enabled)) : [];
   const setChosenSkills = (update: (names: string[]) => string[]) =>
     setPicked({ agentId: skillAgentId, names: update(chosenSkills) });
   const skillTurnId = learnableTurn(transcript.items);
-  const canSaveSkill = threadAgent !== null && threadId !== null && skillTurnId !== null && transcript.runningTurnId === null;
+  const canSaveSkill = admin && threadAgent !== null && threadId !== null && skillTurnId !== null && transcript.runningTurnId === null;
   const waiting = pendingApprovals(transcript).length > 0;
+  const latestMessage = transcript.items.findLast(item => item.kind === "assistant" || item.kind === "user");
+  const railSnapshots = threadId !== null && transcript.lastSeq > 0 ? {
+    ...channelSnapshots,
+    [threadId]: {
+      preview: latestMessage && "text" in latestMessage ? previewText(latestMessage.text) : channelSnapshots[threadId]?.preview ?? "",
+      waiting,
+      working: transcript.runningTurnId !== null,
+    },
+  } : channelSnapshots;
   const totals = conversationUsage(
     transcript.items.flatMap((item) => (item.kind === "turn_end" ? [{ usage: item.usage }] : []))
   );
@@ -479,7 +536,8 @@ export function ChatApp() {
   else if (threadId !== null && thread === null) blockedReason = "Loading conversation…";
   else if (thread?.session_state === "broken")
     blockedReason = "Start a new session to continue this conversation.";
-  else if (waiting) blockedReason = "The engine is waiting for your answer above.";
+  else if (threadId === null && startingAgentId === null) blockedReason = "Set up a bot before sending a message.";
+  else if (waiting) blockedReason = `${threadAgent?.name ?? startingAgent?.name ?? "Your bot"} is waiting for your answer above.`;
   else if (transcript.runningTurnId !== null) blockedReason = "An answer is running…";
   else if (selectedEngine && !selectedEngine.available) blockedReason = selectedEngine.reason ?? "This engine is unavailable. Check its settings.";
 
@@ -516,6 +574,7 @@ export function ChatApp() {
   };
 
   const send = async () => {
+    if (blockedReason || sending || !ready) return;
     // `/name rest` for a skill that is on selects it; anything else is sent as typed.
     const command = parseSkillCommand(draft, agentSkills.filter((s) => s.enabled).map((s) => s.name));
     const usedSkills = command ? toggleSkillOn(chosenSkills, command.name) : chosenSkills;
@@ -532,7 +591,7 @@ export function ChatApp() {
         id = (await api.createThread(startingAgentId, startingAgentId !== null ? { model: newModel, effort: newEffort } : { provider: newProvider, model: newModel, effort: newEffort })).id;
         if (startingAgentId === null) {
           writeCachedPreference({ provider: newProvider, model: newModel, effort: newEffort });
-          void api.setEnginePreference({ provider: newProvider, model: newModel, effort: newEffort }).catch(() => {});
+          if (admin) void api.setEnginePreference({ provider: newProvider, model: newModel, effort: newEffort }).catch(() => {});
         }
         // Open it now: the stream replays from the start, so nothing is missed.
         router.replace(`/chat?thread=${id}`);
@@ -541,7 +600,14 @@ export function ChatApp() {
       for (const file of attached) ids.push((await api.uploadAttachment(id, file, audioConsent ? "openai" : undefined, processing.signal)).id);
       if (audioUrl.trim()) ids.push((await api.importAudioUrl(id, audioUrl.trim(), audioConsent ? "openai" : "", processing.signal)).id);
       processing.signal.throwIfAborted();
-      await api.sendTurn(id, message, ids, usedSkills);
+      const connectName = !ids.length && !usedSkills.length && session?.scopes.includes("admin")
+        ? message.match(/^\s*(?:connect|add)\s+(?:the\s+)?(.+?)(?:\s+app)?[.!]?\s*$/i)?.[1] : undefined;
+      if (connectName) {
+        const catalog = await request<{ providers: { service: string; displayName: string }[] }>("/integrations/connector");
+        const provider = catalog.providers.find(p => [p.service.toLowerCase(), p.displayName.toLowerCase()].includes(connectName.toLowerCase()));
+        if (provider) await request(`/threads/${id}/connect-card`, { method: "POST", body: JSON.stringify({ provider: provider.service }) });
+        else await api.sendTurn(id, message, ids, usedSkills);
+      } else await api.sendTurn(id, message, ids, usedSkills);
       setDraft("");
       setChosenSkills(() => []);
       setAttached([]);
@@ -590,7 +656,7 @@ export function ChatApp() {
         setNewModel(model);
         setNewEffort(effort);
         writeCachedPreference({ provider: target.provider, model, effort });
-        void api.setEnginePreference({ provider: target.provider, model, effort }).catch(() => {});
+        if (admin) void api.setEnginePreference({ provider: target.provider, model, effort }).catch(() => {});
       }
       setModelDraft((previous) => previous === target ? null : previous);
     } catch (err) { setModelError(err instanceof ApiError ? err.message : "Could not change the model."); }
@@ -629,15 +695,16 @@ export function ChatApp() {
     onRename: (id: number, title: string) => manage(() => api.updateThread(id, { title }).then(() => {})),
     onArchive: (id: number, archived: boolean) =>
       manage(() => api.updateThread(id, { archived }).then(() => {})),
-    onDelete: (id: number) =>
+    onDelete: admin ? (id: number) =>
       manage(async () => {
         await api.deleteThread(id);
         if (id === threadId) router.replace("/chat");
-      }),
+      }) : undefined,
   };
 
   const answer = async (approvalId: string, decision: "allow" | "deny", remember = false) => {
-    if (threadId === null) return;
+    if (answeringNow.current || threadId === null) return;
+    answeringNow.current = true;
     setAnswering(approvalId);
     setApprovalErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => id !== approvalId)));
     try {
@@ -656,6 +723,7 @@ export function ChatApp() {
         setApprovalErrors((prev) => ({ ...prev, [approvalId]: message }));
       }
     } finally {
+      answeringNow.current = false;
       setAnswering(null);
     }
   };
@@ -732,50 +800,50 @@ export function ChatApp() {
     rows: todaySnapshot.items,
   } : null;
 
+  const onNewAgent = admin && agents !== null ? () => { setEditAgent(null); setDeleteAgentTarget(null); setAgentsCreate(true); setAgentsOpen(true); } : undefined;
+  const onEditAgent = session?.scopes.includes("admin") ? (agent: Agent) => { setEditAgent(agent); setDeleteAgentTarget(null); setAgentsCreate(false); setAgentsOpen(true); } : undefined;
+  const onDeleteAgent = admin && agents !== null ? (agent: Agent) => { setEditAgent(null); setAgentsCreate(false); setDeleteAgentTarget(agent); setAgentsOpen(true); } : undefined;
+  const [computerChoices, setComputerChoices] = useState<Record<number, boolean>>({});
+  const computerChoice = activeBot ? computerChoices[activeBot.id] ?? readComputerPanel(() => window.localStorage, activeBot.id) : undefined;
+  const computerOpen = admin && !!activeBot && (computerInline
+    ? computerPanelOpen(computerChoice ?? (panel === "computer" ? true : undefined), liveComputerState ?? threadComputer?.state)
+    : panel === "computer");
+  const chooseComputer = (open: boolean) => {
+    if (computerInline && activeBot) {
+      setComputerChoices(current => ({ ...current, [activeBot.id]: open }));
+      writeComputerPanel(() => window.localStorage, activeBot.id, open);
+      if (panel === "computer") setPanel(null);
+    } else setPanel(open ? "computer" : null);
+  };
+  const otherChats = (threads ?? []).filter(chat => !chat.archived_at && chat.id !== threadId);
+  const waitingChats = otherChats.filter(chat => channelSnapshots[chat.id]?.waiting);
+  const waitingCheckFailed = otherChats.some(chat => channelSnapshots[chat.id]?.error);
   const computerText = threadComputer ? computerChip(threadComputer, liveComputerState) : null;
   const buildHeader = (withSidebar: boolean) => (
     <ChatHeader
+      origin={thread?.origin}
       title={roomId !== null
         ? (roomTitle?.id === roomId ? roomTitle.name : t(roomId === "new" ? "room.new" : "room.title"))
         : thread?.title || (threadId === null ? t("shell.newChat") : "Chat")}
-      agent={threadAgent ? { id: threadAgent.id, name: threadAgent.name } : null}
-      onOpenSidebar={withSidebar && !sidebarInline ? () => setDrawerOpen(true) : undefined}
-      agentChoice={
-        roomId === null && agents !== null && threadId === null
-          ? { agents: choosable, value: startingAgentId, onChange: (id) => { setNewAgentId(id); setNewModel(null); setModelDraft(null); } }
-          : undefined
-      }
+      agent={threadAgent ?? startingAgent ?? null}
+      onEditAgent={activeBot && onEditAgent ? () => onEditAgent(activeBot) : undefined}
+      onDeleteAgent={activeBot && onDeleteAgent ? () => onDeleteAgent(activeBot) : undefined}
+      onOpenSidebar={withSidebar ? () => setDrawerOpen(true) : undefined}
       engine={
         roomId === null && ready && engines && (threadId === null || thread !== null)
           ? {
-              label: (() => {
-                const baseEngine = selectedEngine?.label ?? selectedProvider;
-                const modelObj = selectedEngine?.models.find((item) => item.id === selectedModel);
-                const modelName = modelObj?.label ?? (selectedModel ? modelLabel(selectedModel) : "default");
-                const supportsEffort = Boolean(
-                  modelObj?.supported_reasoning_efforts &&
-                  modelObj.supported_reasoning_efforts.length > 1 &&
-                  modelObj.reasoning_effort_configurable !== false
-                );
-                const effortToShow = supportsEffort
-                  ? (selectedEffort ?? modelObj?.default_reasoning_effort)
-                  : null;
-                const effortPart = effortToShow
-                  ? ` · ${effortToShow.charAt(0).toUpperCase() + effortToShow.slice(1)}`
-                  : "";
-                return `${baseEngine} · ${modelName}${effortPart}`;
-              })(),
+              label: engineName(selectedProvider, selectedModel),
               disabled: modelBusy || sending || transcript.runningTurnId !== null,
               onClick: openModelDialog,
             }
           : undefined
       }
       computer={
-        threadComputer && threadAgent && computerText
+        admin && threadComputer && threadAgent && computerText
           ? {
               text: computerText,
               hint: `This conversation's commands and file edits run in ${threadAgent.name}'s computer (${threadComputer.image}), not on this machine.`,
-              onClick: () => setPanel("computer"),
+              onClick: () => chooseComputer(true),
             }
           : undefined
       }
@@ -783,20 +851,23 @@ export function ChatApp() {
         ready && gate.phase === "ready" && (gate.status.tools_enabled || threadComputer) && threadId !== null
           ? {
               label: approvalModeLabel(threadAgent?.approval_mode ?? "ask"),
-              hint: "How much the engine may do before it asks. Set by the conversation's agent; a plain chat asks first.",
+              hint: "How much the engine may do before it asks. Set by the conversation's bot; a plain chat asks first.",
             }
           : undefined
       }
-      onApprovals={ready ? () => setApprovalsOpen(true) : undefined}
-      onFiles={ready && threadId !== null && thread !== null ? () => setFilesOpen(true) : undefined}
-      onUsage={ready ? () => setPanel("usage") : undefined}
-      onToday={ready ? () => void refreshToday() : undefined}
+      onApprovals={admin && ready ? () => setApprovalsOpen(true) : undefined}
+      onFiles={canReadFiles && ready && threadId !== null && thread !== null ? () => setFilesOpen(true) : undefined}
+      onUsage={admin && ready ? () => setPanel("usage") : undefined}
+      onToday={admin && ready ? () => void refreshToday() : undefined}
       usageHint={conversationTotal}
+      computerButton={admin && activeBot ? computerInline
+        ? <button type="button" className="computer-toggle" aria-expanded={computerOpen} onClick={() => chooseComputer(!computerOpen)}><Monitor size={16} aria-hidden="true" />{t("header.computer")}</button>
+        : <ComputerThumbnail className="computer-thumbnail" computerId={threadComputer?.id} name={activeBot.name} onOpen={() => chooseComputer(true)} /> : undefined}
       trailing={
         <>
-          <LanguageSelect compact />
-          {ready ? (
+          {admin && ready ? (
             <NotificationBell
+              waitingThreadIds={Object.entries(railSnapshots).filter(([, snapshot]) => snapshot.waiting).map(([id]) => Number(id))}
               elevated={routinesOpen || panel === "usage"}
               onOpen={() => {
                 setRoutinesOpen(false);
@@ -837,18 +908,18 @@ export function ChatApp() {
       actions={listActions}
       error={manageError}
       onNewChat={startChat}
-      onManageAgents={agents !== null ? () => { setEditAgent(null); setAgentsCreate(false); setAgentsOpen(true); } : undefined}
+      onManageAgents={admin && agents !== null ? () => { setEditAgent(null); setAgentsCreate(false); setAgentsOpen(true); } : undefined}
       leadAgentId={teamState?.team?.lead_agent_id ?? null}
       onChangeLead={session?.scopes.includes("admin") ? async (agent, remove) => {
         try { setTeamState(await (remove ? collaboration.clearLead(agent.id) : collaboration.lead(agent.id))); setAgentTick(value => value + 1); }
         catch (err) { setManageError(err instanceof ApiError ? err.message : "Could not change the lead."); }
       } : undefined}
-      onEditAgent={session?.scopes.includes("admin") ? agent => { setEditAgent(agent); setAgentsCreate(false); setAgentsOpen(true); } : undefined}
-      onDeleteAgent={agents !== null ? (agent) => { setAgentsCreate(false); setDeleteAgentTarget(agent); setAgentsOpen(true); } : undefined}
-      onNewAgent={agents !== null ? () => { setEditAgent(null); setAgentsCreate(true); setAgentsOpen(true); } : undefined}
+      onEditAgent={onEditAgent}
+      onDeleteAgent={onDeleteAgent}
+      onNewAgent={onNewAgent}
       collaboration={ready ? <RoomList selected={roomId} onTeam={() => setTeamOpen(true)} onNavigate={() => setDrawerOpen(false)} /> : undefined}
-      onOpenRoutines={ready && agents !== null ? () => setRoutinesOpen(true) : undefined}
-      onOpenPlanner={ready && agents !== null ? () => setPlannerOpen(true) : undefined}
+      onOpenRoutines={admin && ready && agents !== null ? () => setRoutinesOpen(true) : undefined}
+      onOpenPlanner={admin && ready && agents !== null ? () => setPlannerOpen(true) : undefined}
       onNavigate={() => { setDrawerOpen(false); setModelDraft(null); }}
     />
   );
@@ -866,8 +937,8 @@ export function ChatApp() {
     return (
       <div className="flex h-dvh flex-col">
         {header}
-        <Notice title="Open this from the Open Duet app">
-          This address only works inside the Open Duet window, which keeps your conversations
+        <Notice title="Open this from the Chief of Noumenon app">
+          This address only works inside the Chief of Noumenon window, which keeps your conversations
           private to it. Use that window instead of a browser tab.
         </Notice>
       </div>
@@ -878,10 +949,9 @@ export function ChatApp() {
     return (
       <div className="flex h-dvh flex-col">
         {header}
-        <Notice title="Backend not reachable">
-          Check that it is running, and that this page&apos;s address (
-          {typeof window === "undefined" ? "" : window.location.origin}) is listed in
-          FRONTEND_ORIGINS in backend/.env.
+        <Notice title="Your computer is out of reach" action={{label: "Try again", onClick: checkAgain}}>
+          Check that the computer running Chief of Noumenon is on and connected, then try again.
+          <details className="mt-3"><summary className="cursor-pointer">Advanced</summary><p>For a separate website, allow this page&apos;s address ({typeof window === "undefined" ? "" : window.location.origin}) in the server&apos;s FRONTEND_ORIGINS setting.</p></details>
         </Notice>
       </div>
     );
@@ -897,7 +967,7 @@ export function ChatApp() {
         >
           {gate.status.enabled
             ? (gate.status.reason ?? "unknown reason")
-            : "Set LOCAL_EXECUTION_ENABLED=true in backend/.env on the machine running the backend, then restart it."}
+            : "Bot engines are turned off on this computer. Ask the person who installed the app to turn them on."}
           <p className="mt-3"><Link href="/settings/engines/" className="underline">Open engine settings</Link> to configure an engine and check its status.</p>
         </Notice>
       </div>
@@ -905,7 +975,7 @@ export function ChatApp() {
   }
 
   return (
-    <div className="relative flex h-dvh">
+    <div className={`control-room${computerInline && computerOpen ? " computer-open" : ""}`}>
       <a
         href="#conversation"
         className="sr-only z-50 rounded-field bg-raised px-3 py-2 text-sm font-medium text-ink shadow-lg focus:not-sr-only focus:absolute focus:left-3 focus:top-3"
@@ -913,15 +983,13 @@ export function ChatApp() {
         {t("shell.skip")}
       </a>
       {ready && <CommandPalette agents={agents} threads={threads} onNewChat={startChat} />}
-      {sidebarInline ? (
-        <aside className="w-72 shrink-0 border-r border-line">{sidebar}</aside>
-      ) : (
-        <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} label={t("shell.conversations")}>{sidebar}</Drawer>
-      )}
-      <div className="relative flex min-w-0 flex-1 flex-col">
+      {!admin && (agentsOpen || routinesOpen || plannerOpen || ["usage", "skills", "computer"].includes(panel ?? "")) && <Dialog open title={t("computer.only")} onOpenChange={() => { setAgentsOpen(false); setRoutinesOpen(false); setPlannerOpen(false); setPanel(null); }}><p>{t("computer.only")}</p></Dialog>}
+      <BotRail onNewAgent={onNewAgent} onEditAgent={onEditAgent} onDeleteAgent={onDeleteAgent} agents={agents} threads={threads} selected={threadAgent?.id ?? startingAgent?.id ?? null} snapshots={railSnapshots} onNew={startChat} leadAgentId={teamState?.team?.lead_agent_id ?? null} />
+      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} label={t("header.allTools")}>{sidebar}</Drawer>
+      <div className="control-chat relative flex min-w-0 flex-1 flex-col">
       {buildHeader(true)}
       {modelDraft && modelDraft.threadId === threadId && (threadId !== null || modelDraft.agentId === startingAgentId) && engines && (
-        <Dialog open onOpenChange={(open) => { if (!open) setModelDraft(null); }} title="Engine and model" size="sm">
+        <Dialog open onOpenChange={(open) => { if (!open) setModelDraft(null); }} title={t("header.engineModel")} size="sm">
           <form onSubmit={(event) => { event.preventDefault(); void saveModel(); }} className="space-y-4">
             <EngineModelFields
               engines={engines}
@@ -931,14 +999,14 @@ export function ChatApp() {
               onChange={(provider, model, effort) => setModelDraft({ ...modelDraft, provider, model, effort: effort ?? null })}
               disabled={modelBusy}
               lockProvider={threadId !== null || startingAgentId !== null}
-              defaultLabel={selectedAgent ? `Agent default (${modelLabel(selectedAgent.model)})` : undefined}
+              defaultLabel={selectedAgent?.model && selectedAgent.model !== "default" ? `Bot default (${modelLabel(selectedAgent.model)})` : t("audit.botDefault")}
             />
-            {threadId !== null && <p className="text-xs text-muted">The model changes on the next message. This conversation keeps its engine.</p>}
+            {threadId !== null && <p className="text-xs text-muted">{t("audit.engineNextMessage")}</p>}
             {modelError && <p role="alert" className="text-sm text-danger">{modelError}</p>}
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit" variant="primary" disabled={modelBusy}>{modelBusy ? "Saving…" : "Use model"}</Button>
-              <Button disabled={modelBusy} onClick={() => setModelDraft(null)}>Cancel</Button>
-              <Button variant="ghost" disabled={modelBusy} onClick={() => { setModelBusy(true); api.getEngines(true).then(setEngines).catch(() => setModelError("Could not refresh engines.")).finally(() => setModelBusy(false)); }}>Refresh status</Button>
+              <Button type="submit" variant="primary" disabled={modelBusy}>{modelBusy ? t("audit.saving") : t("audit.useModel")}</Button>
+              <Button disabled={modelBusy} onClick={() => setModelDraft(null)}>{t("common.cancel")}</Button>
+              <Button variant="ghost" disabled={modelBusy} onClick={() => { setModelBusy(true); api.getEngines(true).then(setEngines).catch(() => setModelError("Could not refresh engines.")).finally(() => setModelBusy(false)); }}>{t("audit.checkEngines")}</Button>
             </div>
           </form>
         </Dialog>
@@ -954,11 +1022,11 @@ export function ChatApp() {
         />
       )}
       {teamOpen && agents !== null && <TeamPanel agents={agents} onClose={() => setTeamOpen(false)} onChanged={() => setAgentTick(value => value + 1)} />}
-      {routinesOpen && agents !== null && (
+      {admin && routinesOpen && agents !== null && (
         <RoutinesPanel key={params.get("routine")} routineId={parseThreadId(params.get("routine"))} agents={agents} onClose={() => setRoutinesOpen(false)} />
       )}
-      {plannerOpen && agents !== null && <PlannerPanel key={params.get("task")} taskId={parseThreadId(params.get("task"))} agents={agents} threads={threads ?? []} onClose={() => setPlannerOpen(false)} onOpenRoutines={() => { setPlannerOpen(false); setRoutinesOpen(true); }} />}
-      {agentsOpen && agents !== null && (
+      {admin && plannerOpen && agents !== null && <PlannerPanel key={params.get("task")} taskId={parseThreadId(params.get("task"))} agents={agents} threads={threads ?? []} onClose={() => setPlannerOpen(false)} onOpenRoutines={() => { setPlannerOpen(false); setRoutinesOpen(true); }} />}
+      {admin && agentsOpen && agents !== null && (
         <AgentsPanel
           agents={agents}
           startCreating={agentsCreate}
@@ -973,10 +1041,28 @@ export function ChatApp() {
           initialDeleteAgent={deleteAgentTarget}
           onClose={() => { setAgentsOpen(false); setEditAgent(null); setDeleteAgentTarget(null); }}
           onChanged={() => { setAgentTick((n) => n + 1); setDeleteAgentTarget(null); }}
-          onCreated={(agent) => setNewAgentId(agent.id)}
+          onCreated={(agent) => {
+            setAgents(current => [...(current ?? []).filter(item => item.id !== agent.id), agent]);
+            startChat(agent.id);
+          }}
+          onDeleted={(id) => {
+            const remaining = (agents ?? []).filter(agent => agent.id !== id);
+            setAgents(remaining); setListTick(n => n + 1);
+            setAgentsOpen(false); setEditAgent(null); setDeleteAgentTarget(null);
+            if (activeBot?.id === id) {
+              const next = channelOrder(remaining, threads, teamState?.team?.lead_agent_id ?? null)[0];
+              const target = next && agentTarget(threads, next.id);
+              setNewAgentId(next?.id ?? null); setDraft(""); setNewModel(null);
+              router.replace(target?.kind === "thread" ? `/chat?thread=${target.id}` : next ? `/chat?agent=${next.id}` : "/chat");
+            }
+          }}
         />
       )}
         <main id="conversation" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col outline-none">
+          {waitingChats.length > 0 && <nav className="other-waiting" aria-label={t("chat.otherWaiting")}>
+            {waitingChats.map(chat => <Link key={chat.id} href={`/chat?thread=${chat.id}`}><span>{t("status.waiting")}</span><span> · </span><bdi>{agents?.find(bot => bot.id === chat.agent_id)?.name}</bdi><span> · </span><bdi>{chat.title || t("chat.untitledWaiting")}</bdi></Link>)}
+          </nav>}
+          {waitingCheckFailed && <p className="waiting-check-error" role="status">{t("chat.waitingCheckFailed")}</p>}
           {/* Active rooms share the chat workspace; RoomView keeps only create/edit in a dialog. */}
           {roomId !== null && agents !== null && (
             <RoomView
@@ -993,10 +1079,14 @@ export function ChatApp() {
             <Notice title="Cannot open this conversation">{stream.error}</Notice>
           ) : (
             <Conversation
+              workspace={thread?.workspace_path ?? threadAgent?.workspace_path ?? startingAgent?.workspace_path}
+              computerId={admin ? threadComputer?.id : undefined}
+              onTakeOver={admin ? () => chooseComputer(true) : undefined}
               threadId={threadId}
               loading={threadId !== null && thread === null}
               agent={threadAgent ? { id: threadAgent.id, name: threadAgent.name } : startingAgent ? { id: startingAgent.id, name: startingAgent.name } : null}
-              emptyAction={signInAction}
+              emptyAction={admin && choosable.length === 0 && agents !== null ? { label: "Set up your first bot", onClick: () => { setAgentsCreate(true); setAgentsOpen(true); } } : signInAction}
+              onStarter={text => { setDraft(text); setFocusComposer(true); }}
               emptyHint={
                 selectedEngine && !selectedEngine.available
                   ? `${selectedEngine.label} is not ready: ${(selectedEngine.reason ?? "check it in Settings").replace(/\.+$/, "")}.`
@@ -1010,7 +1100,7 @@ export function ChatApp() {
               sendingReactionReplyDisabled={sendingReactionReplyDisabled || sending}
               remembered={remembered}
               undoneRules={undoneRules}
-              onUndo={undoRule}
+              onUndo={admin ? undoRule : undefined}
             />
           )}
 
@@ -1021,27 +1111,27 @@ export function ChatApp() {
                   The engine can no longer find this conversation&apos;s session, so it cannot continue it. A new
                   session keeps the messages above but starts without them as context.
                 </p>
-                <Button variant="primary" onClick={resetSession} loading={resetting}>
+                {admin ? <Button variant="primary" onClick={resetSession} loading={resetting}>
                   {resetting ? t("common.starting") : t("chat.startNewSession")}
-                </Button>
+                </Button> : <p>{t("computer.only")}</p>}
               </div>
               {resetError && <p className="mx-auto mt-2 max-w-3xl text-xs text-danger">{resetError}</p>}
             </div>
           )}
 
-          <div className="mx-auto w-full max-w-3xl px-3 text-xs text-muted">
-            <details>
-              <summary className="cursor-pointer">{t("chat.audioLink")}</summary>
+          {audioOpen && <Dialog open onOpenChange={setAudioOpen} title={t("chat.audioLink")} size="sm">
+            <div className="mx-auto w-full max-w-3xl px-3 text-xs text-muted">
               <p>{t("chat.audioFormats")}</p>
               <input aria-label={t("chat.directAudioUrl")} type="url" value={audioUrl} onChange={(event) => { setAudioUrl(event.target.value); setAudioConsent(false); }} placeholder="https://example.com/episode.mp3" disabled={sending} className="my-2 w-full rounded-field border border-line bg-inset p-2" />
               <p>{audioCapability?.available ? audioCapability.retention : t("chat.audioUnavailable")}</p>
               <label className="my-2 flex gap-2"><input type="checkbox" checked={audioConsent} onChange={(event) => setAudioConsent(event.target.checked)} disabled={sending || !audioCapability?.available} />{t("chat.audioConsent", { provider: audioCapability?.provider_label ?? "OpenAI" })}</label>
               {sending && hasAudio && <button type="button" onClick={() => audioAbort.current?.abort()} className="my-2 underline">{t("chat.cancelAudio")}</button>}
               <p>{t("chat.transcriptCaveat")}</p>
-            </details>
-          </div>
+            </div>
+          </Dialog>}
           <Composer
-            draftKey={threadId === null ? "new" : String(threadId)}
+            onAudioLink={admin ? () => setAudioOpen(true) : undefined}
+            draftKey={threadId === null ? `new-${startingAgentId ?? "plain"}` : String(threadId)}
             focusRequested={focusComposer}
             onFocused={() => setFocusComposer(false)}
             value={draft}
@@ -1069,28 +1159,25 @@ export function ChatApp() {
           </>}
         </main>
       </div>
-      {panel === "usage" && (
-        <Inspector title="Usage" inline={inspectorInline} onClose={() => setPanel(null)}>
+      {admin && panel === "usage" && (
+        <Inspector title={t("header.usage")} inline={false} onClose={() => setPanel(null)}>
           <UsageView />
         </Inspector>
       )}
-      {panel === "skills" && threadAgent && (
-        <Inspector title={`Skills · ${threadAgent.name}`} inline={inspectorInline} onClose={() => { setSkillSeed(null); setPanel(null); }}>
+      {admin && panel === "skills" && threadAgent && (
+        <Inspector title={`Skills · ${threadAgent.name}`} inline={false} onClose={() => { setSkillSeed(null); setPanel(null); }}>
           <div className="p-4">
             <SkillsPanel key={`${threadAgent.id}-${skillSeed?.nonce ?? 0}`} agent={threadAgent} learnFrom={skillSeed?.source ?? null} onChanged={() => setSkillsTick((n) => n + 1)} />
           </div>
         </Inspector>
       )}
-      {panel === "computer" && threadAgent && (
-        <Inspector title={`Computer · ${threadAgent.name}`} inline={inspectorInline} onClose={() => setPanel(null)}>
-          <ComputerView
-            agent={threadAgent}
-            onChanged={() => setAgentTick((n) => n + 1)}
-            engineSupportsComputers={engines?.find((engine) => engine.id === threadAgent.provider)?.capabilities.computers}
-            engineLabel={engines?.find((engine) => engine.id === threadAgent.provider)?.label ?? threadAgent.provider}
-          />
-        </Inspector>
-      )}
+      {activeBot && computerOpen && <Inspector title={`${activeBot.name}’s computer`} inline={computerInline} onClose={() => chooseComputer(false)}>
+        <ComputerView key={activeBot.id} agent={activeBot}
+          onChanged={() => setAgentTick(n => n + 1)}
+          engineSupportsComputers={engines?.find(engine => engine.id === activeBot.provider)?.capabilities.computers}
+          engineLabel={engines?.find(engine => engine.id === activeBot.provider)?.label ?? activeBot.provider} />
+      </Inspector>}
+
       <Dialog
         open={todayOpen}
         onOpenChange={setTodayOpen}

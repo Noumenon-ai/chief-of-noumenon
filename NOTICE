@@ -1,0 +1,9 @@
+Chief of Noumenon
+
+This is a modified version of Open Duet by its authors.
+Upstream: https://github.com/Anil-matcha/open-duet
+Distributed under the Apache License, Version 2.0; see LICENSE.
+
+Includes a modified copy of Open Agent Connector.
+Upstream: https://github.com/Anil-matcha/open-agent-connector
+Distributed under Apache-2.0; see connector/LICENSE and connector/UPSTREAM.md.

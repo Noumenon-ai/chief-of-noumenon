@@ -58,7 +58,7 @@ async def test_a_malformed_value_is_refused(api, scopes):  # noqa: F811
 
 
 async def test_an_engine_that_cannot_mount_them_is_refused(api):  # noqa: F811
-    agent = await new_agent(api, provider="openai_compat")
+    agent = await new_agent(api, provider="acp")
     response = await api.patch(f"/api/v1/agents/{agent['id']}", json={"connector_scopes": {"github": "read"}})
     assert response.status_code == 409 and code_of(response) == "engine_without_connected_apps"
 
@@ -66,7 +66,7 @@ async def test_an_engine_that_cannot_mount_them_is_refused(api):  # noqa: F811
 async def test_moving_an_allowed_agent_to_another_engine_is_refused(api):  # noqa: F811
     agent = await new_agent(api)
     await api.patch(f"/api/v1/agents/{agent['id']}", json={"connector_scopes": {"github": "read"}})
-    response = await api.patch(f"/api/v1/agents/{agent['id']}", json={"provider": "openai_compat"})
+    response = await api.patch(f"/api/v1/agents/{agent['id']}", json={"provider": "acp"})
     assert response.status_code == 409 and code_of(response) == "engine_without_connected_apps"
     assert (await api.get(f"/api/v1/agents/{agent['id']}")).json()["provider"] == "claude"
 
@@ -189,3 +189,14 @@ async def test_when_composio_cannot_be_asked_the_change_is_refused_not_guessed(a
     response = await api.patch(f"/api/v1/agents/{agent['id']}", json={"connector_scopes": {"unreachable": "read"}})
     assert response.status_code == 502 and code_of(response) == "composio_unavailable"
     assert (await api.get(f"/api/v1/agents/{agent['id']}")).json()["connector_scopes"] is None
+
+
+async def test_api_engine_can_mount_granted_apps_and_receive_an_existing_agent(api):
+    agent = await new_agent(api, provider="openai_compat")
+    result = await api.patch(f"/api/v1/agents/{agent['id']}", json={"connector_scopes": {"github": "read"}})
+    assert result.status_code == 200 and result.json()["connector_scopes"] == {"github": "read"}
+    other = await new_agent(api)
+    await api.patch(f"/api/v1/agents/{other['id']}", json={"connector_scopes": {"github": "read"}})
+    result = await api.patch(f"/api/v1/agents/{other['id']}", json={"provider": "openai_compat"})
+    assert result.status_code == 200 and result.json()["provider"] == "openai_compat"
+    assert result.json()["connector_scopes"] == {"github": "read"}

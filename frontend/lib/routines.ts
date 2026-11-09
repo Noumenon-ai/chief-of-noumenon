@@ -167,7 +167,7 @@ export function formatWhen(iso: string | null | undefined, timezone?: string): s
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
   try {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(typeof document === "undefined" ? undefined : document.documentElement.lang || undefined, {
       timeZone: timezone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
     }).format(date);
   } catch {

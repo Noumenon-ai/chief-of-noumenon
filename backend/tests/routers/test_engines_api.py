@@ -91,7 +91,7 @@ async def test_the_list_and_one_engine(api):
     # Which engines can be the helper model: the ones with a quick text call.
     assert by_id["claude"]["can_write_text"] is True and acp["can_write_text"] is False
     assert by_id["openai_compat"]["can_write_text"] is True
-    assert by_id["openai_compat"]["kind"] == "api" and by_id["openai_compat"]["capabilities"]["tools"] is False
+    assert by_id["openai_compat"]["kind"] == "api" and by_id["openai_compat"]["capabilities"]["tools"] is True
     one = await api.get("/api/v1/engines/acp")
     assert one.status_code == 200 and one.json()["id"] == "acp"
     assert (await api.get("/api/v1/engines/nope")).status_code == 404

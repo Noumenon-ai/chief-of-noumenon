@@ -1,4 +1,5 @@
 "use client";
+import { useT as useUiText } from "@/lib/use-i18n";
 
 import Link from "next/link";
 import { Ellipsis } from "lucide-react";
@@ -11,6 +12,7 @@ import { Menu, MenuItem, MenuSeparator } from "@/components/ui/Menu";
 import { Select } from "@/components/ui/Select";
 import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/Tabs";
 import { useEffect, useRef, useState } from "react";
+import { relativeReceipt } from "@/lib/control-room";
 import { useToast } from "@/components/ui/Toast";
 import { api, ApiError, isLocalApiEndpoint, type Agent, type AgentInput, type AgentMemory, type ApprovalMode, type Engine, type OpenBotDatabasePreview, type OpenBotDatabaseProfilePreview } from "@/lib/api";
 import {
@@ -149,7 +151,7 @@ type ImportState = {
 type MigrationState = { source: AgentMigrationSource | null; text: string; copied: boolean };
 
 const FIELD =
-  "w-full rounded-md border border-line bg-transparent px-3 py-1.5 text-sm placeholder:text-muted";
+  "w-full rounded-md border border-line bg-transparent px-3 py-1.5 text-sm placeholder:text-faint";
 const BUTTON =
   "cursor-pointer rounded-md border border-line px-3 py-1.5 text-sm font-medium hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50";
 const SMALL =
@@ -174,11 +176,11 @@ function SetupEntryDisclosure({ agents, engines, onStart, onCreateLead }: {
   onStart: (id: number) => void;
   onCreateLead: () => void;
 }) {
+  const tx = useUiText();
   return (
     <details>
       <summary className="w-fit cursor-pointer list-none rounded-field py-1 text-sm font-medium text-accent underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-        Create by chatting
-      </summary>
+        {tx("Create by chatting")}</summary>
       <div className="mt-3">
         <AgentSetupEntry agents={agents} engines={engines} onStart={onStart} onCreateLead={onCreateLead} />
       </div>
@@ -196,6 +198,7 @@ export function AgentsPanel({
   startCreating = false,
   initialDeleteAgent = null,
   onCreated,
+  onDeleted,
   onSetupChat,
   initialEditAgent = null,
 }: {
@@ -209,9 +212,11 @@ export function AgentsPanel({
   initialDeleteAgent?: Agent | null;
   // Called after any change, so the page reads the agent list again.
   onChanged: () => void;
-  // Called with an agent made from a template, so the page can select it.
+  // Called after creation, including templates, so the page can open the bot.
   onCreated?: (agent: Agent) => void;
+  onDeleted?: (id: number) => void;
 }) {
+  const tx = useUiText();
   // The template browser, and the template (with the suggested skills still ticked) the form was filled from.
   const [gallery, setGallery] = useState(false);
   const [fromTemplate, setFromTemplate] = useState<{ template: AgentTemplate; skills: string[] } | null>(null);
@@ -278,7 +283,10 @@ export function AgentsPanel({
   const errorText = (err: unknown) =>
     err instanceof ApiError ? err.message || "That did not work." : err instanceof Error ? err.message : "Could not reach the backend.";
 
+  const actionLock = useRef(false);
   const run = async (action: () => Promise<unknown>, done?: () => void) => {
+    if (actionLock.current) return;
+    actionLock.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -288,17 +296,19 @@ export function AgentsPanel({
     } catch (err) {
       setError(errorText(err));
     } finally {
-      setBusy(false);
+      setBusy(false); actionLock.current = false;
     }
   };
 
   const save = () => {
     if (!draft || draft.name.trim() === "") return;
     const input = toInput(draft);
+    let created: Agent | null = null;
     if (draft.id === null && fromTemplate) return createFromTemplate(input, fromTemplate);
     run(
       async () => {
         const agent = draft.id === null ? await api.createAgent({ ...input, make_lead: isLead }) : await api.updateAgent(draft.id, { ...input, ...(roleChoice?.id === draft.id ? { make_lead: isLead } : {}) });
+        if (draft.id === null) created = agent;
         // Creation is already saved; subsequent coordination errors must not create another agent on retry.
         const savedDraft = toDraft(agent);
         setDraft(savedDraft);
@@ -313,12 +323,13 @@ export function AgentsPanel({
         setTeam(await collaboration.team());
       },
       () => {
-        toast("Agent saved.");
+        toast("Bot saved.");
         setDraft(null);
         setOriginalDraft(null);
         setRoleChoice(null);
         setMemberChoices({});
         setDiscardConfirm(false);
+        if (created) { onCreated?.(created); onClose(); }
       }
     );
   };
@@ -343,7 +354,7 @@ export function AgentsPanel({
       const notice = skillInstallNotice(await installTemplateSkills(agent.id, source.template.id, chosen, api.installTemplateSkill));
       setDraft(null);
       setFromTemplate(null);
-      toast("Agent saved.");
+      toast("Bot saved.");
       onChanged();
       onCreated?.(agent);
       if (notice) setError(notice);
@@ -379,6 +390,7 @@ export function AgentsPanel({
       const memory = await api.getAgentMemory(agent.id);
       setNotes({ agent, memory, text: memory.text, conflict: false, saved: null });
     } catch (err) {
+      setNotes(null);
       setError(errorText(err));
     }
   };
@@ -519,7 +531,7 @@ export function AgentsPanel({
         title: profile.title,
         description: "",
         instructions: profile.instructions,
-        mappingNotice: "The source agent's description is imported as Open Dots instructions.",
+        mappingNotice: "The source bot's description is imported as Chief of Noumenon instructions.",
       },
     });
     setOpenBotDatabase(null);
@@ -545,22 +557,22 @@ export function AgentsPanel({
   const canEditConnectedApps = draft !== null && draft.id !== null && supportsConnectedApps(draft.provider);
   const heading = draft
     ? draft.id === null
-      ? fromTemplate ? `New agent · ${fromTemplate.template.name}` : "New agent"
-      : "Edit agent"
+      ? fromTemplate ? `${tx("New bot")} · ${fromTemplate.template.name}` : tx("New bot")
+      : tx("Edit bot")
     : gallery
-      ? "Templates"
+      ? tx("Templates")
       : notes
-      ? `Notes · ${notes.agent.name}`
+      ? `${tx("Notes")} · ${notes.agent.name}`
       : exporting
-        ? `Export · ${exporting.agent.name}`
+        ? `${tx("Export")} · ${exporting.agent.name}`
         : migration
-          ? "Migrate agent setup"
+          ? tx("Migrate bot setup")
           : importing
-          ? "Import agent"
+          ? tx("Import bot")
           : computerOf
-            ? `Computer · ${computerOf.name}`
+            ? `${tx("Computer")} · ${computerOf.name}`
             : skillsOf
-              ? `Skills · ${skillsOf.name}`
+              ? `${tx("Skills")} · ${skillsOf.name}`
               : t("sidebar.agents");
   const openDraft = (nextDraft: Draft) => {
     setDraft(nextDraft);
@@ -623,7 +635,8 @@ export function AgentsPanel({
           saving={busy}
           error={error}
           canSave={draft.name.trim() !== "" && editorDirty && !discardConfirm}
-          saveLabel="Save"
+          invalidReason={!draft.name.trim() ? tx("Enter a name to save this bot.") : discardConfirm ? tx("Choose whether to keep your changes first.") : undefined}
+          saveLabel={tx("Save")}
           cancelLabel={t("common.cancel")}
           onCancel={() => requestClose(false)}
           form="agent-editor-form"
@@ -647,9 +660,9 @@ export function AgentsPanel({
             >
               {discardConfirm && (
                 <div role="group" aria-labelledby="discard-agent-title" className="mb-3 flex flex-wrap items-center gap-2 rounded-field border border-warning/50 bg-warning/10 p-3 text-sm">
-                  <p id="discard-agent-title" className="min-w-0 flex-1 font-medium">Discard unsaved changes?</p>
-                  <Button ref={keepEditingRef} type="button" variant="secondary" onClick={() => { setDiscardConfirm(false); setCloseAfterDiscard(false); }}>Keep editing</Button>
-                  <Button type="button" variant="danger" onClick={discardAndClose}>Discard changes</Button>
+                  <p id="discard-agent-title" className="min-w-0 flex-1 font-medium">{tx("Discard unsaved changes?")}</p>
+                  <Button ref={keepEditingRef} type="button" variant="secondary" onClick={() => { setDiscardConfirm(false); setCloseAfterDiscard(false); }}>{tx("Keep editing")}</Button>
+                  <Button type="button" variant="danger" onClick={discardAndClose}>{tx("Discard changes")}</Button>
                 </div>
               )}
               <Tabs
@@ -657,11 +670,11 @@ export function AgentsPanel({
                 onValueChange={(value) => setEditorSection(value as EditorSection)}
                 className="flex min-h-0 flex-1 flex-col"
               >
-                <TabList label="Agent settings sections">
-                  <Tab value="basics">Basics</Tab>
-                  <Tab value="model">Model and approvals</Tab>
-                  {canEditConnectedApps && <Tab value="apps">Connected apps</Tab>}
-                  <Tab value="memory">Memory and notes</Tab>
+                <TabList label={tx("Bot settings sections")}>
+                  <Tab value="basics">{tx("Basics")}</Tab>
+                  <Tab value="model">{tx("Model and approvals")}</Tab>
+                  {canEditConnectedApps && <Tab value="apps">{tx("Connected apps")}</Tab>}
+                  <Tab value="memory">{tx("Memory and notes")}</Tab>
                 </TabList>
                 <div className="min-h-0 flex-1 overflow-y-auto pb-4 pt-4">
                   <TabPanel value="basics" className="space-y-3">
@@ -669,56 +682,57 @@ export function AgentsPanel({
                       <SetupEntryDisclosure agents={agents} engines={engines} onStart={onSetupChat} onCreateLead={() => setRoleChoice({ id: null, value: true })} />
                     )}
                     <label className="block text-xs text-muted">
-                      Name
+                      {t("bot.name")}
                       <input
                         autoFocus
                         value={draft.name}
                         maxLength={80}
                         onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                        placeholder="Code reviewer"
+                        placeholder={tx("For example, Reviewer")}
                         className={`${FIELD} mt-1`}
                       />
                     </label>
                     <label className="block text-xs text-muted">
-                      Title
+                      {t("bot.role")}
                       <input
                         value={draft.title}
                         maxLength={200}
                         onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-                        placeholder="Reviews pull requests before merge"
+                        placeholder={tx("Reviews pull requests before merge")}
                         className={`${FIELD} mt-1`}
                       />
                     </label>
                     <label className="block text-xs text-muted">
-                      Description
+                      {t("bot.about")}
                       <textarea
                         value={draft.description}
                         rows={2}
                         maxLength={4000}
                         onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                        placeholder="For you: what this agent is for. Not sent to Claude."
+                        placeholder={tx("For you: what this bot is for. Not sent to Claude.")}
                         className={`${FIELD} mt-1 resize-y`}
                       />
                     </label>
                     <label className="block text-xs text-muted">
-                      Instructions
+                      {t("bot.instructions")}
                       <textarea
                         value={draft.instructions}
                         rows={5}
                         onChange={(e) => setDraft({ ...draft, instructions: e.target.value })}
-                        placeholder="How this agent should behave. Added to every conversation it starts."
+                        placeholder={tx("How this bot should behave. Added to every conversation it starts.")}
                         className={`${FIELD} mt-1 resize-y`}
                       />
                     </label>
+                    <details><summary className="cursor-pointer text-sm">{tx("Advanced")}</summary>
                     <label className="block text-xs text-muted">
-                      Workspace folder
-                      <input
+                      {tx("Folder for this bot’s files")}<input
                         value={draft.workspace_path}
                         onChange={(e) => setDraft({ ...draft, workspace_path: e.target.value })}
-                        placeholder="Leave empty for the agent's own folder"
+                        placeholder={tx("Automatic")}
                         className={`${FIELD} mt-1 font-mono`}
                       />
                     </label>
+                    </details>
                     {draft.id === null && fromTemplate && fromTemplate.template.skills.length > 0 && (
                       <TemplateSkillChoices
                         skills={fromTemplate.template.skills}
@@ -731,9 +745,9 @@ export function AgentsPanel({
 
                   <TabPanel value="model" className="space-y-4">
                     <section className="space-y-2">
-                      <h3 className="text-sm font-medium text-ink">Model</h3>
+                      <h3 className="text-sm font-medium text-ink">{tx("Model")}</h3>
                       <EngineModelFields engines={engines} provider={draft.provider} model={draft.model} disabled={busy} hasComputer={agents.some((agent) => agent.id === draft.id && agent.computer != null)} onChange={(provider, model) => setDraft({ ...draft, provider, model })} />
-                      <p className="text-xs text-muted">Engine changes apply to new conversations. Existing conversations keep their engine.</p>
+                      <p className="text-xs text-muted">{tx("Engine changes apply to new conversations. Existing conversations keep their engine.")}</p>
                     </section>
 
                     {admin && <fieldset className="space-y-2 rounded-field border border-line p-3">
@@ -747,15 +761,14 @@ export function AgentsPanel({
                     </fieldset>}
 
                     <label className="block text-xs text-muted">
-                      Fallback engine when limited
-                      <Select
-                        aria-label="Fallback engine"
+                      {tx("Fallback engine when limited")}<Select
+                        aria-label={tx("Fallback engine")}
                         value={draft.fallback_provider && draft.fallback_provider !== draft.provider ? draft.fallback_provider : ""}
                         disabled={busy}
                         onChange={(e) => setDraft({ ...draft, fallback_provider: e.target.value || null, fallback_model: null })}
                         className={`${FIELD} mt-1`}
                       >
-                        <option value="">None</option>
+                        <option value="">{tx("None")}</option>
                         {engines.filter((engine) => engine.id !== draft.provider).map((engine) => (
                           <option key={engine.id} value={engine.id}>{engine.label}</option>
                         ))}
@@ -763,12 +776,11 @@ export function AgentsPanel({
                     </label>
                     {draft.fallback_provider && draft.fallback_provider !== draft.provider && (
                       <label className="block text-xs text-muted">
-                        Fallback model
-                        <input
-                          aria-label="Fallback model"
+                        {tx("Fallback model")}<input
+                          aria-label={tx("Fallback model")}
                           value={draft.fallback_model ?? ""}
                           onChange={(e) => setDraft({ ...draft, fallback_model: e.target.value || null })}
-                          placeholder="Engine default"
+                          placeholder={tx("Engine default")}
                           maxLength={200}
                           className={`${FIELD} mt-1`}
                         />
@@ -776,7 +788,7 @@ export function AgentsPanel({
                     )}
                     <p className="text-xs text-muted">{t("agentTeam.fallbackEngineDescription")}</p>
                     <fieldset className="space-y-2 text-xs text-muted">
-                      <legend>Approvals</legend>
+                      <legend>{tx("Approvals")}</legend>
                       <div className="mt-1 flex flex-wrap gap-2">
                         {APPROVAL_MODES.map((mode) => (
                           <label
@@ -794,11 +806,11 @@ export function AgentsPanel({
                               checked={draft.approval_mode === mode.value}
                               onChange={() => setDraft({ ...draft, approval_mode: mode.value })}
                             />
-                              <span className="inline-flex min-h-8 items-center rounded-md peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent touch:min-h-11">{mode.label}</span>
+                              <span className="inline-flex min-h-8 items-center rounded-md peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent touch:min-h-11">{tx(mode.label)}</span>
                           </label>
                         ))}
                       </div>
-                      {modeInfo && <p>{modeInfo.description}</p>}
+                      {modeInfo && <p>{tx(modeInfo.description)}</p>}
                     </fieldset>
                   </TabPanel>
 
@@ -818,8 +830,7 @@ export function AgentsPanel({
                   <TabPanel value="memory" className="space-y-3">
                     {draft.id === null && (
                       <label className="block text-xs text-muted">
-                        Starter notes
-                        <textarea
+                        {tx("Starter notes")}<textarea
                           value={draft.starter_notes}
                           rows={5}
                           onChange={(e) => setDraft({ ...draft, starter_notes: e.target.value })}
@@ -836,8 +847,7 @@ export function AgentsPanel({
                         disabled={busy}
                         onChange={() => setDraft({ ...draft, memory_enabled: !draft.memory_enabled })}
                       />
-                      Use notes: load this agent&apos;s MEMORY.md into each conversation
-                    </label>
+                      {tx("Use notes: load this bot's MEMORY.md into each conversation")}</label>
                   </TabPanel>
                 </div>
               </Tabs>
@@ -846,8 +856,7 @@ export function AgentsPanel({
             <div className="space-y-3">
               <TemplatesGallery onAdd={addTemplate} />
               <button type="button" onClick={back} className={BUTTON}>
-                Back to agents
-              </button>
+                {tx("Back to bots")}</button>
             </div>
           ) : computerOf ? (
             <div className="space-y-3">
@@ -858,15 +867,13 @@ export function AgentsPanel({
                 engineLabel={engines.find((engine) => engine.id === computerOf.provider)?.label ?? computerOf.provider}
               />
               <button onClick={back} className={BUTTON}>
-                Back
-              </button>
+                {tx("Back")}</button>
             </div>
           ) : skillsOf ? (
             <div className="space-y-3">
               <SkillsPanel key={skillsOf.id} agent={skillsOf} />
               <button onClick={back} className={BUTTON}>
-                Back
-              </button>
+                {tx("Back")}</button>
             </div>
           ) : notes ? (
             <NotesEditor
@@ -887,66 +894,58 @@ export function AgentsPanel({
           ) : exporting ? (
             <div className="space-y-3 text-sm">
               <p className="text-muted">
-                Saves this agent as one file you can keep or give to someone. It holds the name, title, description and
-                instructions. Never its model, folder, approval mode or conversations; an imported copy always starts on
-                &quot;Ask first&quot;.
-              </p>
+                {tx("Saves this bot as one file you can keep or give to someone. It holds the name, title, description and instructions. Never its model, folder, approval mode or conversations; an imported copy always starts on \"Ask first\".")}</p>
               <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
                 <input
                   type="checkbox"
                   checked={exporting.includeNotes}
                   onChange={() => setExporting({ ...exporting, includeNotes: !exporting.includeNotes, notice: null })}
                 />
-                Include its notes (MEMORY.md) as starter notes. Leave off if they hold private details.
-              </label>
+                {tx("Include its notes (MEMORY.md) as starter notes. Leave off if they hold private details.")}</label>
               {exporting.notice && <p className="text-xs text-muted">{exporting.notice}</p>}
               <div className="flex gap-2">
                 <button onClick={doExport} disabled={busy} className={PRIMARY}>
-                  {busy ? "Saving…" : "Save file"}
+                  {busy ? tx("Saving…") : tx("Save file")}
                 </button>
                 <button onClick={back} disabled={busy} className={BUTTON}>
-                  Done
-                </button>
+                  {tx("Done")}</button>
               </div>
             </div>
           ) : migration ? (
             <div className="space-y-3 text-sm">
               {migration.source === null ? (
                 <>
-                  <p>Choose how you want to bring in a single agent setup.</p>
+                  <p>{tx("Choose how you want to bring in a single bot setup.")}</p>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => setMigration({ ...migration, source: "grok" })}
                       className={BUTTON}
                     >
-                      Grok Bot export
-                    </button>
+                      {tx("Grok Bot export")}</button>
                     <button
                       type="button"
                       onClick={() => setMigration({ ...migration, source: "hermes" })}
                       className={BUTTON}
                     >
-                      Hermes Agent export
-                    </button>
+                      {tx("Hermes Bot export")}</button>
                     <button
                       type="button"
                       onClick={() => { setOpenBotDatabase(null); setMigration({ ...migration, source: "openbot" }); }}
                       disabled={!canReadOpenBotDatabase}
                       className={BUTTON}
-                      title={canReadOpenBotDatabase ? undefined : "Available only when connected to a local backend."}
+                      title={canReadOpenBotDatabase ? undefined : tx("Available only when connected to a local backend.")}
                     >
-                      OpenBot database{canReadOpenBotDatabase ? "" : " · local app only"}
+                      {tx("OpenBot database")}{" "}{canReadOpenBotDatabase ? "" : tx(" · local app only")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setMigration({ ...migration, source: "other" })}
                       className={BUTTON}
                     >
-                      Another agent JSON
-                    </button>
+                      {tx("Another bot JSON")}</button>
                   </div>
-                  <button type="button" onClick={back} className={BUTTON}>Cancel</button>
+                  <button type="button" onClick={back} className={BUTTON}>{tx("Cancel")}</button>
                 </>
               ) : migration.source === "openbot" ? (
                 <>
@@ -955,18 +954,13 @@ export function AgentsPanel({
                     type="file"
                     accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3"
                     className="hidden"
-                    aria-label="Choose OpenBot database"
+                    aria-label={tx("Choose OpenBot database")}
                     onChange={(event) => previewOpenBotDatabase(event.target.files?.[0])}
                   />
                   <p>
-                    Choose the OpenBot <code>openbot.db</code> file. Close OpenBot first so its latest changes are saved.
-                    The read-only file can be up to 128 MB and must use a supported schema version.
-                  </p>
+                    {tx("Choose the OpenBot")}{" "}<code>{"openbot.db"}</code> {tx("file. Close OpenBot first so its latest changes are saved. The read-only file can be up to 128 MB and must use a supported schema version.")}</p>
                   <p className="text-xs text-muted">
-                    The file is sent only to the local Open Dots backend for preview and discarded afterward. Only
-                    agent names, titles and role text are returned; memories, skills, routines, connections, messages,
-                    credentials, tools and other settings are not imported. This option is unavailable on hosted accounts.
-                  </p>
+                    {tx("The file is sent only to the local Chief of Noumenon backend for preview and discarded afterward. Only bot names, titles and role text are returned; memories, skills, routines, connections, messages, credentials, tools and other settings are not imported. This option is unavailable on hosted accounts.")}</p>
                   {!openBotDatabase ? (
                     <button
                       type="button"
@@ -974,14 +968,13 @@ export function AgentsPanel({
                       disabled={busy}
                       className={PRIMARY}
                     >
-                      {busy ? "Reading…" : "Choose openbot.db"}
+                      {busy ? tx("Reading…") : tx("Choose openbot.db")}
                     </button>
                   ) : (
                     <>
                       <p className="text-xs text-muted">
-                        Found {openBotDatabase.profiles.length} agent{openBotDatabase.profiles.length === 1 ? "" : "s"}
-                        in schema version {openBotDatabase.schema_version}. Choose one to review; import the others one at a time.
-                      </p>
+                        {tx("Found")}{" "}{openBotDatabase.profiles.length} {tx("bot")}{" "}{openBotDatabase.profiles.length === 1 ? "" : "s"}
+                        {tx("in schema version")}{" "}{openBotDatabase.schema_version}{tx(". Choose one to review; import the others one at a time.")}</p>
                       <div className="max-h-64 space-y-2 overflow-auto rounded-md border border-line p-2">
                         {openBotDatabase.profiles.map((profile) => (
                           <button
@@ -1001,57 +994,53 @@ export function AgentsPanel({
                         disabled={busy}
                         className={BUTTON}
                       >
-                        Choose another file
-                      </button>
+                        {tx("Choose another file")}</button>
                     </>
                   )}
-                  <button type="button" onClick={back} disabled={busy} className={BUTTON}>Cancel</button>
+                  <button type="button" onClick={back} disabled={busy} className={BUTTON}>{tx("Cancel")}</button>
                 </>
               ) : (
                 <>
                   <p>
                     {migration.source === "grok"
-                      ? "Copy the prompt into Grok Bot, then paste its JSON reply below."
+                      ? tx("Copy the prompt into Grok Bot, then paste its JSON reply below.")
                       : migration.source === "hermes"
-                        ? "Copy the prompt into Hermes Agent, then paste its JSON reply below."
-                        : "Paste one agent's JSON export. We will read common name, title, description and instruction fields."}
+                        ? tx("Copy the prompt into Hermes Bot, then paste its JSON reply below.")
+                        : tx("Paste one bot's JSON export. We will read common name, title, description and instruction fields.")}
                   </p>
                   {migration.source !== "other" ? (
                     <details className="rounded-md border border-line p-3">
-                      <summary className="cursor-pointer font-medium">Export prompt</summary>
+                      <summary className="cursor-pointer font-medium">{tx("Export prompt")}</summary>
                       <div className="mt-2 space-y-2">
                         <textarea
                           readOnly
-                          aria-label={`${migration.source === "hermes" ? "Hermes Agent" : "Grok Bot"} export prompt`}
+                          aria-label={`${migration.source === "hermes" ? "Hermes Bot" : "Grok Bot"} export prompt`}
                           value={migration.source === "hermes" ? HERMES_AGENT_EXPORT_PROMPT : GROK_AGENT_EXPORT_PROMPT}
                           rows={8}
                           className={`${FIELD} font-mono text-xs`}
                         />
                         <button type="button" onClick={copyMigrationPrompt} className={BUTTON}>
-                          {migration.copied ? "Copied" : "Copy prompt"}
+                          {migration.copied ? tx("Copied") : tx("Copy prompt")}
                         </button>
                       </div>
                     </details>
                   ) : (
                     <div className="rounded-md border border-line p-3 text-xs text-muted">
-                      Expected fields: name, title, description and instructions. Other settings are ignored.
-                    </div>
+                      {tx("Expected fields: name, title, description and instructions. Other settings are ignored.")}</div>
                   )}
                   <label className="block space-y-1">
-                    <span className="text-xs font-medium">Paste JSON export</span>
+                    <span className="text-xs font-medium">{tx("Paste JSON export")}</span>
                     <textarea
-                      aria-label="Paste agent setup JSON"
+                      aria-label={tx("Paste bot setup JSON")}
                       value={migration.text}
                       onChange={(event) => setMigration({ ...migration, text: event.target.value, copied: false })}
                       rows={9}
                       className={`${FIELD} font-mono text-xs`}
-                      placeholder='{"name":"Research assistant","instructions":"..."}'
+                      placeholder={"{\"name\":\"Research assistant\",\"instructions\":\"...\"}"}
                     />
                   </label>
                   <p className="text-xs text-muted">
-                    Only name, title, description and instructions are imported. Skills, routines, connected apps,
-                    credentials, memories, tools, files and chat history are not transferred.
-                  </p>
+                    {tx("Only name, title, description and instructions are imported. Skills, routines, connected apps, credentials, memories, tools, files and chat history are not transferred.")}</p>
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -1059,9 +1048,8 @@ export function AgentsPanel({
                       disabled={!migration.text.trim() || busy}
                       className={PRIMARY}
                     >
-                      Review import
-                    </button>
-                    <button type="button" onClick={back} disabled={busy} className={BUTTON}>Cancel</button>
+                      {tx("Review import")}</button>
+                    <button type="button" onClick={back} disabled={busy} className={BUTTON}>{tx("Cancel")}</button>
                   </div>
                 </>
               )}
@@ -1071,34 +1059,32 @@ export function AgentsPanel({
               {importing.migration ? (
                 <>
                   <div className="rounded-md border border-line p-3">
-                    <p className="font-medium">Source: {importing.migration.sourceLabel}</p>
+                    <p className="font-medium">{tx("Source:")}{" "}{importing.migration.sourceLabel}</p>
                     {importing.migration.mappingNotice && (
                       <p className="mt-1 text-xs text-muted">{importing.migration.mappingNotice}</p>
                     )}
                     <p className="mt-1 text-xs text-muted">
-                      The following fields will be copied to a new agent. It starts on &quot;Ask first&quot; with the
-                      default model and its own folder.
-                    </p>
+                      {tx("The following fields will be copied to a new bot. It starts on \"Ask first\" with the default model and its own folder.")}</p>
                     <dl className="mt-3 space-y-2">
                       <div>
-                        <dt className="text-xs font-medium text-muted">Name</dt>
+                        <dt className="text-xs font-medium text-muted">{tx("Name")}</dt>
                         <dd className="break-words">{importing.migration.name}</dd>
                       </div>
                       <div>
-                        <dt className="text-xs font-medium text-muted">Title</dt>
-                        <dd className="break-words">{importing.migration.title || "Not provided"}</dd>
+                        <dt className="text-xs font-medium text-muted">{tx("Title")}</dt>
+                        <dd className="break-words">{importing.migration.title || tx("Not provided")}</dd>
                       </div>
                       <div>
-                        <dt className="text-xs font-medium text-muted">Description</dt>
+                        <dt className="text-xs font-medium text-muted">{tx("Description")}</dt>
                         <dd className="max-h-20 overflow-auto whitespace-pre-wrap break-words">
-                          {importing.migration.description || "Not provided"}
+                          {importing.migration.description || tx("Not provided")}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-xs font-medium text-muted">Instructions</dt>
+                        <dt className="text-xs font-medium text-muted">{tx("Instructions")}</dt>
                         <dd>
                           <details className="mt-1">
-                            <summary className="cursor-pointer">Review full instructions</summary>
+                            <summary className="cursor-pointer">{tx("Review full instructions")}</summary>
                             <div className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded border border-line p-2 text-xs">
                               {importing.migration.instructions}
                             </div>
@@ -1108,15 +1094,11 @@ export function AgentsPanel({
                     </dl>
                   </div>
                   <p className="text-xs text-muted">
-                    Skills, routines, connected apps, credentials, memories, tools, files and chat history are not
-                    transferred. Configure those separately after reviewing the agent.
-                  </p>
+                    {tx("Skills, routines, connected apps, credentials, memories, tools, files and chat history are not transferred. Configure those separately after reviewing the bot.")}</p>
                 </>
               ) : (
                 <p>
-                  Add <span className="font-medium">{importing.name}</span> as a new agent. It starts on &quot;Ask first&quot;
-                  with the default model and its own folder; a name already in use gets a number.
-                </p>
+                  {tx("Add")}{" "}<span className="font-medium">{importing.name}</span> {tx("as a new bot. It starts on \"Ask first\" with the default model and its own folder; a name already in use gets a number.")}</p>
               )}
               {importing.hasNotes && (
                 <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
@@ -1125,8 +1107,7 @@ export function AgentsPanel({
                     checked={importing.includeNotes}
                     onChange={() => setImporting({ ...importing, includeNotes: !importing.includeNotes })}
                   />
-                  Keep the file&apos;s starter notes
-                </label>
+                  {tx("Keep the file's starter notes")}</label>
               )}
               <div className="flex gap-2">
                 <button
@@ -1134,11 +1115,10 @@ export function AgentsPanel({
                   disabled={busy}
                   className={PRIMARY}
                 >
-                  {busy ? "Adding…" : "Add agent"}
+                  {busy ? tx("Adding…") : tx("Add bot")}
                 </button>
                 <button onClick={back} disabled={busy} className={BUTTON}>
-                  Cancel
-                </button>
+                  {tx("Cancel")}</button>
               </div>
             </div>
           ) : (
@@ -1154,23 +1134,22 @@ export function AgentsPanel({
                 </div>
                 {searchEnabled && (
                   <label className="min-w-[12rem] flex-1">
-                    <span className="sr-only">Search agents</span>
+                    <span className="sr-only">{tx("Search bots")}</span>
                     <input
                       type="search"
-                      aria-label="Search agents"
+                      aria-label={tx("Search bots")}
                       value={agentFilter}
                       onChange={(event) => setAgentFilter(event.target.value)}
-                      placeholder="Search agents"
+                      placeholder={tx("Search bots")}
                       className={`${FIELD} h-9 py-1.5`}
                     />
                   </label>
                 )}
                 <div className="ml-auto flex flex-wrap items-center gap-2">
-                  <Button onClick={() => setGallery(true)}>Templates…</Button>
+                  <Button onClick={() => setGallery(true)}>{tx("Templates…")}</Button>
                   <Button onClick={() => { setError(null); setOpenBotDatabase(null); setMigration({ source: null, text: "", copied: false }); }}>
-                    Migrate…
-                  </Button>
-                  <Button onClick={() => fileInput.current?.click()}>Import…</Button>
+                    {tx("Migrate…")}</Button>
+                  <Button onClick={() => fileInput.current?.click()}>{tx("Import…")}</Button>
                   <label className="flex min-h-9 cursor-pointer items-center gap-2 px-1 text-xs text-muted touch:min-h-11">
                     <input type="checkbox" checked={showArchived} onChange={() => setShowArchived((on) => !on)} />
                     {t("sidebar.showArchived")}
@@ -1179,18 +1158,17 @@ export function AgentsPanel({
               </div>
               {visible.length === 0 ? (
                 <p className="text-sm text-muted">
-                  No agents yet. An agent keeps its own instructions, model, workspace, approval mode and notes.
-                </p>
+                  {tx("No bots yet. A bot keeps its own instructions, model, workspace, approval mode and notes.")}</p>
               ) : filteredAgents.length === 0 ? (
-                <p className="text-sm text-muted">No agents match that search.</p>
+                <p className="text-sm text-muted">{tx("No bots match that search.")}</p>
               ) : (
                 <>
                 {unavailableEngines.length > 0 && (
-                  <div role="status" aria-label="AI connection status" className="mb-2 flex min-w-0 items-center gap-2 rounded-field border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-xs text-warning">
+                  <div role="status" aria-label={tx("AI connection status")} className="mb-2 flex min-w-0 items-center gap-2 rounded-field border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-xs text-warning">
                     <p className="min-w-0 flex-1 truncate" title={unavailableEngines.map((engine) => `${engine.label}: ${engine.signed_in === false ? "not signed in" : engine.reason ?? "unavailable"}`).join(" · ")}>
-                      Connect an AI: {unavailableEngines.map((engine) => `${engine.label} ${engine.signed_in === false ? "is not signed in" : engine.reason ?? "is unavailable"}`).join(" · ")}
+                      {tx("Connect an AI:")}{" "}{unavailableEngines.map((engine) => `${engine.label} ${engine.signed_in === false ? "is not signed in" : engine.reason ?? "is unavailable"}`).join(" · ")}
                     </p>
-                    <Link href="/settings/engines/" className="shrink-0 font-medium underline underline-offset-2">Engine settings</Link>
+                    <Link href="/settings/engines/" className="shrink-0 font-medium underline underline-offset-2">{tx("Engine settings")}</Link>
                   </div>
                 )}
                 <ul className="space-y-1">
@@ -1207,54 +1185,51 @@ export function AgentsPanel({
                               <div className="flex min-w-0 flex-wrap items-center gap-1.5 leading-4">
                                 <p className="min-w-0 truncate text-sm font-semibold text-ink">{agent.name}</p>
                                 {agent.title?.trim() && <span className="min-w-0 max-w-[12rem] truncate rounded-full border border-line px-1.5 py-0.5 text-[11px] font-medium text-muted" title={agent.title}>{agent.title}</span>}
-                                {agent.pinned && <Badge tone="accent">Pinned</Badge>}
-                                {archived && <Badge>Archived</Badge>}
-                                {engine?.available === false && <span role="img" className="inline-block size-2 shrink-0 rounded-full bg-warning" title={engine.reason ?? `${engine.label} is not available`} aria-label={`${engine.label} is not available`} />}
+                                {agent.pinned && <Badge tone="accent">{tx("Pinned")}</Badge>}
+                                {archived && <Badge>{tx("Archived")}</Badge>}
+                                {engine?.available === false && <span role="img" className="inline-block size-2 shrink-0 rounded-full bg-warning" title={engine.reason ?? `${engine.label} is not available`} aria-label={tx("{name} is not available", { name: engine.label })} />}
                               </div>
                               {description && <p className="truncate text-xs leading-4 text-muted" title={description}>{description}</p>}
-                              <div className="flex min-w-0 flex-wrap gap-1" role="group" aria-label="Agent configuration">
+                              <div className="flex min-w-0 flex-wrap gap-1" role="group" aria-label={tx("Bot configuration")}>
                                 <Badge className="max-w-full truncate !px-1.5 !py-0 text-[10px]">{engine?.label ?? agent.provider}</Badge>
                                 <Badge className="max-w-full truncate !px-1.5 !py-0 text-[10px]">{modelLabel(agent.model)}</Badge>
                                 <Badge className="max-w-full truncate !px-1.5 !py-0 text-[10px]">{approvalModeLabel(agent.approval_mode)}</Badge>
                               </div>
                             </div>
                           </div>
-                          <div className="flex shrink-0 flex-wrap items-center gap-1" role="group" aria-label={`Actions for ${agent.name}`}>
-                            <Button size="sm" variant="secondary" onClick={() => openDraft(toDraft(agent))} disabled={busy}>Edit</Button>
-                            <Button size="sm" variant="ghost" onClick={() => openNotes(agent)} disabled={busy}>Notes</Button>
-                            <Button size="sm" variant="ghost" onClick={() => setSkillsOf(agent)} disabled={busy}>Skills</Button>
-                            {!archived && <Button size="sm" variant="ghost" onClick={() => setComputerOf(agent)} disabled={busy}>Computer</Button>}
+                          <div className="flex shrink-0 flex-wrap items-center gap-1" role="group" aria-label={tx("Actions for {name}", { name: agent.name })}>
+                            <Button size="sm" variant="secondary" onClick={() => openDraft(toDraft(agent))} disabled={busy}>{tx("Edit")}</Button>
+                            <Button size="sm" variant="ghost" onClick={() => openNotes(agent)} disabled={busy}>{tx("Notes")}</Button>
+                            <Button size="sm" variant="ghost" onClick={() => setSkillsOf(agent)} disabled={busy}>{tx("Skills")}</Button>
+                            {!archived && <Button size="sm" variant="ghost" onClick={() => setComputerOf(agent)} disabled={busy}>{tx("Computer")}</Button>}
                             <Menu
                               align="start"
-                              trigger={<IconButton label={`More actions for ${agent.name}`} disabled={busy}><Ellipsis size={18} aria-hidden="true" /></IconButton>}
+                              trigger={<IconButton label={tx("More actions for {name}", { name: agent.name })} disabled={busy}><Ellipsis size={18} aria-hidden="true" /></IconButton>}
                             >
-                              {!archived && <MenuItem onSelect={() => run(() => api.duplicateAgent(agent.id))}>Duplicate</MenuItem>}
-                              {!archived && <MenuItem onSelect={() => run(() => api.updateAgent(agent.id, { pinned: !agent.pinned }))}>{agent.pinned ? "Unpin" : "Pin"}</MenuItem>}
-                              <MenuItem onSelect={() => setExporting({ agent, includeNotes: false, notice: null })}>Export</MenuItem>
-                              <MenuItem onSelect={() => run(() => api.updateAgent(agent.id, { archived: !archived }))}>{archived ? "Restore" : "Archive"}</MenuItem>
+                              {!archived && <MenuItem onSelect={() => run(() => api.duplicateAgent(agent.id))}>{tx("Duplicate")}</MenuItem>}
+                              {!archived && <MenuItem onSelect={() => run(() => api.updateAgent(agent.id, { pinned: !agent.pinned }))}>{agent.pinned ? tx("Unpin") : tx("Pin")}</MenuItem>}
+                              <MenuItem onSelect={() => setExporting({ agent, includeNotes: false, notice: null })}>{tx("Export")}</MenuItem>
+                              <MenuItem onSelect={() => run(() => api.updateAgent(agent.id, { archived: !archived }))}>{archived ? tx("Restore") : tx("Archive")}</MenuItem>
                               <MenuSeparator />
-                              <MenuItem onSelect={() => setDeleteConfirm(agent)} danger>Delete</MenuItem>
+                              <MenuItem onSelect={() => setDeleteConfirm(agent)} danger>{tx("Delete")}</MenuItem>
                             </Menu>
                           </div>
                         </div>
                         {deleteConfirm?.id === agent.id && (
                           <div ref={deleteConfirmationRef} role="alert" className="mt-3 rounded-md border border-danger/50 p-3 pb-4 text-xs">
-                            <p className="font-medium">Delete {agent.name} permanently?</p>
+                            <p className="font-medium">{t("rail.deleteTitle", { name: agent.name })}</p>
                             <p className="mt-1 text-muted">
-                              This removes the agent, its notes and skills, and its computer. Its conversations stay in history
-                              but become unlinked and continue without this agent&apos;s instructions. Its workspace folder stays;
-                              routines assigned to it will fail and pause. This cannot be undone.
-                            </p>
+                              {tx("This removes the bot, its notes and skills, and its computer. Its conversations stay in history but become unlinked and continue without this bot's instructions. Its workspace folder stays; routines assigned to it will fail and pause. This cannot be undone.")}</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               <button ref={keepAgentRef} onClick={() => setDeleteConfirm(null)} disabled={busy} className={SMALL}>
-                                Keep agent
+                                {t("rail.keepBot")}
                               </button>
                               <button
-                                onClick={() => run(() => api.deleteAgent(agent.id), () => setDeleteConfirm(null))}
+                                onClick={() => run(() => api.deleteAgent(agent.id), () => { setDeleteConfirm(null); onDeleted?.(agent.id); })}
                                 disabled={busy}
                                 className={`${SMALL} border-danger/50 text-danger`}
                               >
-                                {busy ? "Deleting…" : "Delete permanently"}
+                                {busy ? t("rail.deleting") : t("rail.deletePermanently")}
                               </button>
                             </div>
                           </div>
@@ -1270,7 +1245,7 @@ export function AgentsPanel({
                 type="file"
                 accept=".json,application/json"
                 className="hidden"
-                aria-label="Agent file to import"
+                aria-label={tx("Bot file to import")}
                 onChange={(e) => pickImport(e.target.files?.[0])}
               />
             </>
@@ -1304,9 +1279,10 @@ function NotesEditor({
   onReload: () => void;
   onBack: () => void;
 }) {
+  const tx = useUiText();
   const t = useT();
   const { memory } = notes;
-  if (!memory) return <p className="text-sm text-muted">Loading notes…</p>;
+  if (!memory) return <p className="text-sm text-muted">{tx("Loading notes…")}</p>;
   const gauge = memoryGauge(memory);
   const dirty = notes.text !== memory.text;
   const enabled = notes.agent.memory_enabled ?? true;
@@ -1314,10 +1290,7 @@ function NotesEditor({
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted">
-        Notes this agent keeps between conversations, in <span className="font-mono break-all">{memory.path}</span>. Only
-        the first {memory.max_lines} lines load into each conversation. Anything that looks like a password or key is
-        replaced when saved.
-      </p>
+        {tx("Notes this bot keeps between conversations, in")}{" "}<span title={memory.path} className="font-mono break-all">{relativeReceipt(memory.path)}</span>{tx(". Only the first")}{" "}{memory.max_lines} {tx("lines load into each conversation. Anything that looks like a password or key is replaced when saved.")}</p>
       <div>
         <div className="h-1.5 w-full overflow-hidden rounded bg-hover" aria-hidden="true">
           <div className={`h-full ${GAUGE_COLOR[gauge.level]}`} style={{ width: `${gauge.percent}%` }} />
@@ -1328,8 +1301,8 @@ function NotesEditor({
         value={notes.text}
         rows={12}
         onChange={(e) => onText(e.target.value)}
-        aria-label="Notes"
-        placeholder={"- Facts this agent should remember\n- One per line"}
+        aria-label={tx("Notes")}
+        placeholder={"- Facts this bot should remember\n- One per line"}
         className={`${FIELD} resize-y font-mono`}
       />
       {notes.conflict && (
@@ -1337,30 +1310,25 @@ function NotesEditor({
           <p>{t("agentTeam.agentNotesConflict")}</p>
           <div className="mt-2 flex gap-2">
             <button onClick={onLoadTheirs} disabled={busy} className={SMALL}>
-              Load its version
-            </button>
+              {tx("Load its version")}</button>
             <button onClick={onOverwrite} disabled={busy} className={SMALL}>
-              Overwrite with mine
-            </button>
+              {tx("Overwrite with mine")}</button>
           </div>
         </div>
       )}
       {notes.saved && <p className="text-xs text-muted">{notes.saved}</p>}
       <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
         <input type="checkbox" checked={enabled} disabled={busy} onChange={() => onToggle(!enabled)} />
-        Use notes in this agent&apos;s conversations
-      </label>
+        {tx("Use notes in this bot's conversations")}</label>
       <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
         <input type="checkbox" checked={recall} disabled={busy || !enabled} onChange={() => onToggleRecall(!recall)} />
-        Recall before each message: add matching topic notes and passages from earlier conversations to the message
-        (shown as a &ldquo;Recalled&rdquo; chip)
-      </label>
+        {tx("Recall before each message: add matching topic notes and passages from earlier conversations to the message (shown as a &ldquo;Recalled&rdquo; chip)")}</label>
       <div className="flex gap-2">
         <button onClick={onSave} disabled={busy || !dirty} className={PRIMARY}>
-          {busy ? "Saving…" : "Save notes"}
+          {busy ? tx("Saving…") : tx("Save notes")}
         </button>
         <button onClick={onBack} disabled={busy} className={BUTTON}>
-          {dirty ? "Discard" : "Done"}
+          {dirty ? tx("Discard") : tx("Done")}
         </button>
       </div>
       <MemoryPanel agent={notes.agent} onAgentChange={onAgentChange} onNotesChanged={() => !dirty && onReload()} />

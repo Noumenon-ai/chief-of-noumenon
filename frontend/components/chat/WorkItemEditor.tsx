@@ -1,7 +1,8 @@
 "use client";
+import { useT } from "@/lib/use-i18n";
 
 import Link from "next/link";
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Select } from "@/components/ui/Select";
@@ -44,6 +45,8 @@ export type WorkItemEditorProps = {
 };
 
 export function WorkItemEditor({ item, board, agents, threads, team, seedDate, seedColumn, latestItem, onReload, onOpenThread, onRun, onSave, onClose }: WorkItemEditorProps) {
+  const tx = useT();
+  const submitting = useRef(false);
   const id = useId();
   const [draft, setDraft] = useState(() => draftOf(item, board, seedDate, seedColumn));
   const [busy, setBusy] = useState(false);
@@ -58,24 +61,24 @@ export function WorkItemEditor({ item, board, agents, threads, team, seedDate, s
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy || stale) return;
+    if (submitting.current || busy || stale) return;
     setError(null);
-    if (!draft.title.trim()) { setError("Give the task a title."); return; }
+    if (!draft.title.trim()) { setError(tx("Give the task a title.")); return; }
     let dueAt: string | null = null;
     let dueDate: string | null = null;
     let savedZone = timezone;
     if (draft.deadlineKind === "date") {
-      if (!draft.date) { setError("Choose a deadline date."); return; }
+      if (!draft.date) { setError(tx("Choose a deadline date.")); return; }
       dueDate = draft.date;
     } else if (draft.deadlineKind === "time") {
-      if (!draft.time) { setError("Choose a deadline date and time."); return; }
+      if (!draft.time) { setError(tx("Choose a deadline date and time.")); return; }
       if (item?.due_at && localDateTime(item.due_at) === draft.time) {
         dueAt = item.due_at;
         savedZone = item.timezone;
       } else {
         const date = new Date(draft.time);
         if (!Number.isFinite(date.getTime()) || localDateTime(date.toISOString()) !== draft.time) {
-          setError("That local time does not exist on this date. Choose another time.");
+          setError(tx("That local time does not exist on this date. Choose another time."));
           return;
         }
         dueAt = date.toISOString();
@@ -89,88 +92,89 @@ export function WorkItemEditor({ item, board, agents, threads, team, seedDate, s
       team_id: kind === "team" ? Number(assigneeId) : null,
       thread_id: draft.threadId,
     };
+    submitting.current = true;
     setBusy(true);
     try { await onSave(data); }
-    catch (err) { setError(err instanceof Error ? err.message : "Could not save this task. Try again."); }
-    finally { setBusy(false); }
+    catch (err) { setError(err instanceof Error ? err.message : tx("Could not save this task. Try again.")); }
+    finally { submitting.current = false; setBusy(false); }
   }
 
   return (
-    <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }} title={item ? "Edit task" : "New task"} size="wide"
-      description="Plan work, set a deadline, and link a conversation.">
+    <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }} title={item ? tx("Edit task") : tx("New task")} size="wide"
+      description={tx("Plan work, set a deadline, and link a conversation.")}>
       <form onSubmit={save} className="space-y-4">
         {stale && <div role="alert" className="space-y-2 rounded-field border border-warning/50 bg-warning/10 p-3 text-sm">
-          <p>This task changed in another window. Load the latest version before saving. This replaces your unsaved edits.</p>
-          {onReload && <Button size="sm" onClick={() => { setDraft(draftOf(latestItem!, board)); setError(null); onReload(latestItem!); }}>Load latest version</Button>}
+          <p>{tx("This task changed in another window. Load the latest version before saving. This replaces your unsaved edits.")}</p>
+          {onReload && <Button size="sm" onClick={() => { setDraft(draftOf(latestItem!, board)); setError(null); onReload(latestItem!); }}>{tx("Load latest version")}</Button>}
         </div>}
         <fieldset disabled={busy} className="space-y-4">
           <div>
-            <label htmlFor={`${id}-title`} className="mb-1 block text-sm font-medium">Title</label>
-            <input id={`${id}-title`} value={draft.title} onChange={event => change("title", event.target.value)} required maxLength={240} className={input} placeholder="What needs to happen?" />
+            <label htmlFor={`${id}-title`} className="mb-1 block text-sm font-medium">{tx("Title")}</label>
+            <input id={`${id}-title`} value={draft.title} onChange={event => change("title", event.target.value)} required maxLength={240} className={input} placeholder={tx("What needs to happen?")} />
           </div>
           <div>
-            <label htmlFor={`${id}-description`} className="mb-1 block text-sm font-medium">Description</label>
-            <textarea id={`${id}-description`} value={draft.description} onChange={event => change("description", event.target.value)} maxLength={50000} rows={4} className={input} placeholder="Add context, a checklist, or the expected result…" />
+            <label htmlFor={`${id}-description`} className="mb-1 block text-sm font-medium">{tx("Description")}</label>
+            <textarea id={`${id}-description`} value={draft.description} onChange={event => change("description", event.target.value)} maxLength={50000} rows={4} className={input} placeholder={tx("Add context, a checklist, or the expected result…")} />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor={`${id}-status`} className="mb-1 block text-sm font-medium">Status</label>
+              <label htmlFor={`${id}-status`} className="mb-1 block text-sm font-medium">{tx("Status")}</label>
               <Select id={`${id}-status`} value={draft.columnId} onChange={event => change("columnId", Number(event.target.value))} className={input}>
                 {board.columns.map(column => <option key={column.id} value={column.id}>{column.name}</option>)}
               </Select>
             </div>
             <div>
-              <label htmlFor={`${id}-priority`} className="mb-1 block text-sm font-medium">Priority</label>
+              <label htmlFor={`${id}-priority`} className="mb-1 block text-sm font-medium">{tx("Priority")}</label>
               <Select id={`${id}-priority`} value={draft.priority} onChange={event => change("priority", event.target.value as WorkItem["priority"])} className={input}>
-                <option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option>
+                <option value="low">{tx("Low")}</option><option value="normal">{tx("Normal")}</option><option value="high">{tx("High")}</option><option value="urgent">{tx("Urgent")}</option>
               </Select>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor={`${id}-deadline-kind`} className="mb-1 block text-sm font-medium">Deadline</label>
+              <label htmlFor={`${id}-deadline-kind`} className="mb-1 block text-sm font-medium">{tx("Deadline")}</label>
               <Select id={`${id}-deadline-kind`} value={draft.deadlineKind} onChange={event => change("deadlineKind", event.target.value as DeadlineKind)} className={input}>
-                <option value="none">No deadline</option><option value="date">Date only</option><option value="time">Date and time</option>
+                <option value="none">{tx("No deadline")}</option><option value="date">{tx("Date only")}</option><option value="time">{tx("Date and time")}</option>
               </Select>
             </div>
             {draft.deadlineKind === "date" && <div>
-              <label htmlFor={`${id}-date`} className="mb-1 block text-sm font-medium">Due date</label>
+              <label htmlFor={`${id}-date`} className="mb-1 block text-sm font-medium">{tx("Due date")}</label>
               <input id={`${id}-date`} type="date" required value={draft.date} onChange={event => change("date", event.target.value)} className={input} />
             </div>}
             {draft.deadlineKind === "time" && <div>
-              <label htmlFor={`${id}-time`} className="mb-1 block text-sm font-medium">Due at · {timezone}</label>
+              <label htmlFor={`${id}-time`} className="mb-1 block text-sm font-medium">{tx("Due at ·")}{timezone}</label>
               <input id={`${id}-time`} type="datetime-local" required value={draft.time} onChange={event => change("time", event.target.value)} className={input} />
             </div>}
           </div>
-          <p className="text-xs text-muted">Deadlines and status changes do not start an agent. Save your changes, then use Run & history to start or schedule work.</p>
+          <p className="text-xs text-muted">{tx("Deadlines and status changes do not start a bot. Save your changes, then use Run & history to start or schedule work.")}</p>
           <div>
-            <label htmlFor={`${id}-assignee`} className="mb-1 block text-sm font-medium">Assigned to</label>
+            <label htmlFor={`${id}-assignee`} className="mb-1 block text-sm font-medium">{tx("Assigned to")}</label>
             <Select id={`${id}-assignee`} value={draft.assignee} onChange={event => change("assignee", event.target.value)} className={input}>
-              <option value="">Unassigned</option>
-              {team && <option value={`team:${team.id}`}>Team · {team.name}</option>}
+              <option value="">{tx("Unassigned")}</option>
+              {team && <option value={`team:${team.id}`}>{tx("Team ·")}{team.name}</option>}
               {agents.map(agent => <option key={agent.id} value={`agent:${agent.id}`}>{agent.name}</option>)}
-              {unavailableAgent && <option value={`agent:${item!.agent_id}`}>Unavailable agent · #{item!.agent_id}</option>}
-              {unavailableTeam && <option value={`team:${item!.team_id}`}>Unavailable team · #{item!.team_id}</option>}
+              {unavailableAgent && <option value={`agent:${item!.agent_id}`}>{tx("Unavailable bot · #")}{item!.agent_id}</option>}
+              {unavailableTeam && <option value={`team:${item!.team_id}`}>{tx("Unavailable team · #")}{item!.team_id}</option>}
             </Select>
           </div>
           <div>
-            <label htmlFor={`${id}-thread`} className="mb-1 block text-sm font-medium">Linked conversation</label>
+            <label htmlFor={`${id}-thread`} className="mb-1 block text-sm font-medium">{tx("Linked conversation")}</label>
             <Select id={`${id}-thread`} value={draft.threadId ?? ""} onChange={event => change("threadId", event.target.value ? Number(event.target.value) : null)} className={input}>
-              <option value="">No linked conversation</option>
-              {threads.map(thread => <option key={thread.id} value={thread.id}>{thread.title || `Conversation #${thread.id}`}</option>)}
-              {unavailableThread && <option value={item!.thread_id!}>Unavailable conversation · #{item!.thread_id}</option>}
+              <option value="">{tx("No linked conversation")}</option>
+              {threads.map(thread => <option key={thread.id} value={thread.id}>{thread.title || tx("Conversation #{id}", { id: thread.id })}</option>)}
+              {unavailableThread && <option value={item!.thread_id!}>{tx("Unavailable conversation · #")}{item!.thread_id}</option>}
             </Select>
             {draft.threadId !== null && threads.some(thread => thread.id === draft.threadId) && <Link href={`/chat?thread=${draft.threadId}`} className="mt-2 inline-block text-xs text-accent underline" onClick={event => {
               if (busy) { event.preventDefault(); return; }
               (onOpenThread ?? onClose)();
-            }}>Open linked conversation</Link>}
+            }}>{tx("Open linked conversation")}</Link>}
           </div>
         </fieldset>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-2 border-t border-line pt-4">
-          {item && onRun && <Button disabled={busy || stale || dirty} onClick={() => onRun(item)}>Run & history</Button>}
-          <Button disabled={busy} onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" loading={busy} disabled={stale || !draft.title.trim()}>{item ? "Save changes" : "Create task"}</Button>
+          {item && onRun && <Button disabled={busy || stale || dirty} onClick={() => onRun(item)}>{tx("Run & history")}</Button>}
+          <Button disabled={busy} onClick={onClose}>{tx("Cancel")}</Button>
+          <Button type="submit" variant="primary" loading={busy} disabled={stale || !draft.title.trim()}>{tx(item ? "Save changes" : "Create task")}</Button>
         </div>
       </form>
     </Dialog>

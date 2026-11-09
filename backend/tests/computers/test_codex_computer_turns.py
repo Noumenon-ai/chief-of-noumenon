@@ -125,6 +125,7 @@ async def test_codex_is_launched_with_its_own_tools_off_and_only_the_computer_mo
     assert config["web_search"] == "disabled"
     servers = config["mcp_servers"]
     assert servers["computer"]["default_tools_approval_mode"] == "prompt"
+    assert servers["computer"]["tool_timeout_sec"] > 1440 * 60
     assert servers["theirs"] == {"enabled": False}  # the person's own servers would run on the host
     assert "own computer" in started["developerInstructions"] and "shell and file tools are turned off" in started["developerInstructions"]
     # Nothing of Codex's may write, and the turn has no execution environment.
@@ -210,3 +211,26 @@ async def test_native_desktop_control_stays_claude_only(rt, sessions, codex):
     ctx.__dict__.update(computer=SimpleNamespace(provider="native"), provider_state=None, resume=False)
     outcome = await CodexAdapter().run_turn(ctx, None, None)
     assert outcome.status == "failed" and outcome.error_code == "engine_without_computers"
+
+
+async def test_codex_handoff_waits_for_continue_and_returns_no_takeover_input(rt, sessions, codex, docker):
+    from app.computers import docker_cli
+    from app.db.models import Approval, Notification
+    _, computer, thread, _ = await codex_agent_with_computer(rt, sessions, docker)
+    await rt.computers._save(computer.id, kind="desktop", image=docker_cli.DESKTOP_IMAGE, browser_enabled=True)
+    docker.add_image(docker_cli.DESKTOP_IMAGE)
+    codex.plan(step("request_handoff", {"reason": "Use your passkey in the live view"}))
+    await rt.send_turn(thread.id, "sign in")
+    approval = await pending_approval(sessions, thread.id)
+    assert approval.kind == "handoff"
+    assert rt._runs[approval.turn_id].gate.waiting
+    assert not [e for e in codex.log() if e.get("event") == "mcp_result"]
+    assert await rt.answer_approval(approval.id, "allow")
+    assert not await rt.answer_approval(approval.id, "allow")
+    await finished(sessions, thread.id)
+    result = next(e for e in codex.log() if e.get("event") == "mcp_result")
+    assert "person finished" in result["content"] and not result["is_error"]
+    async with sessions() as db:
+        assert (await db.get(Approval, approval.id)).consumed_at is not None
+        await db.execute(delete(Notification).where(Notification.thread_id == thread.id))
+        await db.commit()

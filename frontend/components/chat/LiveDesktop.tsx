@@ -6,7 +6,7 @@ import { DesktopRfb, DESKTOP_KEYS } from "@/lib/desktop-rfb";
 import { takeover } from "@/lib/takeover";
 
 const BUTTON = "cursor-pointer rounded border border-line px-2 py-1 text-xs disabled:opacity-50";
-export function LiveDesktop({ computerId }: { computerId: number }) {
+export function LiveDesktop({ computerId, running = true }: { computerId: number; running?: boolean }) {
   const [state, dispatch] = useReducer(takeover, "watching");
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -65,6 +65,7 @@ export function LiveDesktop({ computerId }: { computerId: number }) {
     ws.onerror = () => { ws.close(); };
   };
   const take = async () => {
+    if (!running) return;
     const version = ++generation.current;
     dispatch("take"); setError(null);
     try {
@@ -82,7 +83,8 @@ export function LiveDesktop({ computerId }: { computerId: number }) {
   };
   return <section className={expanded ? "fixed inset-0 z-50 flex flex-col gap-2 bg-inset p-3" : "space-y-2"}>
     <div className="flex flex-wrap items-center gap-2">
-      {state === "watching" || state === "taking" ? <button ref={opener} className={BUTTON} disabled={state === "taking"} onClick={() => void take()}>{state === "taking" ? "Taking control…" : "Take control"}</button> : <>
+      {!running && <p className="text-xs text-muted">Start the computer before taking control.</p>}
+      {state === "watching" || state === "taking" ? <button ref={opener} className={BUTTON} disabled={!running || state === "taking"} title={!running ? "Start the computer before taking control." : undefined} onClick={() => void take()}>{state === "taking" ? "Taking control…" : "Take control"}</button> : <>
         <span className="text-xs">{state === "live" ? "You are in control" : state === "lost" ? "Connection lost" : "Connecting…"}</span>
         <button className={BUTTON} onClick={release}>Hand control back</button>
         <button className={BUTTON} onClick={() => setExpanded(!expanded)}>{expanded ? "Exit full screen" : "Full screen"}</button>
@@ -90,7 +92,7 @@ export function LiveDesktop({ computerId }: { computerId: number }) {
       </>}
     </div>
     {active && <>
-      <canvas ref={canvas} tabIndex={0} role="application" aria-label="Computer desktop. Click to focus; Hand control back returns control to the agent." className="aspect-[16/10] min-h-0 w-full touch-none rounded border border-line bg-black object-contain outline-accent"
+      <canvas ref={canvas} tabIndex={0} role="application" aria-label="Computer desktop. Click to focus; Hand control back returns control to the bot." className="aspect-[16/10] min-h-0 w-full touch-none rounded border border-line bg-black object-contain outline-accent"
         onPointerDown={event => { event.preventDefault(); event.currentTarget.focus(); event.currentTarget.setPointerCapture(event.pointerId); pointer(event); }}
         onPointerMove={event => pointer(event)} onPointerUp={event => pointer(event,0)} onPointerCancel={event => pointer(event,0)} onContextMenu={event => event.preventDefault()}
         onWheel={event => { event.preventDefault(); const rect=event.currentTarget.getBoundingClientRect(); const x=(event.clientX-rect.left)*event.currentTarget.width/rect.width,y=(event.clientY-rect.top)*event.currentTarget.height/rect.height; client.current?.pointer(x,y,event.deltaY<0 ? 8:16); client.current?.pointer(x,y,0); }}

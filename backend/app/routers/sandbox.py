@@ -203,26 +203,6 @@ async def resume_sandbox(box_id: str, db: AsyncSession = Depends(get_db)):
             detail=f"ASCII error: {exc.reason}",
         )
 
-@router.post("/{box_id}/test-command", dependencies=[Depends(known_box)])
-async def test_command(box_id: str):
-    result = await run_in_threadpool(
-        ascii_box_service.run_command,
-        box_id,
-        'claude auth status',
-        #'tmux new-session -d -s claude_auth -x 500 -y 50 "claude auth login"'
-    )
-
-    logger.info(f"Command result: {result.to_json()}")
-    parsed_result = json.loads(result.to_json())
-
-    return {
-        "stdout": parsed_result.get("stdout"),
-        "stderr": parsed_result.get("stderr"),
-        "exit_code": parsed_result.get("exit_code"),
-        "success": parsed_result.get("success"),
-    }
-
-
 @router.post("/{box_id}/test-write-file", dependencies=[Depends(known_box)])
 async def test_write_file(box_id: str, payload: dict):
     result = await run_in_threadpool(
@@ -233,24 +213,6 @@ async def test_write_file(box_id: str, payload: dict):
     )
 
     return result.to_dict()
-
-
-@router.post("/{box_id}/auth/{provider}/start", response_model=AuthLoginStartResponse, dependencies=[Depends(known_box)])
-async def start_auth_login(box_id: str, provider: str):
-    try:
-        login_url = await run_in_threadpool(
-            auth_flow_service.start_login, box_id, provider
-        )
-        return AuthLoginStartResponse(login_url=login_url)
-
-    except UnsupportedProviderError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except BoxNotRunningError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-    except BoxCommandError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-    except LoginTimeoutError as exc:
-        raise HTTPException(status_code=504, detail=str(exc))
 
 
 @router.post(
@@ -313,47 +275,6 @@ async def get_auth_status(box_id: str, provider: str, db: AsyncSession = Depends
         db, sandbox_record.user_id, provider
     )
     return AuthStatusResponse(connected=decrypted is not None)
-
-
-@router.post(
-    "/{box_id}/auth/{provider}/submit", response_model=AuthLoginSubmitResponse
-)
-async def submit_auth_login(
-    box_id: str,
-    provider: str,
-    payload: AuthLoginSubmitRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    sandbox_record = await user_sandbox_service.get_by_box_id(db, box_id)
-    if sandbox_record is None:
-        raise HTTPException(status_code=404, detail="Sandbox not found")
-    await release_snapshot(db)  # the login below can take tens of seconds
-
-    try:
-        credential_content = await run_in_threadpool(
-            auth_flow_service.submit_code, box_id, provider, payload.code
-        )
-
-        await user_credential_service.save_token(
-            db,
-            user_id=sandbox_record.user_id,
-            provider=provider,
-            file_path=auth_flow_service.PROVIDERS[provider]["credential_path"],
-            plaintext=credential_content,
-        )
-
-        return AuthLoginSubmitResponse(status="connected")
-
-    except UnsupportedProviderError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except BoxNotRunningError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-    except BoxCommandError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-    except LoginFailedError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except LoginTimeoutError as exc:
-        raise HTTPException(status_code=504, detail=str(exc))
 
 
 @router.delete("/{box_id}", dependencies=[Depends(known_box)])

@@ -112,10 +112,23 @@ async def test_a_saved_prefix_rule_allows_a_longer_command_but_not_a_chained_one
     chained = {"type": "tool", "tool_name": "Bash", "tool_input": {"command": "git status; rm -rf ~"}}
     cli.script(chained)
     await rt.send_turn(thread.id, "again")
-    approval = await pending_approval(sessions, thread.id)  # asked: the rule does not cover it
+    # Home paths now hit the refusal-only boundary before a saved rule or card.
+    await finished(sessions, thread.id, count=2)
+    assert cli.log("reply")[-1]["reply"]["response"]["response"]["behavior"] == "deny"
+    approvals = await _approvals(sessions, thread.id)
+    denied = next(a for a in approvals if a.input == chained["tool_input"])
+    assert denied.status == "denied"
+    from tests.services.thread_harness import events_of
+    events = await events_of(sessions, thread.id)
+    assert not [e for e in events if e.type == 'approval.requested' and e.turn_id == denied.turn_id]
+
+    # A chain confined to the workspace must still ask; no new automatic allows.
+    cli.script({"type": "tool", "tool_name": "Bash", "tool_input": {"command": "git status; rm -rf scratch"}})
+    await rt.send_turn(thread.id, "check a local chain")
+    approval = await pending_approval(sessions, thread.id)
     assert approval.summary and "rm -rf" in approval.summary
     assert await rt.answer_approval(approval.id, "deny")
-    await finished(sessions, thread.id, count=2)
+    await finished(sessions, thread.id, count=3)
 
 
 async def test_a_rule_for_another_command_or_tool_does_not_apply(rt, sessions, cli, tools_on, owner):

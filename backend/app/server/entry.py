@@ -128,10 +128,13 @@ def build_app(options: ServerOptions):
     from app.server.proxy_check import check_forwarded_headers
     from app.server.static_ui import serve_ui
 
+    from app.services import phone_access
+    phone_access.configure(options.host, options.port, options.base_path)
+
     added = augment_path()
     if added:
         get_logger(__name__).info(f"Added to the PATH for engines: {', '.join(added)}")
-    return check_forwarded_headers(serve_ui(app, options.ui_dir, options.base_path))
+    return check_forwarded_headers(serve_ui(app, options.ui_dir, options.base_path, check_hosts=True))
 
 
 def migrate() -> int:
@@ -140,10 +143,10 @@ def migrate() -> int:
     try:
         report = prepare_database()
     except KeyMismatch as exc:
-        print(f"Open Duet server: {exc}", file=sys.stderr)
+        print(f"Chief of Noumenon server: {exc}", file=sys.stderr)
         return EXIT_KEY_MISMATCH
     except DatabaseRefused as exc:
-        print(f"Open Duet server: {exc}", file=sys.stderr)
+        print(f"Chief of Noumenon server: {exc}", file=sys.stderr)
         return EXIT_DATABASE
     if report.backup:
         print(f"Copied the database to {report.backup} before updating it.")
@@ -193,12 +196,12 @@ def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = 
     try:
         options = read_options(arguments, os.environ if environ is None else environ)
     except ServerConfigError as exc:
-        print(f"Open Duet server: {exc}", file=sys.stderr)
+        print(f"Chief of Noumenon server: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
     problem = check_schema()
     if problem:
-        print(f"Open Duet server: {problem}", file=sys.stderr)
+        print(f"Chief of Noumenon server: {problem}", file=sys.stderr)
         return EXIT_DATABASE
 
     import uvicorn

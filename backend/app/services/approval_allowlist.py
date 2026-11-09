@@ -44,7 +44,7 @@ MAX_WORKSPACE_CHARS = 4096
 MAX_RULES = 200
 BASH_TOOL = "Bash"
 # Tools whose `command` is a shell command a rule can match.
-COMMAND_TOOLS = (BASH_TOOL, "mcp__computer__exec")
+COMMAND_TOOLS = (BASH_TOOL, "mcp__computer__exec", "api__shell")
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 

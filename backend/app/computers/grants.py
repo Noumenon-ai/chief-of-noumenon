@@ -3,8 +3,9 @@
 When the approval gate allows a computer tool call (a person's Allow, a saved
 rule, or an automatic allow the gate records), the app writes a permit for
 exactly that tool and those arguments into a private folder that belongs to
-the running turn. The computer's MCP server runs a call only after it removed
-a matching permit. So a call the gate never saw is refused even if the Claude
+the running turn. For Docker turns the backend mailbox bridge consumes this
+permit and the matching delivered approval row before running a call. The
+child shim never receives the permit folder. So a call the gate never saw is refused even if the Claude
 CLI were configured not to ask, and an approval is spent once.
 
 The folder lives in the app's data folder, outside every workspace and never

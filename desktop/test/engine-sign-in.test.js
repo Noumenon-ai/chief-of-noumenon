@@ -4,7 +4,7 @@ const { validateEngineSignIn, registerEngineSignIn } = require("../src/engine-si
 
 test("engine sign-in opens only provider authorization pages", () => {
   assert.equal(validateEngineSignIn("https://auth.openai.com/codex/device"), "https://auth.openai.com/codex/device");
-  assert.ok(validateEngineSignIn("https://claude.com/cai/oauth/authorize?state=one"));
+  assert.throws(() => validateEngineSignIn("https://claude.com/cai/oauth/authorize?state=one"));
   for (const link of ["https://claude.com.evil.test/oauth/authorize?x=1", "https://claude.com/other?x=1", "https://auth.openai.com/codex/device?redirect=evil", "https://user:pass@claude.com/oauth/authorize?x=1", "file:///etc/passwd", "http://claude.com/oauth/authorize?x=1", "https://claude.com:8443/oauth/authorize?x=1"]) assert.throws(() => validateEngineSignIn(link));
 });
 

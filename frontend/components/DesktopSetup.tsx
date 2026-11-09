@@ -47,7 +47,7 @@ export function DesktopSetup({ settings, onSaved, onFinished }: {
       if (cancelled) return;
       setExisting(agents.filter((agent) => agent.provider === "claude").map((agent) => ({ id: agent.id, name: agent.name, provider: agent.provider })));
       setCreateAgent((previous) => previous ?? agents.length === 0);
-    }).catch(() => { if (!cancelled) setError("Could not load agents. Reload Settings to try again, or set up later."); });
+    }).catch(() => { if (!cancelled) setError("Could not load bots. Reload Settings to try again, or set up later."); });
     return () => { cancelled = true; };
   }, []);
 
@@ -100,8 +100,8 @@ export function DesktopSetup({ settings, onSaved, onFinished }: {
   return (
     <section aria-label="First-run setup" className="space-y-5 rounded-card border border-line bg-raised p-5">
       <div>
-        <h2 className="text-heading font-semibold">Welcome to Open Duet</h2>
-        <p className="mt-2 text-sm text-muted">Choose how your agents work on this computer. You can change these choices in Settings and Agents.</p>
+        <h2 className="text-heading font-semibold">Welcome to Chief of Noumenon</h2>
+        <p className="mt-2 text-sm text-muted">Choose how your bots work on this computer. You can change these choices in Settings and Bots.</p>
       </div>
       <Stepper steps={STEPS} current={step} />
       {error && <Banner tone="danger">{error}</Banner>}
@@ -129,14 +129,14 @@ export function DesktopSetup({ settings, onSaved, onFinished }: {
           </Field>
           <Button disabled={busy} onClick={() => void browse()}>Choose folder</Button>
           <p className="break-all text-xs text-muted">App default: {String(row("LOCAL_WORKSPACE_ROOT")?.default ?? "")}</p>
-          <p className="text-sm text-muted">New agents get their own subfolders here. To work directly in an existing project, set that agent&apos;s workspace in Agents.</p>
+          <p className="text-sm text-muted">New bots get their own subfolders here. To work directly in an existing project, set that bot&apos;s workspace in Bots.</p>
         </div>
       )}
 
       {step === 2 && (
         <div className="space-y-4">
           <Checkbox label="Allow tools on this computer" description="When off, local CLIs stay read only. API endpoints are chat only. Tool-capable engines use their own permissions and the app's approval cards." checked={tools} disabled={busy} onChange={(event) => setTools(event.target.checked)} />
-          <Checkbox label="Create a starter agent with the selected engine" checked={createAgent === true} disabled={busy || createAgent === null} onChange={(event) => setCreateAgent(event.target.checked)} />
+          <Checkbox label="Create a starter bot with the selected engine" checked={createAgent === true} disabled={busy || createAgent === null} onChange={(event) => setCreateAgent(event.target.checked)} />
           {createAgent && provider === "claude" && (
             <Checkbox label="Leads a team: can create specialists and delegate with the team approval settings" checked={leadsTeam} disabled={busy} onChange={(event) => setLeadsTeam(event.target.checked)} />
           )}
@@ -151,12 +151,12 @@ export function DesktopSetup({ settings, onSaved, onFinished }: {
             </Field>
           )}
           {createAgent && (
-            <Field label="Agent name">
-              {(p) => <Input {...p} aria-label="Starter agent name" maxLength={80} value={agentName} disabled={busy} onChange={(event) => setAgentName(event.target.value)} />}
+            <Field label="Bot name">
+              {(p) => <Input {...p} aria-label="Starter bot name" maxLength={80} value={agentName} disabled={busy} onChange={(event) => setAgentName(event.target.value)} />}
             </Field>
           )}
           <fieldset className="space-y-2" disabled={busy || !createAgent}>
-            <legend className="mb-2 text-sm font-medium">Starter agent approval mode</legend>
+            <legend className="mb-2 text-sm font-medium">Starter bot approval mode</legend>
             {APPROVAL_MODES.map((option) => (
               <label key={option.value} className="flex items-start gap-2 text-sm">
                 <input type="radio" name="setup-approval" value={option.value} checked={mode === option.value} onChange={() => setMode(option.value)} className="mt-0.5 accent-(--accent)" />
@@ -164,7 +164,7 @@ export function DesktopSetup({ settings, onSaved, onFinished }: {
               </label>
             ))}
           </fieldset>
-          {!createAgent && <p className="text-xs text-muted">Your existing agents keep their approval modes. Change them in Agents.</p>}
+          {!createAgent && <p className="text-xs text-muted">Your existing bots keep their approval modes. Change them in Bots.</p>}
         </div>
       )}
 
@@ -175,7 +175,7 @@ export function DesktopSetup({ settings, onSaved, onFinished }: {
             <SummaryRow label="Engine" value={`${engine?.label ?? provider} · ${modelLabel(model)}`} />
             <SummaryRow label="Workspace root" value={workspace.trim() || "App default"} />
             <SummaryRow label="Local tools" value={tools ? "on" : "off"} />
-            <SummaryRow label="Agent" value={createAgent ? `Create ${agentName.trim()} with ${APPROVAL_MODES.find((item) => item.value === mode)?.label}.` : "Use your existing agents, or start a plain chat."} />
+            <SummaryRow label="Bot" value={createAgent ? `Create ${agentName.trim()} with ${APPROVAL_MODES.find((item) => item.value === mode)?.label}.` : "Use your existing bots, or start a plain chat."} />
           </dl>
         </div>
       )}

@@ -6,8 +6,8 @@ const path = require("node:path");
 const { cleanEnvironment, defaultExecutable, runSmoke } = require("../scripts/smoke-packaged");
 
 test("packaged smoke locates the configured product, and strips Python and launch overrides", () => {
-  assert.match(defaultExecutable("win32"), /Open Duet\.exe$/);
-  assert.match(defaultExecutable("darwin"), /Open Duet\.app\/Contents\/MacOS\/Open Duet$/);
+  assert.match(defaultExecutable("win32"), /Chief of Noumenon\.exe$/);
+  assert.match(defaultExecutable("darwin"), /Chief of Noumenon\.app\/Contents\/MacOS\/Chief of Noumenon$/);
   const env = cleanEnvironment({ PATH: ["/a/.venv/bin", "/tools/python/bin", "/synthetic-tools"].join(path.delimiter), PYTHONPATH: "secret", OPEN_DOTS_DATA_DIR: "real-profile", OPEN_DOTS_API_TOKEN: "secret", ELECTRON_RUN_AS_NODE: "1", NORMAL: "yes" });
   assert.equal(env.PATH, "/synthetic-tools");
   assert.deepEqual(Object.keys(env).sort(), ["NORMAL", "PATH"]);

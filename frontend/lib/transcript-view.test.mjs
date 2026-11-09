@@ -36,7 +36,7 @@ test("a pending approval is announced before older news", () => {
 
 test("a settled answer is announced with its start; a stopped or streaming one is not", () => {
   const a = announcement([other("assistant", "a1", { text: "Here is\n  the result." })]);
-  assert.deepEqual(a, { key: "a1", text: "Agent replied: Here is the result." });
+  assert.deepEqual(a, { key: "a1", text: "Bot replied: Here is the result." });
   assert.equal(announcement([other("assistant", "a1", { text: "partial", incomplete: true })]), null);
   const long = announcement([other("assistant", "a2", { text: "x".repeat(500) })]);
   assert.ok(long.text.endsWith("…") && long.text.length < 270);

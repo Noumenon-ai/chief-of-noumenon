@@ -4,10 +4,9 @@ By default a run is chat-only: all built-in tools, MCP servers and skills are
 turned off. If a flag is missing the CLI refuses to start; there is no fallback
 to an unrestricted run.
 
-With tools on (`LOCAL_TOOLS_ENABLED`, a `RunControl` passed in) the CLI gets a
-fixed set of tools in permission mode `default` and asks this app, over its
-stdin/stdout, before each call it would prompt a person about. No run ever
-skips permissions or pre-approves anything.
+Native tools stay off in every mode. Agent workspace tools use a scoped MCP
+mailbox whose backend opens the durable approval gate before execution. Other
+MCP calls retain their stdio permission channel. No execution skips the gate.
 """
 
 import base64
@@ -34,6 +33,8 @@ from app.core import host_exec
 # Verified against Claude Code 2.1.232: init reported tools=[], mcp_servers=[],
 # skills=[], and a prompt asking to run a shell command wrote nothing.
 LOCKDOWN_ARGS = [
+    "--restricted",
+    "--settings", '{"disableAllHooks":true}',
     "--tools",
     "",
     "--strict-mcp-config",
@@ -42,11 +43,12 @@ LOCKDOWN_ARGS = [
     "dontAsk",
 ]
 
-# With tools on, the CLI asks this app (over stdin/stdout) before every tool
-# call it would otherwise prompt for in a terminal, and waits for the answer.
-# Only these tools exist: no web access, sub-agents, notebooks or MCP.
-TOOL_NAMES = "Read,Write,Edit,Glob,Grep,Bash"
+# Only explicitly supplied MCP servers exist. Native shell, files, web fetch,
+# subagents and code execution are absent from the login-bearing process.
+TOOL_NAMES = ""  # Native tools never share the engine account mount.
 TOOLS_ARGS = [
+    "--restricted",
+    "--settings", '{"disableAllHooks":true}',
     "--input-format",
     "stream-json",
     "--permission-prompt-tool",
@@ -303,6 +305,12 @@ def _child_env(*, extra_names=(), extra_env=None) -> dict[str, str]:
     # outside the workspace and without asking. Not for runs this app starts;
     # the user's own use of the CLI is unaffected (only this process sees it).
     env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+    # Transport waits outlive approval and execution budgets. The backend owns
+    # expiry, cancellation and the active-work timer.
+    wait_ms = str(max(172800, app_settings.get("LOCAL_APPROVAL_TIMEOUT_SECONDS") + app_settings.get("LOCAL_TASK_TIMEOUT_SECONDS") + 600) * 1000)
+    env["MCP_TOOL_TIMEOUT"] = wait_ms
+    env["CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT"] = wait_ms
+    env["CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS"] = wait_ms
     # Names this backend, so the next start can end what a hard kill left
     # running (app/core/engine_processes.py).
     return engine_processes.mark(env)
@@ -346,6 +354,8 @@ def run_blocking(
     sandbox: bool = False,
     sandbox_writable=(),
     sandbox_readonly=(),
+    sandbox_workspace_readonly: bool = False,
+    sandbox_engine: str | None = None,
 ) -> RunOutput:
     """Run a process to completion with a time limit and an output cap,
     killing its whole process tree if either is exceeded.
@@ -371,8 +381,11 @@ def run_blocking(
     env = _child_env()
     if sandbox:
         from app.core import turn_sandbox
-        turn_sandbox.self_check()
-        args = turn_sandbox.command(args, cwd=cwd, env=env, writable=sandbox_writable, readonly=sandbox_readonly)
+        args, _ = turn_sandbox.prepare(
+            args, cwd=cwd, env=env, writable=sandbox_writable, readonly=sandbox_readonly,
+            workspace_readonly=sandbox_workspace_readonly, engine=sandbox_engine,
+            engine_workspace=sandbox_engine == "claude",
+        )
     proc = subprocess.Popen(
         args,
         stdin=subprocess.PIPE,
@@ -619,7 +632,7 @@ def _status_blocking() -> CliStatus:
         status.error = "Could not determine whether Claude is signed in."
         return status
     if not status.signed_in:
-        status.error = "Claude is not signed in. Open engine settings to sign in."
+        status.error = "Install Claude Code from Anthropic, run claude in a terminal and sign in there, then press Refresh in Settings."
     return status
 
 
@@ -678,8 +691,12 @@ def _run_blocking(
     from app.core import turn_sandbox
     return run_blocking(
         args,
+        # Even chat-only turns must not auto-load a context symlink planted by
+        # an earlier tool turn in the real workspace.
         sandbox=True,
-        sandbox_writable=turn_sandbox.mailbox_mounts((mcp_servers or {}).values()),
+        sandbox_engine='claude',
+        sandbox_workspace_readonly=approval_mode == 'plan' or not tools,
+        sandbox_writable=turn_sandbox.mailbox_mounts((computer, *(mcp_servers or {}).values())),
         sandbox_readonly=[Path(image["path"]) for image in (images or [])],
         stdin_text=user_message_line(prompt, images) if tools or images else prompt,
         cwd=workspace_dir() if workspace is None else workspace,

@@ -110,6 +110,21 @@ def url(value):
     return value
 
 
+def disable_password_saving(profile):
+    """Manual sign-in may retain sessions, never browser-saved passwords."""
+    default = profile / "Default"
+    default.mkdir(mode=0o700, exist_ok=True)
+    preferences = default / "Preferences"
+    data = json.loads(preferences.read_text()) if preferences.exists() else {}
+    data["credentials_enable_service"] = False
+    data.setdefault("profile", {})["password_manager_enabled"] = False
+    data["credentials_enable_autosignin"] = False
+    temporary = default / ".preferences-no-passwords"
+    temporary.write_text(json.dumps(data))
+    temporary.chmod(0o600)
+    os.replace(temporary, preferences)
+
+
 class Browser:
     def __init__(self):
         from playwright.sync_api import sync_playwright
@@ -161,6 +176,7 @@ class Browser:
         profile = Path(PROFILE)
         profile.mkdir(mode=0o700, exist_ok=True)
         profile.chmod(0o700)
+        disable_password_saving(profile)
         self.process = subprocess.Popen([
             CHROME, *extra_flags(), "--disable-dev-shm-usage", "--no-first-run",
             "--no-default-browser-check", "--password-store=basic", "--remote-debugging-address=127.0.0.1",

@@ -207,3 +207,16 @@ def test_prefix_spellings_are_normalised_and_bad_ones_refused():
     for bad in ("/../x", "/a//b", "/./x"):
         with pytest.raises(ValueError):
             normalize_base_path(bad)
+
+
+@pytest.mark.parametrize('canonical,alias', [('127.0.0.1', 'localhost'), ('localhost', '127.0.0.1')])
+async def test_install_local_alias_uses_same_cookie_host_before_login(ui, monkeypatch, canonical, alias):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, 'OPEN_DOTS_PUBLIC_URL', f'http://{canonical}:8000')
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(serve_ui(inner_app, ui)), base_url=f'http://{alias}:8000') as api:
+        response = await api.get('/login/?next=%2Fapps')
+        assert response.status_code == 307
+        assert response.headers['location'] == f'http://{canonical}:8000/login/?next=%2Fapps'
+        assert (await api.get('/api/v1/auth/session')).status_code == 401
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(serve_ui(inner_app, ui)), base_url=f'http://{canonical}:8000') as api:
+        assert (await api.get('/login/')).status_code == 200

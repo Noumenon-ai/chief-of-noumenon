@@ -1,4 +1,6 @@
 "use client";
+import { useT as useUiText } from "@/lib/use-i18n";
+import { localImage } from "@/lib/local-assets";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -16,9 +18,7 @@ import {
 import { Badge } from "@/components/ui/Badge";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog } from "@/components/ui/Dialog";
-import { DesktopAccountDanger } from "@/components/DesktopAccountDanger";
 import {
   profileApi,
   readCachedProfile,
@@ -26,7 +26,6 @@ import {
   type ProfileStats,
   type UserProfile,
 } from "@/lib/profile";
-import { request } from "@/lib/api";
 import { copyToClipboard } from "@/lib/clipboard";
 import { Applies } from "./Applies";
 import { SaveBar } from "./SaveBar";
@@ -81,7 +80,7 @@ function UserAvatar({
   size?: number;
   className?: string;
 }) {
-  const displayName = user.name?.trim() || user.email?.split("@")[0] || "User";
+  const displayName = user.name?.trim() || "You";
   const initials =
     displayName
       .split(/\s+/)
@@ -89,7 +88,7 @@ function UserAvatar({
       .map((w) => w[0]?.toUpperCase())
       .join("") || "U";
 
-  if (user.avatar_url) {
+  if (user.avatar_url && localImage(user.avatar_url)) {
     return (
       <img
         src={user.avatar_url}
@@ -105,7 +104,7 @@ function UserAvatar({
   return (
     <div
       style={{ width: size, height: size }}
-      className={`flex shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-accent/80 to-accent text-accent-fg font-semibold shadow-inner ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-[10px] bg-accent text-accent-fg font-semibold shadow-inner ${className}`}
     >
       <span style={{ fontSize: size * 0.38 }}>{initials}</span>
     </div>
@@ -114,8 +113,9 @@ function UserAvatar({
 
 /* ─── Skeleton Component ─── */
 function ProfileSettingsSkeleton() {
+  const tx = useUiText();
   return (
-    <div className="space-y-8 animate-pulse" aria-label="Loading profile">
+    <div className="space-y-8 animate-pulse" aria-label={tx("Loading profile")}>
       {/* 1. Hero Skeleton */}
       <div className="flex flex-col gap-4 rounded-xl border border-line bg-raised p-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4 min-w-0">
@@ -183,6 +183,7 @@ function defaultEmptyStats(): ProfileStats {
 
 /* ─── Main Profile Settings Component ─── */
 export function ProfileSettings() {
+  const tx = useUiText();
   const confirmation = useSavedConfirmation();
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -208,8 +209,6 @@ export function ProfileSettings() {
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [signOutOpen, setSignOutOpen] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -221,7 +220,7 @@ export function ProfileSettings() {
         }
       })
       .catch((err) => {
-        console.warn("Could not load user profile:", err);
+        if (alive) setError(err instanceof Error ? err.message : "Could not load your profile. Try reloading this page.");
       });
 
     profileApi
@@ -233,7 +232,7 @@ export function ProfileSettings() {
         }
       })
       .catch((err) => {
-        console.warn("Could not load annual stats:", err);
+        if (alive) setError(err instanceof Error ? err.message : "Could not load your activity. Try reloading this page.");
         if (alive) {
           setStatsLoading(false);
         }
@@ -244,23 +243,11 @@ export function ProfileSettings() {
     };
   }, []);
 
-  async function handleSignOut() {
-    setSigningOut(true);
-    try {
-      await request("/desktop-account/logout", { method: "POST" });
-      window.location.reload();
-    } catch (err) {
-      setError(err instanceof Error ? `Could not sign out: ${err.message}` : "Could not sign out.");
-      setSigningOut(false);
-      setSignOutOpen(false);
-    }
-  }
-
   if (!mounted) {
     return <ProfileSettingsSkeleton />;
   }
 
-  const accountName = profile?.name?.trim() || profile?.email?.split("@")[0] || "User";
+  const accountName = profile?.name?.trim() || tx("You");
   const displayStats = stats ?? (statsLoading ? null : defaultEmptyStats());
 
   return (
@@ -271,12 +258,11 @@ export function ProfileSettings() {
       <span id="setting-profile-insights" className="sr-only" />
       <span id="setting-profile-teammates" className="sr-only" />
       <span id="setting-profile-models" className="sr-only" />
-      <span id="setting-profile-account" className="sr-only" />
       {error && <Banner tone="danger">{error}</Banner>}
 
       {/* 1. Profile Hero Section */}
       <section
-        aria-label="Profile Header"
+        aria-label={tx("Profile Header")}
         data-setting-id="setting-profile-details"
         className="flex flex-col gap-4 rounded-xl border border-line bg-raised p-6 sm:flex-row sm:items-center sm:justify-between"
       >
@@ -285,9 +271,8 @@ export function ProfileSettings() {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="truncate text-xl font-semibold text-ink">{accountName}</h3>
-              {profile?.is_admin && <Badge tone="accent">Admin</Badge>}
+              {profile?.is_admin && <Badge tone="accent">{tx("Admin")}</Badge>}
             </div>
-            {profile?.email && <p className="truncate text-sm text-muted">{profile.email}</p>}
             {profile?.bio && <p className="mt-1 text-xs text-muted/80">{profile.bio}</p>}
             <div className="mt-2 flex flex-wrap items-center gap-3"><Applies when="now" /><SavedConfirmation visible={confirmation.saved.has("profile")} /></div>
           </div>
@@ -296,49 +281,49 @@ export function ProfileSettings() {
         <div className="flex shrink-0 items-center gap-2">
           <Button variant="secondary" onClick={() => setShareOpen(true)}>
             <Share2 size={15} aria-hidden="true" />
-            <span>Share</span>
+            <span>{tx("Share")}</span>
           </Button>
           <Button variant="secondary" onClick={() => setEditOpen(true)}>
             <Pencil size={15} aria-hidden="true" />
-            <span>Edit profile</span>
+            <span>{tx("Edit profile")}</span>
           </Button>
         </div>
       </section>
 
       {/* 2. KPI Summary Tiles */}
       {statsLoading ? (
-        <section aria-label="Loading statistics" data-setting-id="setting-profile-summary" className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 animate-pulse">
+        <section aria-label={tx("Loading statistics")} data-setting-id="setting-profile-summary" className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 animate-pulse">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="h-24 rounded-xl border border-line bg-raised/50 p-4" />
           ))}
         </section>
       ) : displayStats ? (
-        <section aria-label="Annual summary statistics" data-setting-id="setting-profile-summary">
+        <section aria-label={tx("Annual summary statistics")} data-setting-id="setting-profile-summary">
           <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
             <div className="group rounded-xl border border-line bg-raised p-4 transition-colors hover:border-line/80">
               <dt className="flex items-center gap-1.5 text-xs font-medium text-muted">
                 <Zap size={14} className="text-accent" />
-                <span>Tokens</span>
+                <span>{tx("Tokens")}</span>
               </dt>
               <dd className="mt-2">
                 <span className="text-2xl font-bold tracking-tight text-ink">
                   {formatCompact(displayStats.tokens)}
                 </span>
-                <span className="block text-[11px] text-faint mt-0.5">Past year</span>
+                <span className="block text-[11px] text-faint mt-0.5">{tx("Past year")}</span>
               </dd>
             </div>
 
             <div className="group rounded-xl border border-line bg-raised p-4 transition-colors hover:border-line/80">
               <dt className="flex items-center gap-1.5 text-xs font-medium text-muted">
                 <Activity size={14} className="text-emerald-500" />
-                <span>Peak day</span>
+                <span>{tx("Peak day")}</span>
               </dt>
               <dd className="mt-2">
                 <span className="text-2xl font-bold tracking-tight text-ink">
                   {displayStats.peak ? formatCompact(displayStats.peak.tokens) : "–"}
                 </span>
                 <span className="block text-[11px] text-faint mt-0.5">
-                  {displayStats.peak ? formatDateShort(displayStats.peak.date) : "None yet"}
+                  {displayStats.peak ? formatDateShort(displayStats.peak.date) : tx("None yet")}
                 </span>
               </dd>
             </div>
@@ -346,27 +331,27 @@ export function ProfileSettings() {
             <div className="group rounded-xl border border-line bg-raised p-4 transition-colors hover:border-line/80">
               <dt className="flex items-center gap-1.5 text-xs font-medium text-muted">
                 <Calendar size={14} className="text-sky-500" />
-                <span>Messages</span>
+                <span>{tx("Messages")}</span>
               </dt>
               <dd className="mt-2">
                 <span className="text-2xl font-bold tracking-tight text-ink">
                   {formatCompact(displayStats.messages)}
                 </span>
-                <span className="block text-[11px] text-faint mt-0.5">Past year</span>
+                <span className="block text-[11px] text-faint mt-0.5">{tx("Past year")}</span>
               </dd>
             </div>
 
             <div className="group rounded-xl border border-line bg-raised p-4 transition-colors hover:border-line/80">
               <dt className="flex items-center gap-1.5 text-xs font-medium text-muted">
                 <Flame size={14} className="text-amber-500" />
-                <span>Current streak</span>
+                <span>{tx("Current streak")}</span>
               </dt>
               <dd className="mt-2">
                 <span className="text-2xl font-bold tracking-tight text-ink">
                   {displayStats.currentStreak} {displayStats.currentStreak === 1 ? "day" : "days"}
                 </span>
                 <span className="block text-[11px] text-faint mt-0.5">
-                  {displayStats.currentStreakStart ? `Since ${formatDateShort(displayStats.currentStreakStart)}` : "Start working today"}
+                  {displayStats.currentStreakStart ? tx("Since {date}", { date: formatDateShort(displayStats.currentStreakStart) }) : tx("Start working today")}
                 </span>
               </dd>
             </div>
@@ -374,7 +359,7 @@ export function ProfileSettings() {
             <div className="group rounded-xl border border-line bg-raised p-4 transition-colors hover:border-line/80">
               <dt className="flex items-center gap-1.5 text-xs font-medium text-muted">
                 <Flame size={14} className="text-rose-500" />
-                <span>Longest streak</span>
+                <span>{tx("Longest streak")}</span>
               </dt>
               <dd className="mt-2">
                 <span className="text-2xl font-bold tracking-tight text-ink">
@@ -383,7 +368,7 @@ export function ProfileSettings() {
                 <span className="block text-[11px] text-faint mt-0.5 truncate">
                   {displayStats.longestStreakDates
                     ? `${formatDateShort(displayStats.longestStreakDates.start)} – ${formatDateShort(displayStats.longestStreakDates.end)}`
-                    : "No streaks yet"}
+                    : tx("No streaks yet")}
                 </span>
               </dd>
             </div>
@@ -394,15 +379,14 @@ export function ProfileSettings() {
       {/* 3. GitHub-Style Activity Heatmap */}
       {displayStats && (
         <section
-          aria-label="Activity on this computer"
+          aria-label={tx("Activity on this computer")}
           data-setting-id="setting-profile-activity"
           className="space-y-3 rounded-xl border border-line bg-raised p-5"
         >
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-ink">Activity on this computer</h3>
+            <h3 className="text-sm font-semibold text-ink">{tx("Activity on this computer")}</h3>
             <span className="text-xs text-muted">
-              {displayStats.activeDays} active {displayStats.activeDays === 1 ? "day" : "days"} in the past year
-            </span>
+              {displayStats.activeDays} {tx("active")}{" "}{displayStats.activeDays === 1 ? "day" : "days"} {tx("in the past year")}</span>
           </div>
 
           <ProfileHeatmap days={displayStats.days} />
@@ -414,10 +398,10 @@ export function ProfileSettings() {
         <div className="grid gap-6 md:grid-cols-2">
           {/* Insights Box */}
           <section data-setting-id="setting-profile-insights" className="space-y-3 rounded-xl border border-line bg-raised p-5">
-            <h3 className="text-sm font-semibold text-ink">Insights</h3>
+            <h3 className="text-sm font-semibold text-ink">{tx("Insights")}</h3>
             <dl className="divide-y divide-line/60 text-sm">
               <div className="flex items-center justify-between py-2.5">
-                <dt className="text-muted">Most used provider</dt>
+                <dt className="text-muted">{tx("Most used provider")}</dt>
                 <dd className="font-medium text-ink">
                   {displayStats.providers[0] ? (
                     <span className="flex items-center gap-1.5">
@@ -437,23 +421,23 @@ export function ProfileSettings() {
               </div>
 
               <div className="flex items-center justify-between py-2.5">
-                <dt className="text-muted">Top model</dt>
+                <dt className="text-muted">{tx("Top model")}</dt>
                 <dd className="font-mono text-xs font-medium text-ink">
-                  {displayStats.models[0]?.model || "None yet"}
+                  {displayStats.models[0]?.model || tx("None yet")}
                 </dd>
               </div>
 
               <div className="flex items-center justify-between py-2.5">
-                <dt className="text-muted">Busiest day</dt>
+                <dt className="text-muted">{tx("Busiest day")}</dt>
                 <dd className="font-medium text-ink">
-                  {displayStats.busiestWeekday !== null ? WEEKDAYS[displayStats.busiestWeekday] : "None yet"}
+                  {displayStats.busiestWeekday !== null ? tx(WEEKDAYS[displayStats.busiestWeekday]) : tx("None yet")}
                 </dd>
               </div>
 
               <div className="flex items-center justify-between py-2.5">
-                <dt className="text-muted">Estimated cost</dt>
+                <dt className="text-muted">{tx("Estimated cost")}</dt>
                 <dd className="font-medium text-ink">
-                  {displayStats.cost !== null ? `$${displayStats.cost.toFixed(2)}` : "Free / API key"}
+                  {displayStats.cost !== null ? `$${displayStats.cost.toFixed(2)}` : tx("Free / API key")}
                 </dd>
               </div>
             </dl>
@@ -462,7 +446,7 @@ export function ProfileSettings() {
           {/* Most Active Teammates */}
           <section data-setting-id="setting-profile-teammates" className="space-y-3 rounded-xl border border-line bg-raised p-5">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-ink">Most active teammates</h3>
+              <h3 className="text-sm font-semibold text-ink">{tx("Most active teammates")}</h3>
               <Bot size={16} className="text-muted" />
             </div>
 
@@ -477,15 +461,13 @@ export function ProfileSettings() {
                       <span className="truncate font-medium text-ink">{row.agent.name}</span>
                     </div>
                     <span className="text-xs font-medium text-muted tabular-nums">
-                      {formatCompact(row.tokens)} tokens
-                    </span>
+                      {formatCompact(row.tokens)} {tx("tokens")}</span>
                   </li>
                 ))}
               </ul>
             ) : (
               <p className="py-6 text-center text-xs text-muted">
-                No agent teammates have turns recorded yet.
-              </p>
+                {tx("No bot teammates have turns recorded yet.")}</p>
             )}
           </section>
         </div>
@@ -493,9 +475,9 @@ export function ProfileSettings() {
 
       {/* 5. Model Distribution Breakdown */}
       {displayStats && displayStats.models && displayStats.models.length > 0 && (
-        <section aria-label="Model usage distribution" data-setting-id="setting-profile-models" className="space-y-3 rounded-xl border border-line bg-raised p-5">
+        <section aria-label={tx("Model usage distribution")} data-setting-id="setting-profile-models" className="space-y-3 rounded-xl border border-line bg-raised p-5">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-ink">Model Distribution</h3>
+            <h3 className="text-sm font-semibold text-ink">{tx("Model Distribution")}</h3>
             <Cpu size={16} className="text-muted" />
           </div>
 
@@ -505,7 +487,7 @@ export function ProfileSettings() {
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-mono font-medium text-ink">{m.model}</span>
                   <span className="text-muted">
-                    {formatCompact(m.tokens)} tokens ({Math.round(m.share * 100)}%)
+                    {formatCompact(m.tokens)} {tx("tokens (")}{" "}{Math.round(m.share * 100)}%)
                   </span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-line/50">
@@ -522,36 +504,6 @@ export function ProfileSettings() {
           </div>
         </section>
       )}
-
-      {/* 6. Connected Account Section */}
-      <section data-setting-id="setting-profile-account" className="space-y-3 rounded-xl border border-line bg-raised p-5">
-        <h3 className="text-sm font-semibold text-ink">Connected Account</h3>
-        <p className="text-xs text-muted">
-          Your profile, conversations, and engine credentials remain bound to your local device.
-        </p>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line/60 bg-surface p-3.5">
-          <div>
-            <div className="text-sm font-medium text-ink">
-              {profile?.email || "Local Profile"}
-            </div>
-            <div className="text-xs text-muted">
-              {profile?.email ? "Signed in with email account" : "Local instance"}
-            </div>
-          </div>
-          {profile?.email && (
-            <Button variant="secondary" onClick={() => setSignOutOpen(true)}>
-              Sign out
-            </Button>
-          )}
-        </div>
-
-        {profile?.email && (
-          <div className="pt-2">
-            <DesktopAccountDanger kind="reset" onDone={() => window.location.reload()} />
-          </div>
-        )}
-      </section>
 
       {/* Edit Profile Dialog */}
       <ProfileEditDialog
@@ -585,23 +537,13 @@ export function ProfileSettings() {
         />
       )}
 
-      {/* Sign Out Confirmation */}
-      <ConfirmDialog
-        open={signOutOpen}
-        onOpenChange={setSignOutOpen}
-        title="Sign out of Open Duet"
-        description="Signing out locks your local profile. Your conversations and engine credentials remain safe on this computer."
-        confirmLabel="Sign out"
-        danger
-        loading={signingOut}
-        onConfirm={handleSignOut}
-      />
     </div>
   );
 }
 
 /* ─── Heatmap Component ─── */
 function ProfileHeatmap({ days }: { days: ProfileDay[] }) {
+  const tx = useUiText();
   const [hovered, setHovered] = useState<ProfileDay | null>(null);
 
   // Group into columns of 7 days (Sunday to Saturday)
@@ -706,20 +648,20 @@ function ProfileHeatmap({ days }: { days: ProfileDay[] }) {
         <div className="mt-2 text-xs text-ink bg-surface border border-line px-2.5 py-1 rounded-md shadow-sm inline-flex items-center gap-2">
           <strong>{formatDateLong(hovered.date)}</strong>
           <span className="text-muted">
-            {formatCompact(hovered.tokens)} tokens · {hovered.messages} {hovered.messages === 1 ? "turn" : "turns"}
+            {formatCompact(hovered.tokens)} {tx("tokens ·")}{" "}{hovered.messages} {hovered.messages === 1 ? "turn" : "turns"}
           </span>
         </div>
       )}
 
       {/* Legend */}
       <div className="mt-3 flex items-center justify-end gap-1.5 text-xs text-muted">
-        <span>Less</span>
+        <span>{tx("Less")}</span>
         <div className="size-[11px] rounded-xs bg-line/40" />
         <div className="size-[11px] rounded-xs bg-accent/35" />
         <div className="size-[11px] rounded-xs bg-accent/55" />
         <div className="size-[11px] rounded-xs bg-accent/80" />
         <div className="size-[11px] rounded-xs bg-accent" />
-        <span>More</span>
+        <span>{tx("More")}</span>
       </div>
     </div>
   );
@@ -737,6 +679,7 @@ function ProfileEditDialog({
   profile: UserProfile | null;
   onSaved: (updated: Partial<UserProfile>) => void;
 }) {
+  const tx = useUiText();
   const [name, setName] = useState(profile?.name || "");
   const [bio, setBio] = useState(profile?.bio || "");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar_url || null);
@@ -793,8 +736,8 @@ function ProfileEditDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Edit profile"
-      description="Update your display name, avatar, and personal bio."
+      title={tx("Edit profile")}
+      description={tx("Update your display name, avatar, and personal bio.")}
       size="sm"
     >
       <form id="profile-edit-form" onSubmit={handleSave} className="space-y-4">
@@ -808,8 +751,7 @@ function ProfileEditDialog({
               size="sm"
               onClick={() => fileInputRef.current?.click()}
             >
-              Change photo
-            </Button>
+              {tx("Change photo")}</Button>
             {avatarUrl && (
               <Button
                 type="button"
@@ -817,8 +759,7 @@ function ProfileEditDialog({
                 size="sm"
                 onClick={() => { setAvatarUrl(null); setSaveError(null); }}
               >
-                Remove
-              </Button>
+                {tx("Remove")}</Button>
             )}
           </div>
           <input
@@ -831,23 +772,23 @@ function ProfileEditDialog({
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-muted mb-1">Display Name</label>
+          <label className="block text-xs font-medium text-muted mb-1">{tx("Display Name")}</label>
           <input
             type="text"
             value={name}
             onChange={(e) => { setName(e.target.value); setSaveError(null); }}
-            placeholder="e.g. Alice Developer"
+            placeholder={tx("e.g. Alice Developer")}
             maxLength={120}
             className="w-full rounded-field border border-line bg-raised px-3 py-1.5 text-sm placeholder:text-faint focus:border-accent focus:outline-none"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-muted mb-1">Bio / Role</label>
+          <label className="block text-xs font-medium text-muted mb-1">{tx("Bio / Role")}</label>
           <textarea
             value={bio}
             onChange={(e) => { setBio(e.target.value); setSaveError(null); }}
-            placeholder="What you're building with Open Duet…"
+            placeholder={tx("What you're building with Chief of Noumenon…")}
             rows={2}
             maxLength={500}
             className="w-full rounded-field border border-line bg-raised px-3 py-1.5 text-sm placeholder:text-faint focus:border-accent focus:outline-none"
@@ -860,7 +801,7 @@ function ProfileEditDialog({
           saving={saving}
           error={saveError}
           saved={false}
-          saveLabel="Save changes"
+          saveLabel={tx("Save changes")}
           onSave={() => {
             const form = document.getElementById("profile-edit-form");
             if (form instanceof HTMLFormElement) form.requestSubmit();
@@ -890,17 +831,18 @@ function ProfileShareDialog({
   profile: UserProfile | null;
   stats: ProfileStats;
 }) {
+  const tx = useUiText();
   const [copied, setCopied] = useState(false);
-  const name = profile?.name || "User";
+  const name = profile?.name || "You";
 
   const shareText = useMemo(() => {
     return [
-      `🚀 Open Duet Activity for ${name}`,
-      `⚡ ${formatCompact(stats.tokens)} Tokens consumed`,
-      `🔥 ${stats.currentStreak} Day current streak (Longest: ${stats.longestStreak} days)`,
-      `🏆 Peak Day: ${stats.peak ? `${formatCompact(stats.peak.tokens)} tokens` : "N/A"}`,
-      stats.models[0] ? `🤖 Top Model: ${stats.models[0].model} (${Math.round(stats.models[0].share * 100)}%)` : "",
-      `💬 ${stats.messages} messages in past year`,
+      `Chief of Noumenon Activity for ${name}`,
+      `${formatCompact(stats.tokens)} Tokens consumed`,
+      `${stats.currentStreak} Day current streak (Longest: ${stats.longestStreak} days)`,
+      `Peak Day: ${stats.peak ? `${formatCompact(stats.peak.tokens)} tokens` : "N/A"}`,
+      stats.models[0] ? `Top Model: ${stats.models[0].model} (${Math.round(stats.models[0].share * 100)}%)` : "",
+      `${stats.messages} messages in past year`,
     ]
       .filter(Boolean)
       .join("\n");
@@ -918,8 +860,8 @@ function ProfileShareDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Share activity summary"
-      description="Share your Open Duet AI accomplishments and usage milestones."
+      title={tx("Share activity summary")}
+      description={tx("Share your Chief of Noumenon AI accomplishments and usage milestones.")}
       size="sm"
     >
       <div className="space-y-4">
@@ -929,29 +871,29 @@ function ProfileShareDialog({
             <UserAvatar user={{ name, avatar_url: profile?.avatar_url }} size={44} />
             <div>
               <div className="font-semibold text-ink leading-tight">{name}</div>
-              <div className="text-xs text-muted">Open Duet Milestones</div>
+              <div className="text-xs text-muted">{tx("Chief of Noumenon Milestones")}</div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-xs pt-1">
             <div className="rounded-lg bg-raised p-2.5 border border-line/60">
-              <div className="text-muted">Tokens</div>
+              <div className="text-muted">{tx("Tokens")}</div>
               <div className="text-base font-bold text-ink">{formatCompact(stats.tokens)}</div>
             </div>
             <div className="rounded-lg bg-raised p-2.5 border border-line/60">
-              <div className="text-muted">Streak</div>
-              <div className="text-base font-bold text-ink">{stats.currentStreak} Days</div>
+              <div className="text-muted">{tx("Streak")}</div>
+              <div className="text-base font-bold text-ink">{stats.currentStreak} {tx("Days")}</div>
             </div>
             <div className="rounded-lg bg-raised p-2.5 border border-line/60">
-              <div className="text-muted">Peak Day</div>
+              <div className="text-muted">{tx("Peak Day")}</div>
               <div className="text-base font-bold text-ink">
                 {stats.peak ? formatCompact(stats.peak.tokens) : "–"}
               </div>
             </div>
             <div className="rounded-lg bg-raised p-2.5 border border-line/60">
-              <div className="text-muted">Top Model</div>
+              <div className="text-muted">{tx("Top Model")}</div>
               <div className="text-xs font-semibold text-ink truncate mt-0.5">
-                {stats.models[0]?.model || "None"}
+                {stats.models[0]?.model || tx("None")}
               </div>
             </div>
           </div>
@@ -959,11 +901,10 @@ function ProfileShareDialog({
 
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
+            {tx("Close")}</Button>
           <Button onClick={copySummary}>
             {copied ? <Check size={14} /> : <Copy size={14} />}
-            <span>{copied ? "Copied!" : "Copy text"}</span>
+            <span>{copied ? tx("Copied!") : tx("Copy text")}</span>
           </Button>
         </div>
       </div>

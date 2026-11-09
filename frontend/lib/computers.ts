@@ -13,7 +13,7 @@ export function computerCreationGate(supported: boolean | undefined, engineLabel
   if (supported === false) {
     return {
       enabled: false,
-      reason: `${engineLabel} can't run its tools in an agent computer. Choose an engine that supports computers to create one.`,
+      reason: `${engineLabel} can't run its tools in a bot computer. Choose an engine that supports computers to create one.`,
     };
   }
   return {
@@ -26,8 +26,8 @@ export function computerCreationGate(supported: boolean | undefined, engineLabel
 export function hostedBrowserLine(health: { hosted?: boolean; browser_local?: boolean } | null | undefined): string | null {
   if (!health?.hosted) return null;
   return health.browser_local
-    ? "Browser: on. Agents browse with a headless browser inside this server; pages on the server's own network are refused."
-    : "Browser: off. Agents here cannot browse until the server turns it on.";
+    ? "Browser: on. Bots browse with a headless browser inside this server; pages on the server's own network are refused."
+    : "Browser: off. Bots here cannot browse until the server turns it on.";
 }
 
 const STATE_LABEL: Record<string, string> = {

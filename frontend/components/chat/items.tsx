@@ -2,11 +2,15 @@
 
 import { Check, ChevronRight, Copy, Loader2, Square, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import type { ReactionKind } from "@/lib/reactions";
+import { useSession } from "@/components/AuthGate";
 import { useState } from "react";
+import Link from "next/link";
 import { canAlwaysAllow, isScreenInput } from "@/lib/approvals";
-import { isComputerTool, toolLabel } from "@/lib/computers";
+import { isComputerTool } from "@/lib/computers";
+import { screenText } from "@/lib/screen-text";
+import { receiptLabel, relativeReceipt } from "@/lib/control-room";
 import { cn } from "@/lib/cn";
-import { failureNextStep, interruptedText, turnUsageText } from "@/lib/everyday";
+import { failureNextStep, interruptedText } from "@/lib/everyday";
 import { compactedLabel, recalledLabel } from "@/lib/memory";
 import type { TranscriptItem } from "@/lib/transcript";
 import { useT } from "@/lib/use-i18n";
@@ -14,6 +18,7 @@ import { toolRunSummary } from "@/lib/transcript-view";
 import { Button } from "@/components/ui/Button";
 import { Markdown } from "./Markdown";
 import { copyToClipboard } from "@/lib/clipboard";
+import { ComputerThumbnail } from "./ComputerThumbnail";
 import { MessageAttachments } from "./Attachments";
 
 type Item<K extends TranscriptItem["kind"]> = Extract<TranscriptItem, { kind: K }>;
@@ -49,7 +54,7 @@ export function formatMessageTime(ts?: string | null): string | null {
   if (!ts) return null;
   const date = new Date(ts);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleTimeString(typeof document === "undefined" ? undefined : document.documentElement.lang || undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 function CopyButton({ text, className }: { text: string; className?: string }) {
@@ -90,15 +95,15 @@ export function UserMessage({ item, threadId = null }: { item: Item<"user">; thr
       <MessageAttachments threadId={threadId} items={item.attachments ?? []} />
       <div className="flex max-w-[88%] items-end gap-1.5 sm:max-w-[80%]">
         {item.text && <CopyButton text={item.text} />}
-        <p className="min-w-0 whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-bubble px-4 py-2.5 text-[15px] leading-relaxed text-ink">
+        <p dir="auto" className="message-bubble min-w-0 whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-bubble px-4 py-2.5 text-[15px] leading-relaxed text-ink">
           {item.text}
         </p>
       </div>
       {timeStr && (
-        <time
+        <time dir="auto"
           dateTime={item.ts ?? undefined}
           title={item.ts ? new Date(item.ts).toLocaleString() : undefined}
-          className="select-none px-1 text-[11px] text-muted/70 font-normal"
+          className="select-none px-1 text-[11px] text-muted font-normal"
         >
           {timeStr}
         </time>
@@ -132,8 +137,9 @@ export function AssistantMessage({
   const t = useT();
   const timeStr = formatMessageTime(ts);
   return (
-    <div className="group/msg max-w-full text-[15px] leading-relaxed">
-      <Markdown text={text} />
+    <div className="message-bubble bot-bubble group/msg max-w-full text-[15px] leading-relaxed">
+      <div dir="auto">
+      <Markdown text={text} /></div>
       {live && <span aria-hidden="true" className="animate-pulse text-muted motion-reduce:animate-none">▍</span>}
       {!live && text && (
         <div className="-ml-1 mt-1 flex flex-wrap items-center gap-1.5">
@@ -175,10 +181,10 @@ export function AssistantMessage({
             </div>
           )}
           {timeStr && (
-            <time
+            <time dir="auto"
               dateTime={ts ?? undefined}
               title={ts ? new Date(ts).toLocaleString() : undefined}
-              className="select-none px-1 text-[11px] text-muted/70 font-normal"
+              className="select-none px-1 text-[11px] text-muted font-normal"
             >
               {timeStr}
             </time>
@@ -198,18 +204,18 @@ const STEP_ICON = {
   stopped: { icon: <Square size={11} />, color: "text-faint", label: "Stopped" },
 } as const;
 
-export function ToolStep({ item }: { item: Item<"tool"> }) {
+export function ToolStep({ item, workspace }: { item: Item<"tool">; workspace?: string | null }) {
   const step = STEP_ICON[item.state];
-  const input = formatValue(item.input);
+  const input = relativeReceipt(formatValue(item.input), workspace);
   return (
-    <details className="group rounded-field border border-line bg-raised/60 text-xs">
+    <><details className="tool-receipt group text-xs font-mono">
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 touch:py-3 [&::-webkit-details-marker]:hidden">
         <span className={cn("inline-flex w-4 shrink-0 justify-center", step.color)} role="img" aria-label={step.label}>
           {step.icon}
         </span>
         {isComputerTool(item.name) && <ComputerBadge />}
-        <span className="font-mono text-ink">{item.name}</span>
-        <span className="min-w-0 flex-1 truncate text-muted">{item.summary}</span>
+        <span className="font-mono text-ink">{receiptLabel(item.name)}{item.state === "error" ? ": Failed" : item.state === "stopped" ? ": Stopped" : ""}</span>
+        <span className="min-w-0 flex-1 truncate text-muted">{relativeReceipt(item.summary, workspace)}</span>
         <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-faint transition-transform group-open:rotate-90" />
       </summary>
       <div className="space-y-2 border-t border-line p-3">
@@ -224,16 +230,18 @@ export function ToolStep({ item }: { item: Item<"tool"> }) {
               {item.state === "error" ? "Error" : "Output"}
               {item.truncated && " (cut at the stored limit)"}
             </p>
-            {item.output ? <LongText value={item.output} /> : <p className="text-muted">No output.</p>}
+            {item.output ? <LongText value={relativeReceipt(item.output, workspace)} /> : <p className="text-muted">No output.</p>}
           </div>
         )}
       </div>
     </details>
+    {item.name?.match(/apps_(search|run)$/) && item.output?.includes("connect_url") && <div className="rounded-field border border-line bg-raised p-3 text-sm"><p>Connect the app and grant an account to this bot on the Apps page. Enter credentials there only.</p><Link className="underline" href="/apps/">Connect an app</Link></div>}
+    </>
   );
 }
 
 // Three or more tool calls in a row, folded into one line while they are done.
-export function ToolRun({ tools }: { tools: Item<"tool">[] }) {
+export function ToolRun({ tools, workspace }: { tools: Item<"tool">[]; workspace?: string | null }) {
   const { total, running, failed } = toolRunSummary(tools);
   const summary = running > 0 ? `Working · ${total} tool calls so far` : `Used ${total} tools`;
   return (
@@ -246,7 +254,7 @@ export function ToolRun({ tools }: { tools: Item<"tool">[] }) {
       </summary>
       <div className="space-y-1.5 border-t border-line p-2">
         {tools.map((tool) => (
-          <ToolStep key={tool.key} item={tool} />
+          <ToolStep workspace={workspace} key={tool.key} item={tool} />
         ))}
       </div>
     </details>
@@ -266,6 +274,10 @@ const APPROVAL_LABEL: Record<Item<"approval">["status"], string> = {
 export type Remembered = { ruleId: number | null; error: string | null };
 
 export function ApprovalCard({
+  workspace,
+  computerId,
+  onTakeOver,
+  botName = "Your bot",
   item,
   answering,
   error,
@@ -274,6 +286,10 @@ export function ApprovalCard({
   undoneRules = [],
   onUndo,
 }: {
+  workspace?: string | null;
+  computerId?: number | null;
+  onTakeOver?: () => void;
+  botName?: string;
   item: Item<"approval">;
   answering: boolean;
   error: string | null;
@@ -286,10 +302,15 @@ export function ApprovalCard({
 }) {
   const t = useT();
   const pending = item.status === "pending";
+  const toolName = item.tool.split("__").at(-1)!.toLowerCase();
+  const action = ({ write: "write", write_file: "write", edit: "edit", multiedit: "edit", bash: "shell", shell: "shell", exec: "shell", apps_run: "apps_run" } as Record<string, string>)[toolName] ?? "other";
+  const fileAction = ["write", "write_file", "edit", "multiedit", "read", "read_file"].includes(toolName) && ("path" in item.input || "file_path" in item.input);
   // A decided card is one line; the input it was asked about is behind the arrow.
   const [open, setOpen] = useState(false);
-  const rememberable = canAlwaysAllow(item.tool, item.input);
+  const { session } = useSession();
+  const rememberable = session?.scopes.includes("admin") === true && canAlwaysAllow(item.tool, item.input);
   const screenInput = isScreenInput(item.tool);
+  const handoff = item.approvalKind === "handoff";
   const byRule = item.resolvedBy === "saved_rule";
   const savedRuleId = remembered?.ruleId ?? (byRule ? item.ruleId : null);
   const undone = savedRuleId != null && undoneRules.includes(savedRuleId);
@@ -297,99 +318,47 @@ export function ApprovalCard({
     <div
       className={cn(
         "space-y-2.5 rounded-card border p-3.5 text-sm",
-        pending ? "border-warning/60 bg-warning/10" : "border-line bg-raised/40 py-2.5",
+        pending ? "approval-waiting" : "approval-receipt border-line py-2.5 font-mono",
       )}
     >
+      {pending && <><p className="approval-eyebrow">{t("status.waiting")}</p><h3 dir="auto">{handoff ? `${botName} needs you to take over` : t("approval.wants", { name: botName, action: t(`approval.action.${action}`) })}</h3></>}
       {pending ? (
         <p className="text-xs font-medium text-ink">
-        {isComputerTool(item.tool) && <ComputerBadge />}
-        {pending ? (
-          isComputerTool(item.tool) ? (
-            <>
-              {screenInput ? t("approval.computerRequest") : t("approval.isolatedRequest")} {t("approval.waitUntilAllowed")}
-            </>
-          ) : (
-            <>
-              Your agent wants to use <span className="font-mono">{item.tool}</span>. It will not run
-              until you allow it.
-            </>
-          )
-        ) : (
-          <>
-            <span className="font-mono">{item.tool}</span>:{" "}
-            {byRule && item.status === "allowed"
-              ? t("approval.allowSaved")
-              : item.resolvedBy === "computer_read"
-                ? t("approval.allowComputerRead")
-                : item.resolvedBy === "accept_edits"
-                  ? t("approval.acceptedEdits")
-                  : item.resolvedBy === "plan_mode"
-                    ? t("approval.planRefused")
-                    : t(APPROVAL_LABEL[item.status])}
-            {!pending && item.summary && <span className="font-mono text-faint"> · {item.summary}</span>}
-          </>
-        )}
+          {isComputerTool(item.tool) && <ComputerBadge />}
+          {handoff ? "Take control in the Computer panel, sign in by hand, then Continue. This expires after 10 minutes." : <>{isComputerTool(item.tool) ? (screenInput ? t("approval.computerRequest") : t("approval.isolatedRequest")) : null} {t("approval.waitUntilAllowed")}</>}
         </p>
       ) : (
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          title={open ? t("chat.approval.hide") : t("chat.approval.show")}
-          className="flex w-full cursor-pointer items-center gap-2 text-left text-xs font-medium text-muted touch:min-h-9"
-        >
-          <span aria-hidden="true" className={cn("inline-flex shrink-0", item.status === "allowed" ? "text-success" : item.status === "denied" ? "text-danger" : "text-faint")}>
-            {item.status === "allowed" ? <Check size={13} /> : <X size={13} />}
+        <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} title={open ? t("chat.approval.hide") : t("chat.approval.show")} className="flex w-full cursor-pointer items-center gap-2 text-left text-xs font-medium touch:min-h-9">
+          <span aria-hidden="true" className={item.status === "denied" || item.actionOutcome === "failed" || item.actionOutcome === "unknown" || item.toolResult?.state === "error" ? "text-danger" : item.status === "allowed" ? "text-success" : "text-faint"}>
+            {item.status === "allowed" && item.actionOutcome !== "unknown" && item.actionOutcome !== "failed" && item.toolResult?.state !== "error" ? <Check size={13} /> : <X size={13} />}
           </span>
-          <span className="min-w-0 flex-1 truncate">
-        {isComputerTool(item.tool) && <ComputerBadge />}
-            {pending ? (
-              isComputerTool(item.tool) ? (
-                <>
-                  {screenInput ? "Let your agent use this computer’s screen, keyboard and browser for this turn." : <>Your agent wants to {toolLabel(item.tool)}, an isolated machine, not this one.</>} It will not run
-                  until you allow it.
-                </>
-              ) : (
-                <>
-                  {t("approval.toolRequest", { tool: item.tool })} {t("approval.waitUntilAllowed")}
-                </>
-              )
-            ) : (
-              <>
-                <span className="font-mono">{item.tool}</span>:{" "}
-                {byRule && item.status === "allowed"
-                  ? t("approval.allowSaved")
-                  : item.resolvedBy === "computer_read"
-                    ? t("approval.allowComputerRead")
-                    : item.resolvedBy === "accept_edits"
-                      ? t("approval.acceptedEdits")
-                      : item.resolvedBy === "plan_mode"
-                        ? t("approval.planRefused")
-                        : t(APPROVAL_LABEL[item.status])}
-                {!pending && item.summary && <span className="font-mono text-faint"> · {item.summary}</span>}
-              </>
-            )}
-              </span>
+          <span className={cn("min-w-0 flex-1 truncate", item.status === "denied" || item.actionOutcome === "failed" || item.actionOutcome === "unknown" || item.toolResult?.state === "error" ? "text-danger" : "text-muted")}>
+            {receiptLabel(item.tool)}: {item.actionOutcome === "unknown" ? "Outcome unknown; may have happened. Ask before retrying" : item.actionOutcome === "done" ? "Done: provider confirmed" : item.actionOutcome === "failed" ? "Failed: request refused" : item.status === "allowed" && item.toolResult?.state === "error" ? "Failed after approval" : item.status === "allowed" && item.toolResult?.state === "stopped" ? "Stopped after approval" : byRule && item.status === "allowed" ? t("approval.allowSaved") : item.resolvedBy === "computer_read" ? t("approval.allowComputerRead") : item.resolvedBy === "accept_edits" ? t("approval.acceptedEdits") : item.resolvedBy === "plan_mode" ? t("approval.planRefused") : t(APPROVAL_LABEL[item.status])}
+            {item.summary && <span className="text-faint"> · {relativeReceipt(item.summary, workspace)}</span>}
+          </span>
           <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-faint transition-transform", open && "rotate-90")} />
         </button>
       )}
+      {pending && handoff && onTakeOver && <ComputerThumbnail computerId={computerId} name={botName} onOpen={onTakeOver} />}
+      {pending && !fileAction && item.summary && <p className="text-sm break-words" dir="auto">{relativeReceipt(item.summary, workspace)}</p>}
       {(pending || open) && (
-        <dl className="space-y-1.5">
+        <dl className="approval-details min-h-0 overflow-auto space-y-1.5">
           {Object.entries(item.input).map(([key, value]) => (
             <div key={key}>
-              <dt className="text-xs text-muted">{key}</dt>
-              <dd>
-                <LongText value={formatValue(value)} />
+              <dt className="text-xs text-muted">{t(`approval.field.${key}`) === `approval.field.${key}` ? key.replaceAll("_", " ").replace(/^./, letter => letter.toUpperCase()) : t(`approval.field.${key}`)}</dt>
+              <dd dir="auto" title={/^(path|file_path|cwd|directory)$/.test(key) ? formatValue(value) : undefined}>
+                <LongText value={/^(content|text|command|new_string|old_string)$/.test(key) ? formatValue(value) : relativeReceipt(formatValue(value), workspace)} />
               </dd>
             </div>
           ))}
         </dl>
       )}
+      {!pending && open && item.toolResult && <div className="space-y-2"><p className="text-xs text-muted">{item.toolResult.state === "error" ? "Error" : "Result"}{item.toolResult.truncated ? " (cut at the stored limit)" : ""}</p><LongText value={relativeReceipt(item.toolResult.output || (item.toolResult.state === "running" ? "Running…" : "No output."), workspace)} /></div>}
       {pending && (
-        <div className="flex flex-wrap gap-2">
-          <Button variant="primary" onClick={() => onAnswer("allow")} disabled={answering} title="Allow with thumbs up">
+        <div className="approval-actions flex flex-wrap gap-2">
+          <Button className="approval-allow" variant="primary" onClick={() => onAnswer("allow")} disabled={answering} title="Allow with thumbs up">
             <ThumbsUp size={13} className="mr-1.5 inline" aria-hidden="true" />
-            {screenInput ? t("approval.allowThisTurn") : t("approval.allow")}
+            {handoff ? "Continue" : screenInput ? t("approval.allowThisTurn") : t("approval.allow")}
           </Button>
           {rememberable && (
             <Button
@@ -400,9 +369,9 @@ export function ApprovalCard({
               {t("approval.alwaysAllow")}
             </Button>
           )}
-          <Button onClick={() => onAnswer("deny")} disabled={answering} title="Deny with thumbs down">
+          <Button className="approval-deny" onClick={() => onAnswer("deny")} disabled={answering} title="Deny with thumbs down">
             <ThumbsDown size={13} className="mr-1.5 inline" aria-hidden="true" />
-            {t("approval.deny")}
+            {handoff ? "Cancel" : t("approval.deny")}
           </Button>
         </div>
       )}
@@ -430,7 +399,6 @@ const END_TEXT: Record<Item<"turn_end">["status"], (item: Item<"turn_end">) => s
 
 export function TurnEnd({ item }: { item: Item<"turn_end"> }) {
   const message = END_TEXT[item.status](item);
-  const usage = item.status === "completed" || item.usage ? turnUsageText(item.usage) : null;
   const next = item.status === "failed" ? failureNextStep(item.errorCode) : null;
   const bad = item.status === "failed";
   return (
@@ -444,11 +412,7 @@ export function TurnEnd({ item }: { item: Item<"turn_end"> }) {
           {next && <p className="mt-1 text-xs text-muted">{next}</p>}
         </div>
       )}
-      {usage && (
-        <p className="text-right text-[11px] text-faint" title="As reported by the engine">
-          {usage}
-        </p>
-      )}
+
     </>
   );
 }
@@ -456,7 +420,7 @@ export function TurnEnd({ item }: { item: Item<"turn_end"> }) {
 export function SessionReset({ item }: { item: Item<"session_reset"> }) {
   return (
     <p className="border-y border-dashed border-line py-2 text-center text-xs text-muted">
-      {item.message ||
+      {(item.message ? screenText(item.message) : null) ||
         "The engine's session for this conversation was reset. The messages above are shown for reference only."}
     </p>
   );
@@ -467,7 +431,7 @@ function ComputerBadge() {
   return (
     <span
       className="mr-1 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent"
-      title="Runs in the agent's computer (an isolated container), not on this machine"
+      title="Runs in the bot's computer (an isolated container), not on this machine"
     >
       computer
     </span>
@@ -485,11 +449,11 @@ export function RecalledChip({ item }: { item: Item<"recalled"> }) {
         aria-expanded={open}
         className="cursor-pointer rounded-full border border-line px-2.5 py-0.5 hover:bg-hover"
       >
-        🧠 {recalledLabel(item.notes.length, item.conversations.length)}
+        {recalledLabel(item.notes.length, item.conversations.length)}
       </button>
       {open && (
         <ul className="mt-1 max-w-xl space-y-1 rounded-field border border-line bg-raised p-2 text-left">
-          <li className="text-muted">Background for the agent, not instructions. It grants no permission.</li>
+          <li className="text-muted">Background for the bot, not instructions. It grants no permission.</li>
           {item.notes.map((n, i) => (
             <li key={`n${i}`}>
               <span className="font-mono">memory/{n.name}</span>: {n.snippet}
@@ -498,7 +462,7 @@ export function RecalledChip({ item }: { item: Item<"recalled"> }) {
           {item.conversations.map((c, i) => (
             <li key={`c${i}`}>
               <span className="font-medium">“{c.title || "untitled"}”</span>
-              {c.at ? ` (${c.at.slice(0, 10)})` : ""}, {c.role === "user" ? "you said" : "the agent said"}: {c.snippet}
+              {c.at ? ` (${c.at.slice(0, 10)})` : ""}, {c.role === "user" ? "you said" : "the bot said"}: {c.snippet}
             </li>
           ))}
         </ul>
@@ -515,7 +479,7 @@ export function EngineSwitched({ item }: { item: Item<"engine_switched"> }) {
         Switched engine: {item.from} → {item.to}
         {item.model ? ` (${item.model})` : ""}
       </p>
-      {item.message && <p className="mt-1 whitespace-pre-wrap break-words text-muted">{item.message}</p>}
+      {item.message && <p className="mt-1 whitespace-pre-wrap break-words text-muted">{screenText(item.message)}</p>}
     </div>
   );
 }

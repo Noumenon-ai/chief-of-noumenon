@@ -2,7 +2,7 @@
 
 Claude and Codex agents with an assigned Docker **desktop** computer get a private,
 visible Chromium browser when **Browser tools** is enabled in the Computer
-panel (off by default). Build the [desktop image](../desktop-image/README.md),
+panel (on for computers created with the app defaults). Build the [desktop image](../desktop-image/README.md),
 then recreate older computers. Stop active turns before changing the setting;
 it applies to the next turn. Turning it off removes the tools; it does not
 erase the profile. No browser tool attaches to a host browser.
@@ -41,7 +41,7 @@ handles, and refuse detached elements. Selectors must match exactly one element.
 
 Page text and accessibility labels are untrusted observations. They cannot
 grant permissions or override the person's request. The agent is instructed
-to stop at login, CAPTCHA or verification and request takeover. Password and
+to use `request_handoff` at any login, password, payment confirmation, CAPTCHA, QR, passkey or verification, and never ask for a password in chat. Password and
 one-time-code inputs are refused by semantic tools. When a page shows a visible
 CAPTCHA frame (reCAPTCHA, hCaptcha, Cloudflare Turnstile, Arkose) or has a
 "Just a moment" or "Access denied" style title, `browser_open`,
@@ -62,7 +62,10 @@ site that blocks data-centre addresses or automation still needs the person to
 take control.
 
 Each computer keeps its profile outside `/workspace`, under
-`/home/agent/browser-profile` with mode 0700. Cookies survive normal browser
+`/home/agent/browser-profile` with mode 0700. The bundled image disables Chromium password saving by managed policy, and the
+broker disables password saving and automatic password sign-in before launch.
+Existing computers need the rebuilt image to receive the managed policy.
+Cookies survive normal browser
 close/restart and computer stop/start. Recreate/removal discards them. Do not
 expect session-only cookies to survive browser restart. Profiles are isolated
 between containers; a host administrator with Docker access can inspect them.

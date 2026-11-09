@@ -19,11 +19,6 @@ DEVICE_COMPLETION_POLL_ATTEMPTS = 150
 RUNNABLE_BOX_STATES = {"ready", "running", "idle"}
 
 PROVIDERS = {
-    "claude": {
-        "login_command": "claude auth login",
-        "credential_path": ".claude/.credentials.json",
-        "abandon_timeout_seconds": 300,
-    },
     "github": {
         "login_command": (
             "gh auth login --hostname github.com --git-protocol https --web"
@@ -112,56 +107,6 @@ def _env_prefix(config: dict) -> str:
     # shell command, so this must go before `timeout`, not passed as one of
     # its arguments.
     return "".join(f"{key}={value} " for key, value in config.get("env", {}).items())
-
-
-def start_login(box_id: str, provider: str) -> str:
-    config = _provider_config(provider)
-    session = _session_name(box_id, provider)
-
-    _ensure_box_running(box_id)
-
-    _run(box_id, f"tmux kill-session -t {session} 2>/dev/null; true")
-
-    _run(
-        box_id,
-        f'tmux new-session -d -s {session} -x 500 -y 50 '
-        f'"{_env_prefix(config)}timeout --foreground {config["abandon_timeout_seconds"]}s '
-        f'{config["login_command"]}; echo DONE_$?; sleep 60"',
-    )
-
-    for _ in range(URL_POLL_ATTEMPTS):
-        time.sleep(POLL_INTERVAL_SECONDS)
-        pane = _run(box_id, f"tmux capture-pane -t {session} -p")
-        match = re.search(r"https?://\S+", pane)
-        if match:
-            return match.group(0)
-
-    raise LoginTimeoutError("Timed out waiting for login URL")
-
-
-def submit_code(box_id: str, provider: str, code: str) -> str:
-    config = _provider_config(provider)
-    session = _session_name(box_id, provider)
-
-    _ensure_box_running(box_id)
-
-    _run(box_id, f'tmux send-keys -t {session} "{code}" Enter')
-
-    for _ in range(CODE_POLL_ATTEMPTS):
-        time.sleep(POLL_INTERVAL_SECONDS)
-        pane = _run(box_id, f"tmux capture-pane -t {session} -p")
-        matches = re.findall(r"DONE_(\d+)", pane)
-        if matches:
-            exit_code = matches[-1]
-            _run(box_id, f"tmux kill-session -t {session} 2>/dev/null; true")
-
-            if exit_code != "0":
-                raise LoginFailedError(f"Login process exited with code {exit_code}")
-
-            file_response = ascii_box_service.read_file(box_id, config["credential_path"])
-            return file_response.content
-
-    raise LoginTimeoutError("Timed out waiting for login to complete")
 
 
 def start_device_login(box_id: str, provider: str) -> DeviceLogin:

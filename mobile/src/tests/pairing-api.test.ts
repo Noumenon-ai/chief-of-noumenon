@@ -92,7 +92,7 @@ describe('pairDevice', () => {
     expect(describePairingError(error)).toContain('540 seconds');
   });
 
-  it('says it is not a Suparagent server when the answer has the wrong shape', async () => {
+  it('says it is not a Chief of Noumenon server when the answer has the wrong shape', async () => {
     for (const reply of [{ status: 200, body: { hello: 'world' } }, { status: 200, badJson: true }, { status: 200, body: { token: 't', session: { scopes: 'chat' } } }]) {
       const { impl } = fakeFetch(reply);
       expect((await failure(pairDevice({ ...args, fetchImpl: impl }))).code).toBe('not_a_server');
@@ -161,7 +161,7 @@ describe('checkServer', () => {
     expect(await checkServer('https://s', fakeFetch({ status: 404 }).impl)).toBe('not_a_server');
   });
 
-  it('does not take any answer for a Suparagent server', async () => {
+  it('does not take any answer for a Chief of Noumenon server', async () => {
     expect(await checkServer('https://s', fakeFetch({ status: 200, badJson: true }).impl)).toBe('not_a_server');
     expect(await checkServer('https://s', fakeFetch({ status: 200, body: { hello: 'world' } }).impl)).toBe('not_a_server');
     expect(await checkServer('https://s', fakeFetch({ status: 200, body: null }).impl)).toBe('not_a_server');

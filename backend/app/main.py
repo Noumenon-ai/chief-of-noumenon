@@ -88,6 +88,7 @@ async def _serving(app: FastAPI):
     # A hosted deployment (TENANT_SCHEMAS_ENABLED) runs every job below once per account schema;
     # otherwise per_tenant returns the job unchanged (app/core/tenant_jobs.py).
     jobs = [
+        asyncio.create_task(_preload_voice()),
         asyncio.create_task(
             run_every(BACKGROUND_INTERVAL_SECONDS, per_tenant(_desktop_account_job(schedule_service.poll_due_schedules)))
         ),
@@ -126,6 +127,26 @@ async def _serving(app: FastAPI):
     if guard.held:
         await for_each(routine_service.scheduler.shutdown)
     await guard.release()
+
+
+async def _preload_voice() -> None:
+    if not settings.VOICE_PRELOAD:
+        return
+
+    def prepare_optional_voice():
+        try:
+            # Import and preparation both run off the event loop. The shared
+            # preparation lock also covers a first recording arriving now.
+            from faster_whisper import WhisperModel  # noqa: F401
+            from app.services import voice
+            voice.prepare_model(settings.SQLITE_FILE.parent / "telegram")
+        except ImportError:
+            # Installing the optional voice extra enables local voice.
+            return
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("voice_preload_failed error_type=%s", type(exc).__name__)
+
+    await asyncio.to_thread(prepare_optional_voice)
 
 
 async def _needs_you_tick() -> None:

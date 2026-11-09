@@ -60,11 +60,11 @@ export function toolCounts(app: CatalogApp): { read: number; write: number } {
 export function agentActionsText(app: CatalogApp): string {
   if (app.agent_actions === "curated") {
     const { read, write } = toolCounts(app);
-    return `Agents get ${read} read tool${read === 1 ? "" : "s"}${write ? ` and ${write} that change things (each asks you first)` : ""}.`;
+    return `Bots get ${read} read tool${read === 1 ? "" : "s"}${write ? ` and ${write} that change things (each asks you first)` : ""}.`;
   }
-  if (app.agent_actions === "generic") return "Agents can look up its actions and run them, with your approval on every call.";
-  if (app.agent_actions === "unavailable") return "Not available to agents: it would give them a shell, code or direct access to Composio.";
-  return "Agent use is checked with Composio when you allow it for an agent.";
+  if (app.agent_actions === "generic") return "Bots can look up its actions and run them, with your approval on every call.";
+  if (app.agent_actions === "unavailable") return "Not available to bots: it would give them a shell, code or direct access to Composio.";
+  return "Bot use is checked with Composio when you allow it for a bot.";
 }
 
 export function connectionNote(app: CatalogApp): string | null {

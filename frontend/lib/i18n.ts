@@ -1,5 +1,7 @@
 // Shared interface messages. Missing catalog entries fall back to English.
 // Keys are surface.name; placeholders such as {name} are filled at runtime. Locale modules contain data only.
+import { auditHebrew } from "./locales/audit-he.ts";
+import { he } from "./locales/he.ts";
 import { de } from "./locales/de.ts";
 import { fr } from "./locales/fr.ts";
 import { it } from "./locales/it.ts";
@@ -13,9 +15,159 @@ import { tr } from "./locales/tr.ts";
 import { zh } from "./locales/zh.ts";
 import { agentTeamMessages } from "./locales/agent-team-extra.ts";
 import { knowledgeRoutinesMessages } from "./locales/knowledge-routines-extra.ts";
+import { chatAppsMessages } from "./locales/chat-apps-extra.ts";
 import { appSettingsMessages } from "./locales/app-settings-extra.ts";
 
 export const en = {
+  "voice.browserPrivacy": "Browser voice typing sends audio to your browser maker: Google in Chrome. Other browsers choose their own processor.",
+  "voice.browserFallback": "Browser voice typing is unavailable. Using transcription on your computer; keep speaking.",
+  "voice.finishing": "Finishing voice typing…",
+  "voice.language": "Voice language",
+  "voice.auto": "Auto",
+  "voice.record": "Record voice",
+  "voice.recording": "Recording. Send to finish and send, or stop to edit.",
+  "voice.stop": "Stop recording",
+  "voice.opening": "Opening microphone…",
+  "voice.transcribing": "Transcribing locally…",
+  "notifications.countOne": "1 unread notification",
+  "notifications.countMany": "{count} unread notifications",
+  "audit.name": "Name",
+  "audit.turns": "Turns",
+  "audit.input": "Input",
+  "audit.output": "Output",
+  "audit.cost": "Estimated cost",
+  "audit.byConversation": "By conversation",
+  "audit.byEngine": "By engine and model",
+  "audit.byDay": "By day",
+  "audit.inputTokens": "Input tokens",
+  "audit.outputTokens": "Output tokens",
+  "audit.previousMonth": "Previous month",
+  "audit.nextMonth": "Next month",
+  "audit.useModel": "Use model",
+  "audit.checkEngines": "Check engines",
+  "audit.botDefault": "Bot default",
+  "audit.saving": "Saving…",
+  "audit.unsaved": "Unsaved changes",
+  "audit.noChanges": "No changes to save.",
+  "audit.engineNextMessage": "The model changes on the next message. This conversation keeps its engine.",
+
+  "notifications.loadError": "Could not update notifications.",
+  "notifications.noLongerWaiting": "No longer waiting for an answer",
+
+  "settings.group.You": "You",
+  "settings.group.AI": "AI",
+  "settings.group.Safety": "Safety",
+  "settings.summary.general": "Appearance, language, updates and the setup guide.",
+  "settings.summary.day": "Time zone, quiet hours, briefs and reminders.",
+  "settings.summary.advanced": "Contact aliases and post drafts for your connected apps.",
+  "settings.summary.phone": "A private link and a sign-in code for your phone.",
+  "settings.summary.notifications": "Alerts when bots need you or work needs attention.",
+  "settings.summary.profile": "Your display name and activity.",
+  "settings.summary.engines": "Choose the AI your bots use.",
+  "settings.summary.channels": "Optional Telegram alerts.",
+  "settings.summary.approvals": "Saved command rules and previous decisions.",
+  "settings.summary.account": "Devices, history export and permissions.",
+  "header.engineModel": "Engine and model",
+
+  "auth.codeHelp": "Enter the sign-in code you chose when setting up this app.",
+  "approval.wants": "{name} wants to {action}",
+  "approval.action.write": "write a file",
+  "approval.action.edit": "edit a file",
+  "approval.action.shell": "run a command",
+  "approval.action.apps_run": "use a connected app",
+  "approval.action.other": "use a tool",
+  "files.title": "This bot’s files",
+  "files.empty": "No files yet",
+  "files.emptyHelp": "Files the bot writes appear here.",
+  "phone.account": "This computer is signed in with {account}.",
+  "phone.noPhone": "No phone has joined yet. On the phone, install Tailscale, sign in with {account}, and turn it on.",
+  "phone.sameAccount": "the same account as this computer",
+  "phone.counts": "Other devices joined: {joined}. Online: {online}.",
+  "phone.cantOpen": "Can’t open the link?",
+  "phone.connected": "The Tailscale app on your phone should show Connected.",
+  "phone.same": "Use the same account on your phone and computer.",
+  "phone.vpn": "On Android, check that the VPN key icon is on.",
+  "phone.minute": "Try again after a minute.",
+  "computer.only": "Do this from your computer",
+  "computer.chat": "Back to chat",
+  "phone.title": "Use on your phone",
+  "phone.help": "Your website, privately on your own devices.",
+  "phone.owner": "Open this page on the computer where you signed in as the owner.",
+  "phone.checking": "Checking this computer…",
+  "phone.devices": "Connect your devices",
+  "phone.privateLink": "Turn on your private link",
+  "phone.scan": "Scan to open your chats",
+  "phone.install": "Install Tailscale",
+  "phone.on": "Turn on",
+  "phone.off": "Turn off",
+  "phone.again": "Check again",
+  "phone.check": "Checking…",
+  "phone.newCode": "Make a new code",
+  "phone.showCode": "Show sign-in code",
+  "phone.codeHelp": "This code signs your phone in once and expires after five minutes. Keep it private. Your phone can chat and answer approvals.",
+  "phone.readyCode": "Make a sign-in code when your phone is ready.",
+  "phone.linkFirst": "Your sign-in code appears here after you turn on the link.",
+  "phone.home": "Keep it on your home screen",
+  "phone.iphone": "iPhone: in Safari, tap Share, then Add to Home Screen.",
+  "phone.android": "Android: in Chrome, open the menu, then Add to Home screen or Install app.",
+  "phone.keep": "Keep Tailscale connected. Chat and the microphone need a connection to your computer.",
+  "phone.qr": "Scan to sign in on your phone",
+  "phone.tailBefore": "Tailscale is a free private link between your own devices.",
+  "phone.tailAfter": "on this computer and your phone, then sign in to the same account on both.",
+  "phone.https": "Open Tailscale HTTPS settings",
+  "bot.name": "Name",
+  "bot.role": "Role",
+  "bot.about": "About this bot",
+  "bot.instructions": "Instructions",
+  "bot.advanced": "Advanced",
+
+  "rail.add": "Add",
+  "rail.oneChat": "1 chat",
+  "common.edit": "Edit",
+  "header.allTools": "All chats and tools",
+  "composer.chooseApp": "Choose an app",
+  "composer.noApps": "No apps connected yet. Connect an app to use it here.",
+  "composer.connectApp": "Connect an app",
+  "composer.appAccess": "Choose which bots can use this account on the Apps page.",
+  "settings.backChat": "Back to chat",
+  "approval.field.path": "File",
+  "approval.field.file_path": "File",
+  "approval.field.content": "What it will write",
+  "approval.field.command": "Command to run",
+  "approval.field.old_string": "Text to replace",
+  "approval.field.new_string": "Replacement text",
+  "settings.nav.general": "General",
+  "settings.nav.day": "Your day",
+  "settings.nav.advanced": "Advanced",
+  "settings.nav.phone": "Use on your phone",
+  "settings.nav.profile": "Profile",
+  "settings.nav.account": "Account & privacy",
+  "settings.nav.engines": "Engines",
+  "settings.nav.notifications": "Notifications",
+  "settings.nav.channels": "Channels",
+  "settings.nav.approvals": "Approvals",
+  "settings.nav.apps": "Apps",
+
+  "rail.yourBots": "Your bots",
+  "rail.addBot": "Add bot",
+  "rail.editBot": "Edit bot",
+  "rail.deleteBot": "Delete bot",
+  "rail.editNamed": "Edit {name}",
+  "rail.deleteNamed": "Delete {name}",
+  "rail.chats": "{n} chats",
+  "rail.idle": "Idle",
+  "rail.deleteTitle": "Delete {name} permanently?",
+  "rail.keepBot": "Keep bot",
+  "rail.deleting": "Deleting…",
+  "rail.deletePermanently": "Delete permanently",
+  "chat.goodMorning": "Good morning. What should {name} do?",
+  "chat.goodAfternoon": "Good afternoon. What should {name} do?",
+  "chat.goodEvening": "Good evening. What should {name} do?",
+  "chat.starterReminder": "Remind me in an hour to...",
+  "chat.starterPdf": "Read this PDF and sign it...",
+  "chat.starterBot": "Ask {name} to look into...",
+  "chat.starterReply": "Draft a reply to...",
+
   "theme.label": "Theme",
   "theme.system": "System",
   "theme.light": "Light",
@@ -26,13 +178,13 @@ export const en = {
   "common.delete": "Delete",
   "shell.newChat": "New chat",
   "shell.skip": "Skip to the conversation",
-  "shell.openSidebar": "Open conversations",
+  "shell.openSidebar": "Open workspace tools",
   "shell.conversations": "Conversations",
   "sidebar.apps": "Apps",
-  "sidebar.agents": "Agents",
-  "sidebar.manageAgents": "Manage agents",
-  "sidebar.newAgent": "New agent",
-  "sidebar.noAgents": "An agent has its own instructions, notes and computer.",
+  "sidebar.agents": "Bots",
+  "sidebar.manageAgents": "Manage bots",
+  "sidebar.newAgent": "New bot",
+  "sidebar.noAgents": "A bot has its own instructions, notes and computer.",
   "sidebar.recent": "Recent",
   "sidebar.search": "Search conversations",
   "sidebar.loading": "Loading…",
@@ -41,7 +193,7 @@ export const en = {
   "sidebar.showArchived": "Show archived",
   "sidebar.hideArchived": "Hide archived",
   "sidebar.routines": "Routines",
-  "sidebar.legacyTasks": "Telegram & Boat tasks",
+  "sidebar.legacyTasks": "Older Boat tasks",
   "sidebar.settings": "Settings",
   "sidebar.rowActions": "Conversation actions",
   "sidebar.rename": "Rename",
@@ -56,14 +208,14 @@ export const en = {
   "sidebar.archivedTag": "archived",
   "sidebar.showAll": "Show all conversations",
   "sidebar.showFewer": "Show fewer",
-  "sidebar.showAllAgents": "Show all {n} agents",
-  "sidebar.showFewerAgents": "Show fewer agents",
+  "sidebar.showAllAgents": "Show all {n} bots",
+  "sidebar.showFewerAgents": "Show fewer bots",
   "sidebar.agentActions": "Actions for {name}",
-  "sidebar.agentSettings": "Agent settings",
+  "sidebar.agentSettings": "Bot settings",
   "sidebar.makeLead": "Make lead",
   "sidebar.removeLead": "Remove lead role",
-  "sidebar.deleteAgent": "Delete agent…",
-  "sidebar.noAgentsTitle": "No agents yet",
+  "sidebar.deleteAgent": "Delete bot…",
+  "sidebar.noAgentsTitle": "No bots yet",
   "sidebar.emptyTitle": "No conversations yet",
   "sidebar.emptyAction": "Start a chat",
   "sidebar.loadingList": "Loading conversations",
@@ -73,24 +225,28 @@ export const en = {
   "time.yesterday": "yesterday",
   "time.days": "{n} days ago",
   "palette.title": "Go to",
-  "palette.placeholder": "Search chats, agents and settings",
+  "palette.placeholder": "Search chats, bots and settings",
   "palette.empty": "Nothing matches.",
   "palette.newChat": "New chat",
   "palette.settings": "Settings",
   "palette.groupActions": "Actions",
-  "palette.groupAgents": "Agents",
+  "palette.groupAgents": "Bots",
   "palette.groupChats": "Conversations",
   "palette.hint": "↑↓ to move, Enter to open, Esc to close",
   "status.working": "Working",
   "status.waiting": "Waiting for you",
   "status.unread": "Unread",
   "status.reset": "Needs a new session",
+  "header.computer": "Computer",
+  "chat.otherWaiting": "Waiting in other chats",
+  "chat.untitledWaiting": "Chat",
+  "chat.waitingCheckFailed": "Some chats could not be checked. Open their chat to retry.",
   "header.more": "More",
   "header.approvals": "Approvals",
   "header.files": "Files",
   "header.usage": "Usage",
-  "header.agentForChat": "Agent for this chat",
-  "header.noAgent": "No agent",
+  "header.agentForChat": "Bot for this chat",
+  "header.noAgent": "No bot",
   "header.engine": "Choose engine and model",
   "header.reconnecting": "Reconnecting…",
   "header.unavailable": "Unavailable",
@@ -121,7 +277,7 @@ export const en = {
   "language.english": "English",
   "language.spanish": "Español",
   "channels.telegramTitle": "Telegram",
-  "channels.telegramDescription": "Link Telegram to use the same account and conversation history in the bot.",
+  "channels.telegramDescription": "Optional alerts and approval buttons. Chat happens in the website.",
   "channels.boatTasksTitle": "Boat tasks",
   "channels.boatTasksDescription": "Open the legacy task page for Boat task submissions and account setup.",
   "channels.boatTasksLink": "Open legacy Boat tasks",
@@ -130,7 +286,7 @@ export const en = {
   "channels.connectedAs": "Connected as {userId}",
   "channels.linkTelegram": "Link Telegram",
   "channels.disconnect": "Disconnect",
-  "channels.sendLinkCommand": "Send this code to the Telegram bot to link your account.",
+  "channels.sendLinkCommand": "Telegram is for optional alerts. Open the website to chat.",
   "channels.copy": "Copy",
   "channels.copied": "Copied",
   "channels.copyFailed": "Could not copy. Select and copy the command instead.",
@@ -142,7 +298,7 @@ export const en = {
   "channels.boatTasksCompactDescription": "Manage Boat task submissions.",
   "channels.openBoatTasks": "Open Boat tasks",
   "chat.conversation": "Conversation",
-  "chat.emptyPrompt": "Ask your agent something",
+  "chat.emptyPrompt": "Ask your bot something",
   "chat.emptyPromptWithAgent": "Ask {name} something",
   "chat.historyHint": "History stays on this computer. Attach images or text files with the paperclip, paste, or drop them on the message box.",
   "chat.jumpLatest": "Jump to latest",
@@ -152,7 +308,7 @@ export const en = {
   "chat.audioConsent": "I consent to send this audio to {provider} for transcription.",
   "chat.cancelAudio": "Cancel audio processing",
   "chat.transcriptCaveat": "Machine transcripts may contain uncertain words or names. Review the transcript before requesting later actions.",
-  "composer.placeholder": "Message your agent",
+  "composer.placeholder": "Message your bot",
   "composer.label": "Message",
   "composer.attach": "Attach files or media",
   "composer.attachButton": "Attach files",
@@ -172,13 +328,13 @@ export const en = {
   "planner.title": "Tasks & calendar",
   "planner.description": "Plan your work, track deadlines, and see scheduled routines.",
   "planner.today": "Today",
-  "sidebar.createAgent": "Create an agent",
+  "sidebar.createAgent": "Create a bot",
   "sidebar.noConversations": "No conversations yet.",
   "search.placeholder": "Search conversations…",
   "search.label": "Search conversations",
   "search.includeArchived": "Include archived",
-  "search.onlyAgent": "Only conversations with this agent",
-  "search.anyAgent": "Any agent",
+  "search.onlyAgent": "Only conversations with this bot",
+  "search.anyAgent": "Any bot",
   "search.results": "Search results",
   "search.searching": "Searching…",
   "search.noResults": "No matching conversations.",
@@ -186,7 +342,7 @@ export const en = {
   "composer.skillsForMessage": "Skills for this message",
   "composer.removeSkill": "Remove skill {name}",
   "composer.skills": "Skills",
-  "composer.noEnabledSkills": "No skills are switched on for this agent. Add one in the agent’s settings.",
+  "composer.noEnabledSkills": "No skills are switched on for this bot. Add one in the bot’s settings.",
   "composer.skillsLimit": "Up to {max} per message, used for the next message only.",
   "composer.dropAttach": "Drop to attach",
   "planner.runHistory": "Run & history",
@@ -231,7 +387,7 @@ export const en = {
   "composer.noMatchingSkills": "No matching skills available. Try another name or open the skill picker.",
   "search.kindTitle": "Title",
   "search.kindYou": "You",
-  "search.kindAgent": "Agent",
+  "search.kindAgent": "Bot",
   "search.noResultsWithQuery": "No conversation mentions “{query}”.",
   "search.archivedHint": ". Archived conversations are not searched unless you include them.",
   "search.archived": "archived",
@@ -243,35 +399,35 @@ export const en = {
   "planner.taskCount": "{count} tasks",
   "chat.refreshTodayError": "Could not refresh the Today brief. Try again.",
   "chat.audioConsentRequired": "Consent to send audio to {provider} before sending.",
-  "auth.titleSetup": "Set the owner passphrase",
-  "auth.titleSignIn": "Sign in to Open Duet",
+  "auth.titleSetup": "Create your sign-in code",
+  "auth.titleSignIn": "Sign in to Chief of Noumenon",
   "auth.signedInOpening": "Signed in. Opening…",
   "auth.working": "Working…",
-  "auth.setupAndSignIn": "Set passphrase and sign in",
+  "auth.setupAndSignIn": "Create and sign in",
   "auth.signIn": "Sign in",
   "auth.loading": "Loading…",
-  "auth.setupServerOnly": "No owner passphrase is set yet, and it can only be set from the server itself. On the server, run:",
+  "auth.setupServerOnly": "No sign-in code has been set. Create it on the computer running this app with this command:",
   "auth.reloadAndSignIn": "Then reload this page and sign in.",
-  "auth.setupHelp": "This passphrase protects this server. Use at least 10 characters; you will sign in with it on every new browser.",
-  "auth.passphrase": "Passphrase",
+  "auth.setupHelp": "Choose a sign-in code of at least 10 characters. This is your password for this app; keep it safe for signing in on another browser.",
+  "auth.passphrase": "Sign-in code",
   "auth.repeatPassphrase": "Repeat it",
   "auth.pairingPrompt": "Have a pairing code from Settings → Devices?",
   "auth.pairBrowser": "Pair this browser",
-  "auth.passphrasesDiffer": "The two passphrases differ.",
+  "auth.passphrasesDiffer": "The sign-in codes do not match.",
   "auth.signInError": "Could not sign in. Try again.",
   "auth.workspaceError": "Could not open your workspace",
   "auth.tryAgain": "Try again",
   "auth.continueWithoutSetup": "Continue without the setup guide",
   "auth.stateError": "Could not read your sign-in or setup state.",
-  "auth.hidePassphrase": "Hide passphrase",
-  "auth.showPassphrase": "Show passphrase",
+  "auth.hidePassphrase": "Hide sign-in code",
+  "auth.showPassphrase": "Show sign-in code",
   "common.undo": "Undo",
   "common.operationError": "That did not work.",
   "approvals.allowedTab": "Always allowed",
   "approvals.decisionsTab": "Decisions",
   "approvals.healthTab": "Health",
   "approvals.title": "Approvals",
-  "approvals.explanation": "Una regla guardada permite ejecutar un comando de shell sin preguntar. Cualquier otra cosa sigue requiriendo confirmación, y un comando que afecte a la seguridad básica (borrar tu carpeta personal, formatear un disco, hacer un force push…) siempre la requiere, sea cual sea la regla. Una regla que empiece por ciertas palabras nunca coincide con un comando que encadene otro.",
+  "approvals.explanation": "A saved rule lets a shell command run without asking. Everything else still asks, and a command that affects basic safety (deleting your home folder, formatting a disk, a force push and similar) always asks, whatever the rule says. A rule that starts with certain words never matches a command that chains another one.",
   "approvals.onlyThisFolder": "Only rules that apply in this conversation’s folder",
   "approvals.loading": "Loading…",
   "approvals.empty": "No saved rules. Choose “Always allow this command” on a request, or add one below.",
@@ -292,18 +448,18 @@ export const en = {
   "approval.denied": "Denied",
   "approval.expired": "Expired: nobody answered in time, so it did not run",
   "approval.cancelled": "Cancelled: the run ended before it was answered",
-  "approval.computerRequest": "Permite que tu agente use la pantalla, el teclado y el navegador de este ordenador durante este turno.",
-  "approval.isolatedRequest": "Tu agente quiere usar una máquina aislada, no esta.",
-  "approval.toolRequest": "Your agent wants to use {tool}.",
-  "approval.waitUntilAllowed": "No se ejecutará hasta que lo permitas.",
+  "approval.computerRequest": "Let your bot use this computer's screen, keyboard and browser for this turn.",
+  "approval.isolatedRequest": "Your bot wants to use an isolated machine, not this one.",
+  "approval.toolRequest": "Your bot wants to use {tool}.",
+  "approval.waitUntilAllowed": "It will not run until you allow it.",
   "approval.allowSaved": "Allowed by a saved rule, without asking",
-  "approval.allowComputerRead": "Allowed without asking: reading inside the agent’s computer",
+  "approval.allowComputerRead": "Allowed without asking: reading inside the bot’s computer",
   "approval.acceptedEdits": "Allowed without asking: edits are accepted",
   "approval.planRefused": "Refused: plan only changes nothing",
   "approval.allowThisTurn": "Allow this turn",
   "approval.allow": "Allow",
   "approval.alwaysAllow": "Always allow this command",
-  "approval.alwaysAllowHint": "Permítelo ahora y, a partir de ahora, ejecuta exactamente este comando en esta carpeta sin volver a preguntar.",
+  "approval.alwaysAllowHint": "Allow it now, and from now on run exactly this command in this folder without asking again.",
   "approval.deny": "Deny",
   "approval.allowedOnce": "Allowed this once only: {error}.",
   "approval.noLongerAlwaysAllowed": "No longer always allowed. Next time it asks again.",
@@ -311,16 +467,16 @@ export const en = {
   "approval.savedRuleAllows": "A saved rule allows this command.",
   "approval.stopAlwaysAllowing": "Stop always allowing",
   "team.title": "Team",
-  "team.description": "Un líder puede crear especialistas y asignarles trabajo. Cada agente conserva sus propias aprobaciones.",
-  "team.agentsTab": "Agents",
+  "team.description": "A lead can create specialists and assign them work. Each bot keeps its own approvals.",
+  "team.agentsTab": "Bots",
   "team.activityTab": "Activity",
-  "team.coordination": "Team coordination",
+  "team.coordination": "Let bots work together",
   "team.manage": "Manage",
   "team.noTeam": "No team yet",
-  "team.noTeamHelp": "Choose a lead from your agents to start a team.",
-  "team.addAgent": "Add an agent",
+  "team.noTeamHelp": "Choose a lead from your bots to start a team.",
+  "team.addAgent": "Add a bot",
   "team.chooseLead": "Choose team lead",
-  "team.selectAgent": "Select an agent…",
+  "team.selectAgent": "Select a bot…",
   "team.noJobs": "No delegated jobs yet",
   "team.noJobsHelp": "Jobs the lead hands to specialists show up here.",
   "team.activity": "Team activity",
@@ -334,8 +490,8 @@ export const en = {
   "team.job": "Job {id}",
   "team.result": "Result",
   "team.openWork": "Open work",
-  "team.instructionsReviewed": "Instructions written by agent {id} · reviewed",
-  "team.instructionsReview": "Instructions written by agent {id} · review in Agents",
+  "team.instructionsReviewed": "Instructions written by bot {id} · reviewed",
+  "team.instructionsReview": "Instructions written by bot {id} · review in Bots",
   "team.addedByYou": "Added by you",
   "team.canDelegate": "Can delegate",
   "team.workTab": "Work",
@@ -356,9 +512,9 @@ export const en = {
   "room.name": "Room name",
   "room.members": "Members",
   "room.memberLimit": "Elige hasta 12 agentes. Responden de uno en uno.",
-  "room.removeHelp": "Al quitar a un miembro se omiten las respuestas en cola. Detén a los miembros que estén trabajando y espera a que terminen antes de quitarlos. Si los vuelves a añadir, conservan su historial de trabajo y empiezan con los mensajes nuevos de la sala; las respuestas antiguas nunca se vuelven a intentar automáticamente.",
+  "room.removeHelp": "Removing a member skips their queued replies. Stop members who are working and wait for them to finish before removing them. If you add them back, they keep their work history and start with new room messages; old replies are never retried automatically.",
   "room.instructions": "Shared instructions",
-  "room.instructionsHelp": "Visible para todos los miembros de la sala. No incluyas credenciales aquí.",
+  "room.instructionsHelp": "Visible to all members of the room. Do not put credentials here.",
   "room.responderQuestion": "Who answers without a tag?",
   "room.taggedOnly": "Only tagged members",
   "room.oneMember": "One member",
@@ -406,7 +562,7 @@ export const en = {
   "room.saving": "Saving…",
   "onboarding.step.welcome": "Welcome",
   "onboarding.step.engine": "Connect an AI",
-  "onboarding.step.agent": "Your first agent",
+  "onboarding.step.agent": "Your first bot",
   "onboarding.step.ready": "Ready",
   "onboarding.error.readUnavailable": "Could not read setup progress.",
   "onboarding.error.saveConflict": "Setup changed in another window. Reload saved progress to continue.",
@@ -418,43 +574,43 @@ export const en = {
   "onboarding.loading": "Loading setup…",
   "onboarding.status.skipped": "Set up when you are ready",
   "onboarding.status.saved": "Your setup is saved",
-  "onboarding.revisit": "You can revisit the guide. Existing agents, conversations and permissions stay as you left them.",
+  "onboarding.revisit": "You can revisit the guide. Existing bots, conversations and permissions stay as you left them.",
   "onboarding.continueSetup": "Continue setup",
   "onboarding.goToChat": "Go to chat",
-  "onboarding.host.desktop": "Agents and their workspaces run on this computer.",
-  "onboarding.host.server": "Agents and their workspaces run on the server hosting this app. Your browser does not grant access to this device's files.",
+  "onboarding.host.desktop": "Bots and their workspaces run on this computer.",
+  "onboarding.host.server": "Bots and their workspaces run on the server hosting this app. Your browser does not grant access to this device's files.",
   "onboarding.saveStatus.saving": "Saving progress…",
   "onboarding.saveStatus.failed": "Progress could not be saved.",
   "onboarding.saveStatus.pending": "Changes waiting to save…",
   "onboarding.saveStatus.saved": "Progress saved. You can return later.",
   "onboarding.ariaLabel": "First-run setup",
-  "onboarding.welcome.title": "Welcome to Open Duet",
-  "onboarding.welcome.description": "Connect an AI, give your first agent a purpose, and try a request.",
+  "onboarding.welcome.title": "Welcome to Chief of Noumenon",
+  "onboarding.welcome.description": "Connect an AI, give your first bot a purpose, and try a request.",
   "onboarding.welcome.accountNote": "Your app account and your AI subscription are separate. Connect an AI you already use, or configure an API endpoint. Provider costs and limits still apply.",
-  "onboarding.welcome.existingAgents": "You already have agents. Choose whether to keep using them in the agent step.",
+  "onboarding.welcome.existingAgents": "You already have bots. Choose whether to keep using them in the bot step.",
   "onboarding.engine.title": "Connect an AI",
   "onboarding.engine.description": "Sign in with an existing subscription or add an API key. An engine must be ready before you continue.",
-  "onboarding.agent.title": "Give your agent a purpose",
-  "onboarding.agent.createStarter": "Create a starter agent",
-  "onboarding.agent.name": "Agent name",
+  "onboarding.agent.title": "Give your bot a purpose",
+  "onboarding.agent.createStarter": "Create a starter bot",
+  "onboarding.agent.name": "Bot name",
   "onboarding.agent.purpose": "What should it help with?",
   "onboarding.agent.firstRequest": "First request",
   "onboarding.agent.firstRequestHint": "This opens as a draft in chat. You review it and press Send.",
-  "onboarding.agent.makeLead": "Make this agent the team lead so it can help create specialists and delegate work.",
+  "onboarding.agent.makeLead": "Make this bot the team lead so it can help create specialists and delegate work.",
   "onboarding.agent.askFirstNote": "Starts with Ask-first approvals. Choosing a role does not connect email, calendar or computer access.",
-  "onboarding.agent.existing": "Continue with your existing agents or start a plain conversation. You can create an agent from Agents later.",
+  "onboarding.agent.existing": "Continue with your existing bots or start a plain conversation. You can create a bot from Bots later.",
   "onboarding.ready.title": "Ready for your first conversation",
   "onboarding.model.default": "Default model",
   "onboarding.summary.createdAgent": "{name} will help with: {purpose}",
-  "onboarding.summary.continueExisting": "Continue with your existing agents or a plain chat.",
-  "onboarding.workspace.desktop": "New agents use this app's workspace on your computer.",
-  "onboarding.workspace.server": "New agents use the configured server workspace.",
-  "onboarding.approvalMode": "Agent approval mode starts at Ask first.",
+  "onboarding.summary.continueExisting": "Continue with your existing bots or a plain chat.",
+  "onboarding.workspace.desktop": "New bots use this app's workspace on your computer.",
+  "onboarding.workspace.server": "New bots use the configured server workspace.",
+  "onboarding.approvalMode": "Bot approval mode starts at Ask first.",
   "onboarding.access.summary": "Optional apps and computer access",
-  "onboarding.access.description": "Connect apps on the Apps page when you need them. Choose a computer in Agents when a task requires browser or desktop control.",
+  "onboarding.access.description": "Connect apps on the Apps page when you need them. Choose a computer in Bots when a task requires browser or desktop control.",
   "onboarding.access.native": "On a supported Mac, native computer access asks for system permissions. Denying those permissions does not prevent chat. Never grant screen access just to finish this guide.",
   "onboarding.openApps": "Open Apps",
-  "onboarding.firstReplyFailed": "If the first reply fails, keep the agent and retry or choose another engine. Saving setup does not mean a reply has succeeded.",
+  "onboarding.firstReplyFailed": "If the first reply fails, keep the bot and retry or choose another engine. Saving setup does not mean a reply has succeeded.",
   "onboarding.saveAgain": "Try saving again",
   "onboarding.reloadProgress": "Reload saved progress",
   "onboarding.back": "Back",
@@ -475,6 +631,142 @@ export const en = {
 
 // Locale catalogs provide translated shared interface copy; any missing entry uses English.
 export type MessageKey = Exclude<keyof typeof en,
+  | "voice.browserPrivacy" | "voice.browserFallback" | "voice.finishing"
+  | "voice.recording" | "voice.language" | "voice.auto" | "voice.record" | "voice.stop" | "voice.opening" | "voice.transcribing"
+  | "phone.account" | "phone.noPhone" | "phone.sameAccount" | "phone.counts"
+  | "phone.cantOpen" | "phone.connected" | "phone.same" | "phone.vpn" | "phone.minute"
+  | "computer.only" | "computer.chat"
+  | "notifications.countOne"
+  | "notifications.countMany"
+  | "audit.name"
+  | "audit.turns"
+  | "audit.input"
+  | "audit.output"
+  | "audit.cost"
+  | "audit.byConversation"
+  | "audit.byEngine"
+  | "audit.byDay"
+  | "audit.inputTokens"
+  | "audit.outputTokens"
+  | "audit.previousMonth"
+  | "audit.nextMonth"
+  | "audit.useModel"
+  | "audit.checkEngines"
+  | "audit.botDefault"
+  | "audit.saving"
+  | "audit.unsaved"
+  | "audit.noChanges"
+  | "audit.engineNextMessage"
+
+  | "notifications.loadError"
+  | "notifications.noLongerWaiting"
+
+  | "settings.group.You"
+  | "settings.group.AI"
+  | "settings.group.Safety"
+  | "settings.summary.general"
+  | "settings.summary.day"
+  | "settings.summary.advanced"
+  | "settings.summary.phone"
+  | "settings.summary.notifications"
+  | "settings.summary.profile"
+  | "settings.summary.engines"
+  | "settings.summary.channels"
+  | "settings.summary.approvals"
+  | "settings.summary.account"
+  | "header.engineModel"
+
+  | "auth.codeHelp"
+  | "approval.wants"
+  | "approval.action.write"
+  | "approval.action.edit"
+  | "approval.action.shell"
+  | "approval.action.apps_run"
+  | "approval.action.other"
+  | "files.title"
+  | "files.empty"
+  | "files.emptyHelp"
+  | "phone.title"
+  | "phone.help"
+  | "phone.owner"
+  | "phone.checking"
+  | "phone.devices"
+  | "phone.privateLink"
+  | "phone.scan"
+  | "phone.install"
+  | "phone.on"
+  | "phone.off"
+  | "phone.again"
+  | "phone.check"
+  | "phone.newCode"
+  | "phone.showCode"
+  | "phone.codeHelp"
+  | "phone.readyCode"
+  | "phone.linkFirst"
+  | "phone.home"
+  | "phone.iphone"
+  | "phone.android"
+  | "phone.keep"
+  | "phone.qr"
+  | "phone.tailBefore"
+  | "phone.tailAfter"
+  | "phone.https"
+  | "bot.name"
+  | "bot.role"
+  | "bot.about"
+  | "bot.instructions"
+  | "bot.advanced"
+  | "rail.add"
+  | "rail.oneChat"
+  | "common.edit"
+  | "header.allTools"
+  | "composer.chooseApp"
+  | "composer.noApps"
+  | "composer.connectApp"
+  | "composer.appAccess"
+  | "settings.backChat"
+  | "approval.field.path"
+  | "approval.field.file_path"
+  | "approval.field.content"
+  | "approval.field.command"
+  | "approval.field.old_string"
+  | "approval.field.new_string"
+  | "settings.nav.general"
+  | "settings.nav.day"
+  | "settings.nav.advanced"
+  | "settings.nav.phone"
+  | "settings.nav.profile"
+  | "settings.nav.account"
+  | "settings.nav.engines"
+  | "settings.nav.notifications"
+  | "settings.nav.channels"
+  | "settings.nav.approvals"
+  | "settings.nav.apps"
+
+  | "header.computer"
+  | "chat.otherWaiting"
+  | "chat.untitledWaiting"
+  | "chat.waitingCheckFailed"
+  | "rail.yourBots"
+  | "rail.addBot"
+  | "rail.editBot"
+  | "rail.deleteBot"
+  | "rail.editNamed"
+  | "rail.deleteNamed"
+  | "rail.chats"
+  | "rail.idle"
+  | "rail.deleteTitle"
+  | "rail.keepBot"
+  | "rail.deleting"
+  | "rail.deletePermanently"
+  | "chat.goodMorning"
+  | "chat.goodAfternoon"
+  | "chat.goodEvening"
+  | "chat.starterReminder"
+  | "chat.starterPdf"
+  | "chat.starterBot"
+  | "chat.starterReply"
+
   | "channels.telegramTitle"
   | "channels.telegramDescription"
   | "channels.boatTasksTitle"
@@ -503,7 +795,7 @@ export type MessageKey = Exclude<keyof typeof en,
   | "chat.reaction.sent"
 >;
 type EnglishKey = keyof typeof en;
-export const LOCALES = ["en", "de", "es", "fr", "it", "ja", "ko", "nl", "pl", "pt", "ru", "tr", "zh"] as const;
+export const LOCALES = ["en", "he", "de", "es", "fr", "it", "ja", "ko", "nl", "pl", "pt", "ru", "tr", "zh"] as const;
 export type Locale = (typeof LOCALES)[number];
 export type LanguageChoice = Locale;
 
@@ -511,6 +803,7 @@ export const LANGUAGE_KEY = "od-language";
 export const LANGUAGE_CHOICES: readonly LanguageChoice[] = LOCALES;
 export const LANGUAGE_LABELS: Record<Locale, string> = {
   en: "English",
+  he: "עברית",
   de: "Deutsch",
   es: "Español",
   fr: "Français",
@@ -526,6 +819,7 @@ export const LANGUAGE_LABELS: Record<Locale, string> = {
 };
 export const LANGUAGE_TAGS: Record<Locale, string> = {
   en: "en",
+  he: "he",
   de: "de",
   es: "es",
   fr: "fr",
@@ -565,7 +859,7 @@ export const es: Partial<Record<EnglishKey, string>> = {
   "onboarding.saveStatus.pending": "Cambios pendientes de guardar…",
   "onboarding.saveStatus.saved": "Progreso guardado. Puedes volver más tarde.",
   "onboarding.ariaLabel": "Configuración inicial",
-  "onboarding.welcome.title": "Te damos la bienvenida a Open Duet",
+  "onboarding.welcome.title": "Te damos la bienvenida a Chief of Noumenon",
   "onboarding.welcome.description": "Conecta una IA, asigna un propósito a tu primer agente y prueba una solicitud.",
   "onboarding.welcome.accountNote": "Tu cuenta de la aplicación y tu suscripción de IA son independientes. Conecta una IA que ya uses o configura un endpoint de API. Siguen aplicándose los costes y límites del proveedor.",
   "onboarding.welcome.existingAgents": "Ya tienes agentes. En el paso de agentes, elige si quieres seguir usándolos.",
@@ -633,7 +927,7 @@ export const es: Partial<Record<EnglishKey, string>> = {
   "sidebar.showArchived": "Mostrar archivadas",
   "sidebar.hideArchived": "Ocultar archivadas",
   "sidebar.routines": "Rutinas",
-  "sidebar.legacyTasks": "Tareas de Telegram y Boat",
+  "sidebar.legacyTasks": "Tareas anteriores de Boat",
   "sidebar.settings": "Configuración",
   "sidebar.rowActions": "Acciones de la conversación",
   "sidebar.rename": "Cambiar nombre",
@@ -815,7 +1109,7 @@ export const es: Partial<Record<EnglishKey, string>> = {
   "chat.refreshTodayError": "No se pudo actualizar el resumen de hoy. Inténtalo de nuevo.",
   "chat.audioConsentRequired": "Da tu consentimiento para enviar audio a {provider} antes de enviarlo.",
   "auth.titleSetup": "Establecer la frase de contraseña del propietario",
-  "auth.titleSignIn": "Iniciar sesión en Open Duet",
+  "auth.titleSignIn": "Iniciar sesión en Chief of Noumenon",
   "auth.signedInOpening": "Sesión iniciada. Abriendo…",
   "auth.working": "Procesando…",
   "auth.setupAndSignIn": "Establecer frase de contraseña e iniciar sesión",
@@ -967,6 +1261,7 @@ export const es: Partial<Record<EnglishKey, string>> = {
 
 const catalogs: Record<Locale, Partial<Record<MessageKey, string>>> = {
   en,
+  he,
   de,
   es,
   fr,
@@ -982,13 +1277,15 @@ const catalogs: Record<Locale, Partial<Record<MessageKey, string>>> = {
 };
 
 type SupplementalCatalog = Record<Locale, Record<string, string>>;
-const supplementalCatalogs = [agentTeamMessages, knowledgeRoutinesMessages, appSettingsMessages] as unknown as SupplementalCatalog[];
+const supplementalCatalogs = [agentTeamMessages, knowledgeRoutinesMessages, appSettingsMessages, chatAppsMessages] as unknown as SupplementalCatalog[];
 const writableCatalogs = catalogs as unknown as Record<Locale, Record<string, string>>;
 for (const locale of LOCALES) {
   for (const supplemental of supplementalCatalogs) {
     Object.assign(writableCatalogs[locale], supplemental[locale]);
   }
 }
+
+Object.assign(writableCatalogs.he, auditHebrew);
 
 function isLocale(value: string): value is Locale {
   return (LOCALES as readonly string[]).includes(value);
@@ -1025,12 +1322,14 @@ export function writeLanguage(storage: () => StorageLike, choice: LanguageChoice
 type DocumentLike = {
   documentElement: {
     lang: string;
+    dir?: string;
     dataset: Record<string, string | undefined>;
   };
 };
 
 export function applyLanguage(doc: DocumentLike, choice: LanguageChoice, _systemLocale = "en"): Locale {
   doc.documentElement.lang = LANGUAGE_TAGS[choice];
+  doc.documentElement.dir = choice === "he" ? "rtl" : "ltr";
   doc.documentElement.dataset.languageChoice = choice;
   return choice;
 }
@@ -1040,7 +1339,7 @@ export const LANGUAGE_INIT_SCRIPT =
   JSON.stringify(LOCALES) +
   ';function ok(v){return a.indexOf(v)>=0}' +
   'try{var v=localStorage.getItem(' + JSON.stringify(LANGUAGE_KEY) + ');if(ok(v))c=v}catch(e){}' +
-  'd.dataset.languageChoice=c;d.lang=c==="pt"?"pt-BR":c==="zh"?"zh-CN":c})();';
+  'd.dir=c==="he"?"rtl":"ltr";d.dataset.languageChoice=c;d.lang=c==="pt"?"pt-BR":c==="zh"?"zh-CN":c})();';
 
 export function translate(locale: Locale, key: string, params?: Record<string, string | number>): string {
   const template: string = catalogs[locale][key as MessageKey] ?? catalogs.en[key as MessageKey] ?? en[key as EnglishKey] ?? key;

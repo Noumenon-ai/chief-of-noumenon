@@ -113,8 +113,11 @@ class Backend:
             "TOKEN_ENCRYPTION_KEYS": TEST_KEY,
             "BOAT_API_KEY": "",
             "TELEGRAM_BOT_TOKEN": "",
+            # This isolated environment does not inherit the conftest gate.
+            "VOICE_PRELOAD": "false",
             "LOCAL_EXECUTION_ENABLED": "true",
             "LOCAL_TOOLS_ENABLED": "true",
+            "TURN_SANDBOX_ENABLED": "false",
             "LOCAL_CLAUDE_CLI_PATH": str(self.claude),
             "LOCAL_CODEX_CLI_PATH": str(self.root / "bin" / "no-codex"),
             # The server allow-lists child-process env vars. Expose the fake

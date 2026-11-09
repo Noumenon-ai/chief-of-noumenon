@@ -21,6 +21,7 @@ import { ConversationSearch } from "@/components/chat/ConversationSearch";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { SkeletonList } from "@/components/ui/Skeleton";
+import { LanguageSelect } from "@/components/settings/LanguageSelect";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { AgentRow } from "./AgentRow";
 import { ThreadRow, type RowActions } from "./ThreadRow";
@@ -259,17 +260,19 @@ export function Sidebar({
               <div className="pt-0.5">
                 {listed.length === 0 && (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onNewAgent?.();
-                        onNavigate?.();
-                      }}
-                      className="flex w-full cursor-pointer items-center gap-2 rounded-field px-2.5 py-1.5 text-left text-xs text-muted transition-colors hover:bg-hover/60 hover:text-ink"
-                    >
-                      <Plus size={13} className="shrink-0 text-muted" />
-                      <span>{t("sidebar.createAgent")}</span>
-                    </button>
+                    {onNewAgent && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onNewAgent();
+                          onNavigate?.();
+                        }}
+                        className="flex w-full cursor-pointer items-center gap-2 rounded-field px-2.5 py-1.5 text-left text-xs text-muted transition-colors hover:bg-hover/60 hover:text-ink"
+                      >
+                        <Plus size={13} className="shrink-0 text-muted" />
+                        <span>{t("sidebar.createAgent")}</span>
+                      </button>
+                    )}
                     {onManageAgents && (
                       <button
                         type="button"
@@ -369,6 +372,7 @@ export function Sidebar({
           </Link>
         </div>
 
+        <div className="py-2"><LanguageSelect compact /></div>
         {/* Bottom bar with Settings and Theme Toggle */}
         <div className="mt-1.5 flex items-center justify-between border-t border-line/60 pt-1.5">
           <Link

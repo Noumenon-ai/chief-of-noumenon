@@ -1,6 +1,3 @@
-import json
-
-from boat_sdk.exceptions import ApiException
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +28,8 @@ async def save_token(
     file_path: str,
     plaintext: str,
 ) -> UserCredential:
+    if provider == "claude":
+        raise ValueError("Claude credentials are managed only by the official CLI. Sign in in its terminal flow.")
     ciphertext = crypto.encrypt(plaintext)
 
     await begin_write(db)  # read-then-write: lock first so two saves cannot interleave
@@ -55,6 +54,8 @@ async def save_token(
 async def get_decrypted(
     db: AsyncSession, user_id: str, provider: str
 ) -> tuple[str, str] | None:
+    if provider == "claude":
+        return None  # Never decrypt or copy credentials saved by the removed sign-in flow.
     record = await _get_row(db, user_id, provider)
     if record is None:
         return None
@@ -69,54 +70,6 @@ class CredentialNotFoundError(Exception):
     pass
 
 
-def _claude_expires_at(content: str) -> int | None:
-    try:
-        expires_at = json.loads(content)["claudeAiOauth"]["expiresAt"]
-    except (json.JSONDecodeError, KeyError, TypeError):
-        return None
-    return expires_at if isinstance(expires_at, int) else None
-
-
-# Providers whose CLI renews (and rotates) its login in place on the box. For
-# these the box copy can be newer than ours and must win over the stored one.
-EXPIRY_READERS = {"claude": _claude_expires_at}
-
-
-async def _read_box_file(box_id: str, file_path: str) -> str | None:
-    try:
-        response = await run_in_threadpool(ascii_box_service.read_file, box_id, file_path)
-    except ApiException:
-        return None
-    return response.content
-
-
-async def pull_renewed_credential_from_box(
-    db: AsyncSession, *, box_id: str, user_id: str, provider: str
-) -> bool:
-    """Save the box's copy of the credential if it's newer than the stored one.
-    Returns True if the box copy was newer (and is now stored)."""
-    read_expiry = EXPIRY_READERS.get(provider)
-    if read_expiry is None:
-        return False
-    decrypted = await get_decrypted(db, user_id, provider)
-    if decrypted is None:
-        return False
-
-    stored, file_path = decrypted
-    on_box = await _read_box_file(box_id, file_path)
-    if on_box is None:
-        return False
-
-    box_expiry, stored_expiry = read_expiry(on_box), read_expiry(stored)
-    if box_expiry is None or (stored_expiry is not None and box_expiry <= stored_expiry):
-        return False
-
-    await save_token(
-        db, user_id=user_id, provider=provider, file_path=file_path, plaintext=on_box
-    )
-    return True
-
-
 async def inject_credential_into_box(
     db: AsyncSession, *, box_id: str, user_id: str, provider: str
 ) -> None:
@@ -125,13 +78,6 @@ async def inject_credential_into_box(
         raise CredentialNotFoundError(
             f"No credential found for user {user_id} and provider {provider}"
         )
-
-    # Overwriting a renewed login with our older copy would hand the CLI a
-    # refresh token that renewal already invalidated.
-    if await pull_renewed_credential_from_box(
-        db, box_id=box_id, user_id=user_id, provider=provider
-    ):
-        return
 
     plaintext, file_path = decrypted
     

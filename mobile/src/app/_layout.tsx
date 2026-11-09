@@ -54,7 +54,7 @@ function RootStack({ ready }: { ready: boolean }) {
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
       </Stack.Protected>
       <Stack.Protected guard={!paired}>
-        <Stack.Screen name="pair" options={{ title: 'Suparagent' }} />
+        <Stack.Screen name="pair" options={{ title: 'Chief of Noumenon' }} />
         <Stack.Screen name="scan" options={{ title: 'Scan QR code', presentation: 'modal' }} />
       </Stack.Protected>
     </Stack>

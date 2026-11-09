@@ -89,6 +89,6 @@ export async function installTemplateSkills(
 
 export function skillInstallNotice(result: SkillInstallResult): string | null {
   if (result.failed.length === 0) return null;
-  if (result.unsupported) return "The agent was created, but this version has no skills library, so the suggested skills were not added.";
-  return `The agent was created, but these skills were not added: ${result.failed.join(", ")}.`;
+  if (result.unsupported) return "The bot was created, but this version has no skills library, so the suggested skills were not added.";
+  return `The bot was created, but these skills were not added: ${result.failed.join(", ")}.`;
 }

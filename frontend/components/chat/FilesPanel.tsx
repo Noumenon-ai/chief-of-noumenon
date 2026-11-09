@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/lib/use-i18n";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { EmptyPanel, ErrorState, LoadingState } from "./PanelState";
@@ -14,7 +15,8 @@ function message(err: unknown, fallback: string): string {
 // Read-only view of the open conversation's workspace: folders, a preview of
 // text and images, and downloads of a file or a whole folder as a zip
 // (docs/EVERYDAY.md).
-export function FilesPanel({ threadId, workspace, onClose }: { threadId: number; workspace: string | null; onClose: () => void }) {
+export function FilesPanel({ threadId, onClose }: { threadId: number; workspace: string | null; onClose: () => void }) {
+  const t = useT();
   const [path, setPath] = useState("");
   const [listing, setListing] = useState<FolderListing | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -95,11 +97,11 @@ export function FilesPanel({ threadId, workspace, onClose }: { threadId: number;
   const crumbs = path ? path.split("/") : [];
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }} title="Files" description={workspace ?? undefined} size="lg" flush>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }} title={t("files.title")} size="lg" flush>
         <div className="flex h-[min(68dvh,40rem)] min-h-0 flex-col md:flex-row">
           <section className="flex min-h-0 flex-col border-b border-line md:w-80 md:border-b-0 md:border-r">
             <nav aria-label="Folder" className="flex flex-wrap items-center gap-1 px-3 py-2 text-xs">
-              <button onClick={() => setPath("")} className="cursor-pointer underline">workspace</button>
+              <button onClick={() => setPath("")} className="cursor-pointer underline">{t("files.title")}</button>
               {crumbs.map((part, i) => (
                 <span key={i} className="flex items-center gap-1">
                   <span className="text-faint">/</span>
@@ -131,8 +133,8 @@ export function FilesPanel({ threadId, workspace, onClose }: { threadId: number;
               {!listError && listing?.entries.length === 0 && (
                 <li>
                   <EmptyPanel
-                    title={path ? "This folder is empty" : "The workspace is empty"}
-                    description={path ? undefined : "Files the agent writes appear here."}
+                    title={path ? "This folder is empty" : t("files.empty")}
+                    description={path ? undefined : t("files.emptyHelp")}
                     action={path ? <Button size="sm" onClick={() => setPath(parentPath(path))}>Go up</Button> : undefined}
                   />
                 </li>
@@ -142,7 +144,7 @@ export function FilesPanel({ threadId, workspace, onClose }: { threadId: number;
                   <li key={entry.path}>
                     {entry.type === "hidden" ? (
                       <span className="flex items-center gap-2 px-2 py-1 text-faint" title="Secret files (keys, .env, credentials) are never shown.">
-                        <span aria-hidden>🔒</span>
+                        <span aria-hidden>Locked</span>
                         <span className="truncate">{entry.name}</span>
                       </span>
                     ) : (
@@ -152,7 +154,7 @@ export function FilesPanel({ threadId, workspace, onClose }: { threadId: number;
                           preview?.path === entry.path ? "bg-inset" : ""
                         }`}
                       >
-                        <span aria-hidden>{entry.type === "dir" ? "📁" : "📄"}</span>
+                        <span aria-hidden>{entry.type === "dir" ? "Folder" : "File"}</span>
                         <span className="min-w-0 flex-1 truncate">{entry.name}</span>
                         {entry.type === "file" && <span className="shrink-0 text-xs text-muted">{formatBytes(entry.bytes)}</span>}
                       </button>

@@ -18,7 +18,7 @@ export function Avatar({
   size?: keyof typeof SIZES;
   className?: string;
 }) {
-  const base = "inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold";
+  const base = "inline-flex shrink-0 select-none items-center justify-center rounded-[10px] font-semibold";
   if (agentId === null) {
     return (
       <span aria-hidden="true" className={cn(base, "bg-inset text-muted", SIZES[size], className)}>

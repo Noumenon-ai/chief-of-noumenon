@@ -32,14 +32,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 top-12 z-[60] flex flex-col items-center gap-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {items.map((item) => {
           const Icon = ICONS[item.tone];
           return (
             <div key={item.id} className="pointer-events-auto flex w-full max-w-sm animate-pop-in items-center gap-2.5 rounded-card border border-line bg-raised px-3 py-2.5 text-sm text-ink shadow-lg">
               <Icon size={16} aria-hidden="true" className={cn("shrink-0", COLOR[item.tone])} />
               <span className="min-w-0 flex-1">{item.message}</span>
-              <button type="button" onClick={() => dismiss(item.id)} aria-label={t("common.close")} className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted hover:text-ink touch:size-10">
+              <button type="button" onClick={() => dismiss(item.id)} aria-label={t("common.close")} className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded text-muted hover:text-ink touch:size-11">
                 <X size={14} aria-hidden="true" />
               </button>
             </div>

@@ -33,7 +33,7 @@ def test_codex_and_acp_set_memory_tools_and_codex_also_has_team_tools():
         assert caps.memory_tools and caps.can_search_history
     assert CodexAdapter.capabilities.mcp
     assert not AcpAdapter.capabilities.mcp
-    assert not OpenAIChatAdapter.capabilities.can_search_history
+    assert OpenAIChatAdapter.capabilities.can_search_history
     assert Capabilities().can_search_history is False and Capabilities(mcp=True).can_search_history
 
 
@@ -71,7 +71,11 @@ async def test_codex_without_an_agent_or_with_notes_off_mounts_nothing(crt, sess
     await crt.send_turn(thread.id, "hi")
     await finished(sessions, thread.id)
     assert all("config" not in m["params"] for m in codex.received("thread/start"))
-    assert all("developerInstructions" not in m["params"] for m in codex.received("thread/start"))
+    from app.services.starter_team import RESOURCEFULNESS
+    starts = codex.received("thread/start")
+    assert "developerInstructions" not in starts[0]["params"]
+    assert RESOURCEFULNESS in starts[1]["params"]["developerInstructions"]
+    assert "BEGIN NOTES" not in starts[1]["params"]["developerInstructions"]
 
 
 # --- ACP ------------------------------------------------------------------------------------

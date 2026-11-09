@@ -7,6 +7,7 @@ import { api, ApiError, type Engine } from "@/lib/api";
 import { firstReadyEngine } from "@/lib/engines";
 import { useT } from "@/lib/use-i18n";
 import { onboarding, onboardingChatHref, STARTER_ROLES, type OnboardingDraft, type OnboardingState } from "@/lib/onboarding";
+import { FirstRun } from "./FirstRun";
 import { EngineSettings } from "./EngineSettings";
 import { EngineModelFields } from "./chat/EngineModelFields";
 import { DesktopPermissions } from "./DesktopPermissions";
@@ -75,9 +76,10 @@ export function OnboardingApp() {
 
   useEffect(() => {
     let live = true;
+    if (!state?.existing_agents) return;
     api.getEngines().then(items => { if (live) enginesChanged(items); }).catch(() => {});
     return () => { live = false; };
-  }, [enginesChanged]);
+  }, [enginesChanged, state?.existing_agents]);
 
   const change = (values: Partial<OnboardingDraft>) => { setDraft(previous => previous && ({ ...previous, ...values })); setSaveError(null); setError(null); };
   const engine = engines.find(item => item.id === draft?.provider);
@@ -110,7 +112,7 @@ export function OnboardingApp() {
 
   const header = (
     <header className="flex flex-wrap items-center justify-between gap-3">
-      <Link href="/chat/" className="text-sm underline">Open Duet</Link>
+      <Link href="/chat/" className="text-sm underline">Chief of Noumenon</Link>
       <div className="flex items-center gap-2"><LanguageSelect compact /><ThemeToggle /></div>
     </header>
   );
@@ -134,6 +136,8 @@ export function OnboardingApp() {
       </main>
     );
   }
+
+  if ((!state.existing_agents && state.status === "pending") || (state.auto_created && state.status === "configured")) return <FirstRun initial={state} />;
 
   if (state.status !== "pending") {
     return (

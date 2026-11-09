@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 
 const BUTTON = "cursor-pointer rounded border border-line px-2 py-1 text-xs disabled:opacity-50";
 
-export function BoatDesktop({ computerId }: { computerId: number }) {
+export function BoatDesktop({ computerId, running = true }: { computerId: number; running?: boolean }) {
   const [lease, setLease] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,6 +40,7 @@ export function BoatDesktop({ computerId }: { computerId: number }) {
   }, [computerId, lease, release]);
 
   const take = async () => {
+    if (!running) return;
     setBusy(true);
     setError(null);
     try {
@@ -64,16 +65,17 @@ export function BoatDesktop({ computerId }: { computerId: number }) {
 
   return (
     <section className="space-y-2">
+      {!running && <p className="text-xs text-muted">Start the computer before taking control.</p>}
       <div className="flex flex-wrap items-center gap-2">
         {!lease ? (
-          <button className={BUTTON} disabled={busy} onClick={() => void take()}>
+          <button className={BUTTON} disabled={busy || !running} title={!running ? "Start the computer before taking control." : undefined} onClick={() => void take()}>
             {busy ? "Opening cloud desktop…" : "Take control"}
           </button>
         ) : (
           <>
             <span className="text-xs">You are in control of the cloud desktop</span>
             <button className={BUTTON} onClick={release}>Hand control back</button>
-            {!url && <button className={BUTTON} disabled={busy} onClick={() => void take()}>Retry connection</button>}
+            {!url && <button className={BUTTON} disabled={busy || !running} title={!running ? "Start the computer before taking control." : undefined} onClick={() => void take()}>Retry connection</button>}
           </>
         )}
       </div>
@@ -88,7 +90,7 @@ export function BoatDesktop({ computerId }: { computerId: number }) {
             className="aspect-[16/10] min-h-[320px] w-full rounded border border-line bg-black"
           />
           <p className="text-xs text-muted">
-            This provider-issued desktop link is secret. Open Dots clears it from this view when you hand control back, but the provider does not expose a link revocation control.
+            This provider-issued desktop link is secret. Chief of Noumenon clears it from this view when you hand control back, but the provider does not expose a link revocation control.
           </p>
         </>
       )}

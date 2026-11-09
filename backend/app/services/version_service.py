@@ -1,4 +1,4 @@
-"""Version and update detection for Open Duet (BL-64).
+"""Version and update detection for Chief of Noumenon (BL-64).
 
 Detects current version, git commit, installation mode (Docker, service/systemd,
 git checkout, or source), checks GitHub releases for newer versions, and formats
@@ -112,7 +112,7 @@ def get_git_commit(root: Path | None = None) -> str | None:
 
 
 def detect_install_kind(environ: Mapping[str, str] | None = None) -> str:
-    """Detects whether Open Duet is running via Docker, systemd service, git checkout, or source."""
+    """Detects whether Chief of Noumenon is running via Docker, systemd service, git checkout, or source."""
     env = os.environ if environ is None else environ
     if (
         env.get("OPEN_DOTS_DOCKER")

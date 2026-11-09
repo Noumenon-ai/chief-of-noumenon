@@ -6,7 +6,7 @@ conversation of that agent: the agent's engine, model, instructions, workspace
 and computer (if it has one) are used, through the same thread runtime and
 approval gate as a chat you type yourself. Nothing here needs Boat.
 
-The older Boat **schedules** (`/schedules`, Telegram `/schedule`) are unchanged
+The older Boat **schedules** (`/schedules`) are unchanged
 and keep running Boat sandboxes. Routines are the local counterpart.
 
 ## What a routine is
@@ -193,8 +193,9 @@ failed, was missed or interrupted, and a run that completed. A skipped
 occurrence is only recorded in the run history, so a long run of a frequent
 routine does not flood the feed. The chat
 header shows a bell with the unread count. When `TELEGRAM_BOT_TOKEN` and
-`ROUTINE_TELEGRAM_CHAT_ID` are set, the same messages are also sent to that
-Telegram chat.
+`ROUTINE_TELEGRAM_CHAT_ID` are set, notices needing input are also sent as
+Telegram alerts. Routine completion chatter stays in the website. Pending
+approval cards always use the optional owner alert channel.
 
 Feed entries remain after their routine or conversation is deleted. Deleting
 a linked conversation clears the entry's `thread_id` while preserving its text
@@ -330,3 +331,64 @@ changed body text, concurrent requests, restart or an unknown response cannot
 obtain another attempt in the same run. Check Gmail before starting a new run
 after uncertainty. A draft is never a send, and a live Gmail run is still needed
 to qualify provider response shapes and the approval experience.
+
+## Day routines and personal reminders
+
+Settings → Your day provides Morning brief, Evening brief and Gmail triage for
+an explicitly chosen bot. Adding them is idempotent and leaves all three off.
+Choose a local time and enable each separately. No account is connected or granted
+by this action. These are built-in read-only programs linked to ordinary routine
+records: the scheduler and history remain the same. Editing their prompt or
+turning on Uninterrupted access cannot make them act. They never launch an
+engine with retrieved content or expose tools to it. Their fixed source reads
+recheck current bot grants, account identity, blocked providers and read metadata
+before every dispatch. Text inside mail cannot authorize a call.
+
+Briefs include primary-calendar events for today, unread important mail, open
+local planner tasks, due reminders and recorded delegated work and bot conversation statuses. Missing or
+failing sources are reported explicitly. Calendar results are bounded to 100
+items (15 detailed lines); tasks and delegated work to 20. They are deterministic
+summaries, not a claim to comprehensive semantic understanding. Reports appear in
+the app and the configured owner's Telegram channel; no live account was used to
+qualify these programs.
+
+Personal reminders accept English and Hebrew in team-enabled website chat,
+using `create_reminder`, `list_reminders` and `cancel_reminder`, or the same controls
+in Settings. The owner time zone defaults to the server's system IANA zone (UTC if
+unavailable) and is editable in Your day. Today/tomorrow, weekdays, explicit clock
+times, ISO dates, and relative minutes/hours are supported. Morning explicitly
+means 09:00 and evening 18:00; creation reports the exact time. Ambiguous slash
+dates, absent times, past times and DST gaps/folds ask a short question instead of
+creating a reminder. Unsupported phrases likewise ask for a date and time.
+
+Reminders persist in owner-scoped database records. Claiming a due reminder and
+creating its app notification is one transaction; restart catch-up includes a late
+note. Repeated scheduler passes and idempotent tool retries cannot create another
+notification. Telegram follows its durable feed cursor. Telegram has no send
+idempotency key: delivery followed by a lost acknowledgement or a process crash
+before cursor persistence can duplicate a Telegram message. Absolute exactly-once
+external delivery is therefore not promised. Reminder bodies and tool results are
+not written to diagnostic/decision logs; the app retains the reminder and chat as
+user-visible records. Delete/cancel operations are owner scoped.
+
+## Optional Shabbat and Yom Tov quiet
+
+Off by default in Settings → Your day. Enter a location label and its IANA time
+zone, and choose Israel or diaspora holiday days. There is no location lookup or
+network calendar request. The offline fixed Hebrew calendar includes Rosh
+Hashanah, Yom Kippur, the first/last festival days of Sukkot and Pesach, and Shavuot.
+Shabbat and adjacent festival windows merge into one period.
+
+The boundary is deliberately a **civil-time preference**: 14:00 on the eve until
+midnight immediately after the last quiet day. It is not a sunset calculation,
+not candle-lighting or havdalah, and not halachic authority. Location selects the
+time zone/holiday convention only; latitude, elevation, local custom and unusual
+high-latitude daylight are not modeled. Review these broad times for your needs.
+No dependency or lockfile was added.
+
+Non-urgent app/Telegram notifications are held and replaced by one summary after
+the period ends. Urgent mail and approvals remain available. Scheduled work waits;
+missed occurrences within quiet time coalesce into one deferred run. Work started
+manually still runs and its result remains visible. Quiet-mode settings affect
+future behavior; switching it off releases the original feed entries. The backend
+and optional Telegram poller must be running to deliver.

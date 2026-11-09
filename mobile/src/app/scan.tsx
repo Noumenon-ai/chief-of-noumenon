@@ -34,7 +34,7 @@ export default function Scan() {
     if (handled.current) return;
     const link = parsePairingLink(data);
     if (!link) {
-      setMessage('That is not a Suparagent pairing code.');
+      setMessage('That is not a Chief of Noumenon pairing code.');
       return;
     }
     handled.current = true;

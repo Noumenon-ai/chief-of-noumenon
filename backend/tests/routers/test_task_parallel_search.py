@@ -24,9 +24,9 @@ async def test_parallel_search_task_launch(
     monkeypatch.setattr(settings, "BOAT_BASE_URL", base_url)
     monkeypatch.setattr(settings, "PARALLEL_SEARCH_ENABLED", enabled)
     await user_credential_service.save_token(
-        db_session, user_id=user_id, provider="claude",
-        file_path=".claude/.credentials.json",
-        plaintext=json.dumps({"claudeAiOauth": {"expiresAt": 1, "accessToken": "owned-fixture"}}),
+        db_session, user_id=user_id, provider="github",
+        file_path=".config/gh/hosts.yml",
+        plaintext=json.dumps({"syntheticGithub": {"expiresAt": 1, "accessToken": "owned-fixture"}}),
     )
     parent_id = None
     session_id = str(uuid.uuid4())

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { auth } from "@/lib/auth";
 import { ApiError, request } from "@/lib/api";
 import type { DesktopAccountStatus } from "./DesktopAccountLogin";
 import { DesktopAccountDanger } from "./DesktopAccountDanger";
@@ -13,7 +14,7 @@ export function DesktopAccountSection() {
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     let live = true;
-    request<DesktopAccountStatus>("/desktop-account/status").then(value => { if (live) setAccount(value); }).catch(err => {
+    auth.status().then(status => status.desktop ? request<DesktopAccountStatus>("/desktop-account/status") : null).then(value => { if (live) setAccount(value); }).catch(err => {
       if (live && !(err instanceof ApiError && err.status === 404)) setError(err instanceof Error ? `Could not read your account. ${err.message}` : "Could not read your account.");
     });
     return () => { live = false; };
@@ -21,7 +22,7 @@ export function DesktopAccountSection() {
   if (!account && !error) return null;
   return <section className="space-y-3 rounded-lg border border-line p-5"><h3 className="font-semibold">App account</h3>
     {account && <p className="text-sm">{account.signed_in ? `Signed in as ${account.email}` : "Signed out"}</p>}
-    <p className="text-xs text-muted">Signing out locks this local profile. Your agents, conversations and engine credentials stay on this computer and remain bound to this account.</p>
+    <p className="text-xs text-muted">Signing out locks this local profile. Your bots, conversations and engine credentials stay on this computer and remain bound to this account.</p>
     {error && <Banner tone="danger">{error}</Banner>}
     {account?.signed_in && <Button disabled={busy} onClick={() => {
       setBusy(true); setError(null);

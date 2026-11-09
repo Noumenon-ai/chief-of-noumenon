@@ -21,6 +21,7 @@ MEMORY.md is never recalled (it already loads into every turn), and neither
 is the current conversation (it is already in context).
 """
 
+import asyncio
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -246,7 +247,7 @@ async def build(db, *, owner_id: str, agent_id: int, thread_id: int, message: st
     terms = terms_of(message)
     if not terms:
         return None
-    note_matches = _note_matches(agent_id, terms)
+    note_matches = await asyncio.to_thread(_note_matches, agent_id, terms)
     notes = [match[2] for match in note_matches[:MAX_NOTES]]
     bridges = _bridge_terms(note_matches)
     conversations = await conversation_passages(db, owner_id, agent_id, thread_id, terms, bridges)

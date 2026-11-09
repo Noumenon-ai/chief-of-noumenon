@@ -9,25 +9,26 @@ connect an inbox, or sign you in to an AI provider. A profile stays associated
 with that account after sign-out. Use a separate desktop profile for another
 account; moving data between accounts is not part of this flow.
 
-New users continue through Welcome, Connect an AI, Your first agent and Ready.
-The browser guide uses the server's workspace; the desktop guide uses the local
-app workspace. The interface currently supports English and offers system,
-light and dark appearance. Existing users with saved agents or the old desktop
-completion flag can open the guide from Settings without repeating setup.
+On first open, the owner flow checks for existing agents. If there are none,
+local discovery chooses a ready signed-in Claude or Codex CLI first, then other
+ready CLIs, a configured API engine, then a model at the default loopback Ollama
+or LM Studio address. It creates `Chief` with Ask first approvals and offers a
+small link to change its engine. Creation and its receipt share a transaction;
+concurrent opens and retries do not create extra agents or overwrite existing ones.
 
-Choose a ready engine and model, then optionally give a starter agent a name
-and purpose. Writing, research and planning suggestions are editable. Supported
-team-tool engines can optionally make the agent a team lead. Creation uses
-Ask-first approvals and does not enable connected apps or native desktop access.
-You can keep existing agents instead. The first request opens as an unsent chat
-draft: review it and press Send yourself.
+Detection never probes a configured remote API. CLI status checks may use the
+CLI's own authentication behavior. Local HTTP checks have fixed IP addresses,
+short timeouts, bounded responses, no environment proxy and no redirects.
 
-Progress saves after a short pause while editing. A save conflict shows a reload
-option; failed reads and saves remain retryable. Completion creates the starter
-and its receipt in one database transaction, so retrying after a lost response
-does not create another agent. The first-reply milestone is recorded separately,
-only after the server verifies a successful turn in your conversation. Set up
-later dismisses the guide; Settings can reopen it.
+If nothing is ready, one screen offers CLI sign-in commands, an API key form,
+and local-model instructions. It rechecks automatically. Owner passphrase setup
+stays as it is; Telegram alerts remain optional in Settings; private phone chat uses Settings → Use on your phone. Existing users may still
+reopen the older agent-configuration guide from Settings.
+
+The first-reply milestone still requires a successful stored turn. Scripted
+automated tests cover priority, local-only discovery, concurrent creation,
+existing agents and redirects. Real provider sign-in, model downloads and packaged
+first-open behavior have not been tested for this increment.
 
 ## Engines and optional permissions
 

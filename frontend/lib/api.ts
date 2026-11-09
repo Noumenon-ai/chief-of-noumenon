@@ -1,3 +1,4 @@
+import { screenText } from "./screen-text.ts";
 import type { SkillDoc, SkillPreview, SkillSave, SkillSummary, SkillLearnPreview, SkillLearnSource } from "./skills";
 import type { TemplateCatalog, TemplateSkill } from "./templates";
 import type { ComposioAccount, ComposioApp, ComposioLink } from "./connected-apps";
@@ -7,7 +8,7 @@ const API_BASE =
 
 export function isLocalApiEndpoint(): boolean {
   try {
-    const hostname = new URL(API_BASE).hostname.toLowerCase();
+    const hostname = new URL(API_BASE, typeof window !== "undefined" ? window.location.origin : undefined).hostname.toLowerCase();
     return hostname === "localhost" || hostname.endsWith(".localhost") || hostname.startsWith("127.") || hostname === "[::1]";
   } catch {
     return false;
@@ -21,7 +22,7 @@ class ApiError extends Error {
   code: string | null;
 
   constructor(status: number, message: string, code: string | null = null) {
-    super(message);
+    super(screenText(message));
     this.status = status;
     this.code = code;
   }
@@ -190,7 +191,9 @@ export type DecisionEvent =
   | "auto_allowed"
   | "expired"
   | "cancelled"
-  | "undone";
+  | "undone"
+  | "app_call"
+  | "app_result";
 
 export type DecisionFilter = {
   limit?: number;
@@ -613,16 +616,6 @@ export type EngineConfigInput = {
 export type ComposioStatus = { configured: boolean; apps: ComposioApp[] };
 export type { CatalogApp as ComposioCatalogApp, CatalogPage as ComposioCatalogPage, CatalogTool as ComposioCatalogTool } from "./apps-catalog";
 
-export type CodexLoginOperation = {
-  id: string;
-  phase: "running" | "succeeded" | "failed" | "expired" | "cancelled";
-  authorization_url?: string;
-  user_code?: string;
-  error?: string;
-};
-
-export type ClaudeLoginOperation = Omit<CodexLoginOperation, "user_code"> & { code_sent?: boolean };
-
 export type VersionInfo = {
   current_version: string;
   commit?: string | null;
@@ -752,6 +745,7 @@ export type AgentExport = {
 
 export type Thread = {
   id: number;
+  origin?: "app" | "telegram";
   // Present once the backend supports named agents; null for a plain chat.
   agent_id?: number | null;
   title: string | null;
@@ -811,7 +805,8 @@ async function readEventStream<T extends StreamEnvelope>(
   extraHeaders: Record<string, string>,
   onEvent: (event: T) => void,
   signal?: AbortSignal,
-  onOpen?: () => void
+  onOpen?: () => void,
+  onChunk?: () => void
 ): Promise<void> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { Accept: "text/event-stream", ...extraHeaders },
@@ -828,6 +823,7 @@ async function readEventStream<T extends StreamEnvelope>(
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
+    onChunk?.();
     parser.push(decoder.decode(value, { stream: true }));
   }
   parser.push(decoder.decode());
@@ -977,13 +973,6 @@ export const api = {
   setEnginePreference: (preference: EnginePreference) => request<EnginePreference>("/engines/preference", { method: "PUT", body: JSON.stringify(preference) }),
   logoutClaudeEngine: () => request<void>("/engines/claude/logout", { method: "POST" }),
   logoutCodexEngine: () => request<void>("/engines/codex/logout", { method: "POST" }),
-  startClaudeEngineLogin: () => request<ClaudeLoginOperation>("/engines/claude/login", { method: "POST" }),
-  claudeLoginStatus: (id: string) => request<ClaudeLoginOperation>(`/engines/claude/login/${encodeURIComponent(id)}`),
-  completeClaudeLogin: (id: string, code: string) => request<void>(`/engines/claude/login/${encodeURIComponent(id)}/code`, { method: "POST", body: JSON.stringify({ code }) }),
-  cancelClaudeLogin: (id: string) => request<void>(`/engines/claude/login/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  startCodexLogin: () => request<CodexLoginOperation>("/engines/codex/login", { method: "POST" }),
-  codexLoginStatus: (id: string) => request<CodexLoginOperation>(`/engines/codex/login/${encodeURIComponent(id)}`),
-  cancelCodexLogin: (id: string) => request<void>(`/engines/codex/login/${encodeURIComponent(id)}`, { method: "DELETE" }),
   startGoogleSetup: (action: "install" | "sign_in" | "models") => request<GoogleSetupOperation>(`/engines/antigravity/setup/${action}`, { method: "POST" }),
   googleSetupStatus: () => request<GoogleSetupOperation | null>("/engines/antigravity/setup/status"),
   cancelGoogleSetup: () => request<void>("/engines/antigravity/setup", { method: "DELETE" }),
@@ -1057,16 +1046,7 @@ export const api = {
       method: "POST",
     }),
 
-  startClaudeLogin: (boxId: string) =>
-    request<{ login_url: string }>(`/sandboxes/${boxId}/auth/claude/start`, {
-      method: "POST",
-    }),
 
-  submitClaudeCode: (boxId: string, code: string) =>
-    request<{ status: string }>(`/sandboxes/${boxId}/auth/claude/submit`, {
-      method: "POST",
-      body: JSON.stringify({ code }),
-    }),
 
   submitTask: (
     userId: string,
@@ -1089,6 +1069,9 @@ export const api = {
 
   getProviders: () => request<Providers>("/providers"),
 
+  getTelegramSettings: () => request<{ enabled: boolean; lead_agent: number | null }>("/telegram"),
+  setTelegramSettings: (lead_agent: number | null) => request("/telegram", { method: "PUT", body: JSON.stringify({ lead_agent }) }),
+  getSandboxStatus: () => request<{ protected: boolean; reason?: string }>("/local/sandbox"),
   getLocalStatus: () => request<LocalStatus>("/local/status"),
 
   createLocalTask: (userId: string, promptText: string) =>
@@ -1259,6 +1242,7 @@ export const api = {
   deleteBoatCredential: () => request<void>("/computers/boat-credentials", { method: "DELETE" }),
   boatDesktopUrl: (id: number, leaseId: string) => request<{ url: string }>(`/computers/${id}/boat-desktop-url`, { method: "POST", body: JSON.stringify({ lease_id: leaseId }) }),
 
+  listComputers: () => request<Computer[]>("/computers"),
   getAgentComputer: (agentId: number) => request<Computer>(`/agents/${agentId}/computer`),
 
   // Idempotent: an agent that already has a computer gets it back unchanged.
@@ -1274,6 +1258,9 @@ export const api = {
   computerScreenshot: (id: number) => requestBlobUrl(`/computers/${id}/screenshot`),
   createAgentComputer: (agentId: number, settings: ComputerSettings & { provider?: "docker" | "boat"; kind?: ComputerKind; start?: boolean } = {}) =>
     request<Computer>(`/agents/${agentId}/computer`, { method: "POST", body: JSON.stringify(settings) }),
+
+  buildComputerImage: (computerId: number) => request<{ status: string; output: string }>(`/computers/${computerId}/build-image`, { method: "POST" }),
+  computerImageProgress: (computerId: number) => request<{ status: string; output: string }>(`/computers/${computerId}/build-image`),
 
   getComputer: (computerId: number) => request<Computer>(`/computers/${computerId}`),
 
@@ -1393,14 +1380,16 @@ export const api = {
     afterSeq: number | null,
     onEvent: (event: ThreadEvent) => void,
     signal?: AbortSignal,
-    onOpen?: () => void
+    onOpen?: () => void,
+    onChunk?: () => void
   ): Promise<void> =>
     readEventStream<ThreadEvent>(
       `/threads/${threadId}/events/stream`,
       afterSeq === null ? {} : { "Last-Event-ID": String(afterSeq) },
       onEvent,
       signal,
-      onOpen
+      onOpen,
+      onChunk
     ),
 
   getPendingAsk: (taskId: number) =>

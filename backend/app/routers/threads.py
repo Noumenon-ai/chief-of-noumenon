@@ -386,3 +386,58 @@ async def answer_approval(
     return ApprovalAnswerResponse(
         decision=payload.decision, rule_id=rule.id if rule else None, remember_error=why
     )
+
+
+from pydantic import BaseModel, ConfigDict, Field
+from app.auth.routes import current_principal
+
+
+class CardAnswer(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    choice: int | None = Field(default=None, ge=-1, le=4)
+    connection_id: str | None = Field(default=None, max_length=200)
+    timezone: str | None = Field(default=None, max_length=100)
+
+
+@router.post('/{thread_id}/cards/{identifier}')
+async def answer_card(thread_id: int, identifier: str, body: CardAnswer,
+                      principal=Depends(current_principal), rt: ThreadRuntime = Depends(get_runtime)):
+    from app.services import chat_cards
+    if 'assistant' in principal.scopes:
+        raise HTTPException(403, 'Only a person can answer a card.')
+    await _thread_or_404(rt, thread_id)
+    try:
+        return await chat_cards.respond(rt, thread_id, identifier, body.choice, body.connection_id,
+                                        body.timezone, admin=principal.is_admin)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from None
+    except LookupError:
+        raise HTTPException(404, 'Card not found.') from None
+    except (ValueError, store.ThreadBusy) as exc:
+        raise HTTPException(409, str(exc)) from None
+    except Exception:
+        # No model or connector error payload (possibly containing credentials)
+        # is reflected into a response or logged here. The card stays retryable.
+        raise HTTPException(503, 'Could not continue. Check the app and engine, then retry.') from None
+
+
+class ConnectCardRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    provider: str = Field(min_length=1, max_length=200, pattern=r'^[a-z0-9_-]+$')
+
+
+@router.post('/{thread_id}/connect-card')
+async def request_connect_card(thread_id: int, body: ConnectCardRequest,
+                               principal=Depends(current_principal), rt: ThreadRuntime = Depends(get_runtime)):
+    from app.services import chat_cards
+    if not principal.is_admin or 'assistant' in principal.scopes:
+        raise HTTPException(403, 'Open this card in your owner browser.')
+    await _thread_or_404(rt, thread_id)
+    try:
+        return await chat_cards.request_connect(rt, thread_id, body.provider)
+    except LookupError:
+        raise HTTPException(404, 'Conversation not found.') from None
+    except ValueError:
+        raise HTTPException(409, 'This app is unavailable. Choose an app from Apps.') from None
+    except Exception:
+        raise HTTPException(503, 'Could not load the app. Retry.') from None

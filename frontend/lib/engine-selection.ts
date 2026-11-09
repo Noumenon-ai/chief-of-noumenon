@@ -95,10 +95,11 @@ export function resolveEngineModel(
  * Reads the cached engine preference from localStorage for instant 0ms hydration.
  */
 export function readCachedPreference(
-  storage: Storage | null = typeof window !== "undefined" ? window.localStorage : null
+  storage?: Storage | null
 ): { provider: string | null; model: string | null; effort?: string | null } | null {
-  if (!storage) return null;
   try {
+    if (storage === undefined) storage = typeof window !== "undefined" ? window.localStorage : null;
+    if (!storage) return null;
     const raw = storage.getItem(PREFERRED_ENGINE_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
@@ -123,10 +124,11 @@ export function readCachedPreference(
  */
 export function writeCachedPreference(
   choice: { provider: string | null; model: string | null; effort?: string | null },
-  storage: Storage | null = typeof window !== "undefined" ? window.localStorage : null
+  storage?: Storage | null
 ): void {
-  if (!storage) return;
   try {
+    if (storage === undefined) storage = typeof window !== "undefined" ? window.localStorage : null;
+    if (!storage) return;
     const payload: { provider: string | null; model: string | null; effort?: string | null } = {
       provider: choice.provider?.trim() || null,
       model: choice.model?.trim() || null,

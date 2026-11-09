@@ -94,10 +94,10 @@ def _computer_tool_authorized(scope: Scope) -> bool:
 
 
 _REFUSAL_PAGE = (
-    "<!doctype html><meta charset=utf-8><title>Open Duet</title>"
+    "<!doctype html><meta charset=utf-8><title>Chief of Noumenon</title>"
     "<body style=\"font:16px system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem\">"
-    "<h1 style=\"font-size:1.2rem\">Open this from the Open Duet app</h1>"
-    "<p>This address only works inside the Open Duet window, which keeps your conversations "
+    "<h1 style=\"font-size:1.2rem\">Open this from the Chief of Noumenon app</h1>"
+    "<p>This address only works inside the Chief of Noumenon window, which keeps your conversations "
     "private to it. Use that window instead of a browser tab.</p>"
 )
 
@@ -128,7 +128,7 @@ def _refusal(scope: Scope) -> Response:
         content={
             "detail": {
                 "error_code": "launch_token_required",
-                "message": "This address only works from inside the Open Duet app.",
+                "message": "This address only works from inside the Chief of Noumenon app.",
             }
         },
     )

@@ -121,9 +121,9 @@ def test_tools_arguments_ask_this_app_and_never_skip_permissions():
     assert args[args.index("--permission-mode") + 1] == "default"
     assert args[args.index("--input-format") + 1] == "stream-json"
     assert args[args.index("--session-id") + 1] == "sid-2"
-    assert set(args[args.index("--tools") + 1].split(",")) == {
-        "Read", "Write", "Edit", "Glob", "Grep", "Bash",
-    }
+    assert args[args.index("--tools") + 1] == ""
+    assert "--restricted" in args
+    assert json.loads(args[args.index("--settings") + 1])["disableAllHooks"] is True
     for flag in ("--strict-mcp-config", "--disable-slash-commands"):
         assert flag in args
     joined = " ".join(args)

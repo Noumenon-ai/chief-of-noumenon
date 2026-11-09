@@ -8,7 +8,14 @@ class LocalTaskCreateRequest(BaseModel):
     prompt_text: str = Field(min_length=1, max_length=100_000)
 
 
+class VoiceSettings(BaseModel):
+    languages: list[str]
+    default: Literal["auto"] = "auto"
+    browser_speech: bool = True
+
+
 class LocalStatusResponse(BaseModel):
+    voice: VoiceSettings | None = None
     # LOCAL_EXECUTION_ENABLED on the backend.
     enabled: bool
     # Enabled, allowed for this caller, and the CLI is installed and signed in.

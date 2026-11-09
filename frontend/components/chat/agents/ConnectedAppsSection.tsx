@@ -1,4 +1,5 @@
 "use client";
+import { useT } from "@/lib/use-i18n";
 
 import Link from "next/link";
 import { agentAppOptions, levelOf, withAccount, withApp, type AccountScopes, type ComposioAccount, type Level, type Scopes } from "@/lib/connected-apps";
@@ -20,10 +21,11 @@ export function ConnectedAppsSection({
   onScopesChange: (scopes: Scopes) => void;
   onAccountScopesChange: (scopes: AccountScopes) => void;
 }) {
+  const tx = useT();
   const apps = agentAppOptions(appAccounts, connectorScopes);
 
   return (
-    <div className="space-y-4" role="group" aria-label="Connected apps access">
+    <div className="space-y-4" role="group" aria-label={tx("Connected apps access")}>
       {apps.map((app) => {
         const level = levelOf(connectorScopes, app.slug);
         const options: { value: Level; label: string }[] = [
@@ -32,10 +34,10 @@ export function ConnectedAppsSection({
           ...(app.write ? [{ value: "write" as const, label: "Read and change" }] : []),
         ];
         const helper = level === "off"
-          ? "This agent cannot use this app."
+          ? "This bot cannot use this app."
           : level === "read"
-            ? `${app.generic ? "Look up only." : "Read only."} ${app.read}`
-            : `${app.generic ? "Look up and run." : "Read and change."} ${app.write ?? ""}`;
+            ? `${tx(app.generic ? "Look up only." : "Read only.")} ${tx(app.read)}`
+            : `${tx(app.generic ? "Look up and run." : "Read and change.")} ${tx(app.write ?? "")}`;
 
         const accounts = appAccounts?.filter((account) => account.toolkit === app.slug && account.status === "ACTIVE") ?? [];
         const selected = connectorAccountScopes[app.slug] ?? [];
@@ -45,9 +47,9 @@ export function ConnectedAppsSection({
           <fieldset key={app.slug} className="min-w-0 space-y-2 rounded-field border border-line p-3">
             <legend className="px-1 text-sm font-medium text-ink">
               {app.label}
-              {app.generic && <span className="ml-2 text-xs font-normal text-muted">No built-in tools; every action asks you first.</span>}
+              {app.generic && <span className="ml-2 text-xs font-normal text-muted">{tx("No built-in tools; every action asks you first.")}</span>}
             </legend>
-            <div role="radiogroup" aria-label={`${app.label} access`} className="inline-flex max-w-full flex-wrap gap-1 rounded-md border border-line bg-inset p-1">
+            <div role="radiogroup" aria-label={tx("{name} access", { name: app.label })} className="inline-flex max-w-full flex-wrap gap-1 rounded-md border border-line bg-inset p-1">
               {options.map((option) => (
                 <label key={option.value} className="relative">
                   <input
@@ -58,17 +60,17 @@ export function ConnectedAppsSection({
                     checked={level === option.value}
                     onChange={() => onScopesChange(withApp(connectorScopes, app.slug, option.value))}
                   />
-                  <span className={SEGMENT}>{option.label}</span>
+                  <span className={SEGMENT}>{tx(option.label)}</span>
                 </label>
               ))}
             </div>
-            <p className="text-xs leading-5 text-muted" aria-live="polite">{helper}</p>
+            <p className="text-xs leading-5 text-muted" aria-live="polite">{tx(helper)}</p>
 
             {level !== "off" && (
               <div className="space-y-1 border-l border-line pl-3">
-                <p className="text-xs text-muted">Allow this agent to use these connected accounts:</p>
+                <p className="text-xs text-muted">{tx("Allow this bot to use these connected accounts:")}</p>
                 {appAccounts === null ? (
-                  <p className="text-xs text-muted">Loading connected accounts…</p>
+                  <p className="text-xs text-muted">{tx("Loading connected accounts…")}</p>
                 ) : (
                   <>
                     {accounts.length ? accounts.map((account) => (
@@ -82,7 +84,7 @@ export function ConnectedAppsSection({
                         <span>{account.alias || account.id}</span>
                       </label>
                     )) : (
-                      <p className="text-xs text-muted">No connected account is available. Connect one on the <Link href="/apps/" className="text-accent underline underline-offset-2">Apps page</Link>.</p>
+                      <p className="text-xs text-muted">{tx("No connected account is available. Connect one on the")}<Link href="/apps/" className="text-accent underline underline-offset-2">{tx("Apps page")}</Link>.</p>
                     )}
                     {unavailable.map((id) => (
                       <label key={id} className="flex min-h-8 cursor-pointer items-center gap-2 text-xs touch:min-h-11">
@@ -92,10 +94,10 @@ export function ConnectedAppsSection({
                           checked
                           onChange={() => onAccountScopesChange(withAccount(connectorAccountScopes, app.slug, id, false))}
                         />
-                        <span>Unavailable account ({id}) · remove access</span>
+                        <span>{tx("Unavailable account (")}{id}{tx(") · remove access")}</span>
                       </label>
                     ))}
-                    {selected.length === 0 && <p className="text-xs text-muted">No accounts selected; this app is unavailable to the agent.</p>}
+                    {selected.length === 0 && <p className="text-xs text-muted">{tx("No accounts selected; this app is unavailable to the bot.")}</p>}
                   </>
                 )}
               </div>
@@ -104,8 +106,7 @@ export function ConnectedAppsSection({
         );
       })}
       <p className="text-xs leading-5 text-muted">
-        <Link href="/apps/" className="text-accent underline underline-offset-2">Connect apps first on the Apps page</Link>, then choose which exact accounts this agent can use. Access is used only in conversations you start, never in routines or from outside messages.
-      </p>
+        <Link href="/apps/" className="text-accent underline underline-offset-2">{tx("Connect apps first on the Apps page")}</Link>{tx(", then choose which exact accounts this bot can use. Access is used only in conversations you start, never in routines or from outside messages.")}</p>
     </div>
   );
 }

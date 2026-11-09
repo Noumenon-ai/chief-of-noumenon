@@ -561,3 +561,31 @@ def test_local_access_accepts_an_authenticated_session_and_keeps_the_loopback_ru
     monkeypatch.setattr(settings, "LOCAL_EXECUTION_ENABLED", False)
     with pytest.raises(LocalAccessDenied):
         LoopbackPolicy().authorize(Request(signed_in))
+
+
+async def test_concurrent_logins_create_sessions_without_stale_sqlite_snapshot(app, factory, monkeypatch):
+    import asyncio
+    await set_owner(factory)
+    original = store.verify_owner
+    ready = asyncio.Event()
+    count = 0
+
+    async def together(db, passphrase):
+        nonlocal count
+        result = await original(db, passphrase)
+        count += 1
+        if count == 2:
+            ready.set()
+        await asyncio.wait_for(ready.wait(), 5)
+        return result
+
+    monkeypatch.setattr(store, 'verify_owner', together)
+    async with client(app) as first, client(app) as second:
+        responses = await asyncio.gather(*[
+            api.post('/api/v1/auth/login', json={'passphrase': PASSPHRASE})
+            for api in (first, second)
+        ])
+        assert [r.status_code for r in responses] == [200, 200]
+        assert responses[0].cookies.get(COOKIE_NAME) != responses[1].cookies.get(COOKIE_NAME)
+        for api in (first, second):
+            assert (await api.get('/api/v1/auth/session')).status_code == 200

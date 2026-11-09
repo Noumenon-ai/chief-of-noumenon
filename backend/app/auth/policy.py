@@ -40,6 +40,7 @@ CHAT_ROUTES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = tuple(
     (frozenset(methods), re.compile(f"^{API}{path}$"))
     for methods, path in (
         ({"GET"}, "/auth/session"),
+        ({"POST"}, "/voice/transcribe"),
         ({"GET"}, "/version"),
         ({"GET", "PUT"}, "/notifications/preferences"),
         ({"GET"}, "/team"),
@@ -57,6 +58,7 @@ CHAT_ROUTES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = tuple(
         ({"POST"}, "/threads"),
         ({"GET", "PATCH"}, f"/threads/{_ID}"),
         ({"POST"}, f"/threads/{_ID}/turns"),
+        ({"POST"}, f"/threads/{_ID}/cards/[0-9a-f]{{32}}"),
         ({"POST"}, f"/threads/{_ID}/stop"),
         ({"GET"}, f"/threads/{_ID}/events"),
         ({"GET"}, f"/threads/{_ID}/events/stream"),
@@ -73,6 +75,7 @@ CHAT_ROUTES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = tuple(
         ({"GET"}, "/engines/[A-Za-z0-9_-]+"),
         ({"GET"}, "/providers"),
         ({"GET"}, "/local/status"),
+        ({"GET"}, "/local/sandbox"),
     )
 )
 
@@ -123,4 +126,31 @@ class Principal:
 
     @property
     def is_admin(self) -> bool:
-        return "admin" in self.scopes
+        return "admin" in self.scopes and "assistant" not in self.scopes
+
+
+# Autonomous MCP clients never receive the human chat scope (which can approve).
+ASSISTANT_ROUTES = tuple(
+    (frozenset(methods), re.compile(f"^{API}{path}$"))
+    for methods, path in (
+        ({"GET"}, "/auth/session"),
+        ({"GET"}, "/agents"),
+        ({"GET", "POST"}, "/threads"),
+        ({"GET"}, f"/threads/{_ID}"),
+        ({"GET"}, f"/threads/{_ID}/events"),
+        ({"GET"}, f"/threads/{_ID}/approvals"),
+        ({"POST"}, f"/threads/{_ID}/turns"),
+        ({"GET"}, "/search"),
+        ({"GET"}, "/planner/board"),
+        ({"GET", "POST"}, "/planner/items"),
+        ({"GET"}, "/routines"),
+        ({"POST"}, f"/routines/{_ID}/run"),
+    )
+)
+
+
+def allows_request(scopes, method, path):
+    if 'assistant' in scopes:
+        # Restrict even an accidentally mixed token. It cannot gain owner powers.
+        return _matches(ASSISTANT_ROUTES, method, path)
+    return allows(scopes, required_scope(method, path))

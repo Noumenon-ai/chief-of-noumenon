@@ -52,6 +52,7 @@ class Thread(Base):
     # The named agent this thread was created from, if any. Not a database
     # foreign key: deleting an agent never deletes or rewrites its threads.
     agent_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    origin: Mapped[str] = mapped_column(String, nullable=False, default="app", server_default="app")
     kind: Mapped[str] = mapped_column(String, nullable=False, default="chat", server_default="chat")
     job_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     room_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

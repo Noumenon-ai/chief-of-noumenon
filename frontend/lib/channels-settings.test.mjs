@@ -5,39 +5,26 @@ import { test } from "node:test";
 const component = readFileSync(new URL("../components/ConnectTelegram.tsx", import.meta.url), "utf8");
 const channels = readFileSync(new URL("../components/settings/ChannelsSettings.tsx", import.meta.url), "utf8");
 
-test("Channels Settings uses the settings variant of Telegram linking", () => {
-  assert.match(channels, /<ConnectTelegram[^>]*variant="settings"/);
-  assert.match(component, /variant\?: "legacy" \| "settings"/);
+test("Channels Settings describes optional alerts without selecting a chat bot", () => {
+  assert.match(channels, /<TelegramSettings/);
+  const ownerChannel = readFileSync(new URL("../components/TelegramSettings.tsx", import.meta.url), "utf8");
+  assert.match(ownerChannel, /Telegram is off/);
+  assert.match(ownerChannel, /without it/);
+  assert.match(ownerChannel, /Allow and Deny/);
+  assert.doesNotMatch(ownerChannel, /Default lead bot|setTelegramSettings/);
+  assert.doesNotMatch(channels, /setIdentity|ConnectTelegram/);
 });
 
-test("the Telegram settings variant presents connection status and cancellable link codes", () => {
-  const start = component.indexOf('if (variant === "settings")');
-  const end = component.indexOf("\n  if (userId)", start);
-  assert.notEqual(start, -1);
-  assert.notEqual(end, -1);
-  const settingsVariant = component.slice(start, end);
-
-  for (const messageKey of [
-    "channels.notConnected",
-    "channels.connectedAs",
-    "channels.linkTelegram",
-    "channels.disconnect",
-    "channels.copy",
-    "channels.copied",
-    "channels.waitingForLink",
-    "channels.expiresAt",
-  ]) {
-    assert.ok(settingsVariant.includes(messageKey), `${messageKey} appears in the settings variant`);
-  }
-  assert.match(settingsVariant, /\/link \{linkCode\.code\}/);
-  assert.match(settingsVariant, /onClick=\{cancelLink\}/);
-  assert.doesNotMatch(settingsVariant, /get started|continue without telegram|\bguest\b/i);
+test("legacy task identity stays local and does not offer an unusable Telegram link flow", () => {
+  assert.match(component, /onLinked\(\{ guest: true \}\)/);
+  assert.match(component, /existing task history/);
+  assert.match(component, /onClick=\{onReset\}/);
+  assert.doesNotMatch(component, /createLinkCode|waitingForLink|\/link |same account\/history/);
 });
 
-test("Boat tasks stays a compact SettingsCard row with a button-style link", () => {
-  const boatTasks = channels.slice(channels.indexOf('id="setting-channels-boat-tasks"'));
-  assert.match(boatTasks, /description=\{<span className="block truncate">\{t\("channels\.boatTasksCompactDescription"\)\}<\/span>\}/);
-  assert.match(boatTasks, /channels\.openBoatTasks/);
-  assert.match(boatTasks, /action=\{/);
-  assert.doesNotMatch(boatTasks, /channels\.boatTasksLink/);
+test("Channels has no hosted task link and legacy tasks redirects to chat", () => {
+  assert.doesNotMatch(channels, /Boat|boat|href="\/tasks\/"/);
+  const tasks = readFileSync(new URL("../app/tasks/page.tsx", import.meta.url), "utf8");
+  assert.match(tasks, /router.replace\("\/chat\/"\)/);
+  assert.doesNotMatch(tasks, /getProviders|SubmitTask/);
 });

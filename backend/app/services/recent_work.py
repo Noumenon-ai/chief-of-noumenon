@@ -16,6 +16,7 @@ rule as recalled messages: a private chat reaches a room only openly.
 """
 
 from dataclasses import dataclass
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
@@ -92,7 +93,7 @@ async def lines(db, *, owner_id: str, agent_id: int, current_thread_id: int, now
         in_room = thread.kind == "room_member"
         where = f'room "{_fold(rooms.get(thread.room_id) or thread.title or "room", 60)}"' if in_room else "1:1 chat"
         out.append(
-            Line(thread.id, finished, where, None if in_room else thread.title, _fold(redact_secrets(turn.result or "")[0], SAID_CHARS), not in_room)
+            Line(thread.id, finished, where, None if in_room else thread.title, _fold((await asyncio.to_thread(redact_secrets, (turn.result or "")[:24000]))[0], SAID_CHARS), not in_room)
         )
     return out
 

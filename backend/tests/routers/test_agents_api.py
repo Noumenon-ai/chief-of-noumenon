@@ -340,7 +340,8 @@ async def test_the_agents_approval_mode_is_on_every_turns_context(api, rt, sessi
     agent = await make(api, approval_mode="accept_edits", instructions="Hi.", memory_enabled=False)
     thread = (await thread_from(api, agent)).json()
     await send(api, rt, sessions, thread["id"], 1)
-    assert seen == [("accept_edits", "Hi.")]
+    from app.services.starter_team import RESOURCEFULNESS, FILE_GUIDANCE
+    assert seen == [("accept_edits", "Hi.\n\n" + RESOURCEFULNESS + "\n\n" + FILE_GUIDANCE)]
 
 
 async def test_a_model_chosen_for_the_conversation_wins_over_the_agents(api, rt, sessions, launches):

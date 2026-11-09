@@ -60,7 +60,7 @@ function elapsed(value: string, now: number): string {
 
 function agentName(agents: TeamAgent[], id: number): string {
   if (id <= 0) return "—";
-  return agents.find((agent) => agent.id === id)?.name ?? `Agent ${id}`;
+  return agents.find((agent) => agent.id === id)?.name ?? `Bot ${id}`;
 }
 
 export function JobCard({ job: initial, agents, onChanged }: { job: TeamJob; agents: TeamAgent[]; onChanged: () => void }) {

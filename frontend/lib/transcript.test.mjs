@@ -375,3 +375,16 @@ test('a retried setup receipt keeps one card and its field-level changes', () =>
   assert.equal(state.items.length,1);
   assert.deepEqual(state.items[0].rows[0].changes,[{field:'instructions',before:'Old brief',after:'Product Hunt launches'}]);
 });
+
+for (const outcome of ['done', 'failed', 'unknown']) {
+  test(`connected app receipt preserves trusted ${outcome} despite engine success`, () => {
+    reset();
+    const t = run([
+      ev('approval.requested', { approval_id: 'app', tool: 'mcp__composio__apps_run', input: {} }),
+      ev('approval.resolved', { approval_id: 'app', status: 'allowed' }),
+      ev('app.action_result', { approval_id: 'app', outcome }),
+      ev('tool.completed', { call_id: 'app', ok: true, output: 'provider text says success' }),
+    ]);
+    assert.equal(t.items.find(i => i.kind === 'approval').actionOutcome, outcome);
+  });
+}

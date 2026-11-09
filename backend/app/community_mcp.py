@@ -135,7 +135,7 @@ def _validate_manifest(value: object, *, section: str, path: str) -> dict:
     for field in ("source_repo", "endpoint", "privacy_url", "terms_url"):
         _validate_public_url(value.get(field), field, require_standard_port=(field == "endpoint"), max_length=300)
     if section == "community" and any(key.startswith("tested_") for key in value):
-        raise McpError("invalid_catalog", "A community listing cannot claim Open Dots testing.", 502)
+        raise McpError("invalid_catalog", "A community listing cannot claim Chief of Noumenon testing.", 502)
     return dict(value)
 
 
@@ -193,7 +193,10 @@ async def _bundle_file(path: str, *, limit: int) -> bytes:
     candidate = (root / path).resolve()
     if root not in candidate.parents or not candidate.is_file():
         raise McpError("catalog_unavailable", "No bundled marketplace catalog is available.", 503)
-    data = candidate.read_bytes()
+    def read_bounded():
+        with candidate.open('rb') as source:
+            return source.read(limit + 1)
+    data = await asyncio.to_thread(read_bounded)
     if len(data) > limit:
         raise McpError("catalog_too_large", "A bundled marketplace file is too large.", 502)
     return data
@@ -305,7 +308,7 @@ def safe_schema(value: object, depth: int = 0) -> dict:
         raise McpError("unsupported_schema", "This tool's input schema is too large or complex.", 422)
     allowed = {"$schema", "type", "title", "description", "properties", "required", "additionalProperties", "items", "enum", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems", "format", "default"}
     if set(value) - allowed:
-        raise McpError("unsupported_schema", "This tool uses a schema feature Open Dots cannot validate safely.", 422)
+        raise McpError("unsupported_schema", "This tool uses a schema feature Chief of Noumenon cannot validate safely.", 422)
     kind = value.get("type", "object")
     if kind not in ("object", "array", "string", "number", "integer", "boolean", "null"):
         raise McpError("unsupported_schema", "This tool uses an unsupported input type.", 422)
@@ -682,7 +685,7 @@ class RemoteMcpSession:
                 try:
                     tool = _normalize_tool(raw)
                 except McpError:
-                    continue  # one tool Open Dots cannot validate must not hide the rest
+                    continue  # one tool Chief of Noumenon cannot validate must not hide the rest
                 total_bytes += len(canonical(tool).encode("utf-8"))
                 if total_bytes > MAX_TOOLSET_BYTES:
                     raise McpError("toolset_too_large", "This remote server exposes too much tool metadata.", 502)
@@ -711,7 +714,7 @@ class RemoteMcpSession:
                 if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str):
                     safe_content.append({"type": "text", "text": item["text"][:200_000]})
                 elif isinstance(item, dict) and item.get("type") == "resource_link":
-                    safe_content.append({"type": "text", "text": "[A remote resource link was returned and is not opened by Open Dots.]"})
+                    safe_content.append({"type": "text", "text": "[A remote resource link was returned and is not opened by Chief of Noumenon.]"})
         output = {"content": safe_content, "isError": result.get("isError") is True}
         structured = result.get("structuredContent")
         if structured is not None:

@@ -42,13 +42,13 @@ export function DesktopAccountLogin({ status, onSignedIn }: { status: DesktopAcc
 
   return <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center space-y-5 px-5 py-8">
     <ThemeToggle />
-    <div><h1 className="text-2xl font-semibold">Sign in to Open Duet</h1><p className="mt-2 text-sm text-muted">Use your email to sign in or create an account. Connecting Claude or Codex comes next.</p></div>
-    {status.profile_bound && <Banner tone="warning">Your agents and conversations on this computer are locked until you sign in with the account linked to it.</Banner>}
-    <p className="text-sm text-muted">Your agents and files stay on this computer. Account sign-in does not upload them or connect your email inbox.</p>
+    <div><h1 className="text-2xl font-semibold">Desktop account sign-in</h1><p className="mt-2 text-sm text-muted">This legacy account flow uses suparagent.ai, operated separately from Chief of Noumenon. The self-hosted web app uses your own server passphrase.</p></div>
+    {status.profile_bound && <Banner tone="warning">Your bots and conversations on this computer are locked until you sign in with the account linked to it.</Banner>}
+    <p className="text-sm text-muted">Your bots and files stay on this computer. Account sign-in does not upload them or connect your email inbox.</p>
     <form className="space-y-4" onSubmit={submit}>
       <Field label="Email">{(props) => <Input {...props} type="email" autoComplete="email" required maxLength={254} disabled={busy || sent} value={email} onChange={event => setEmail(event.target.value)} />}</Field>
       {sent && <Field label="Email code">{(props) => <Input {...props} autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required value={code} disabled={busy} onChange={event => setCode(event.target.value.replace(/\D/g, ""))} />}</Field>}
-      {!status.profile_bound && <Checkbox label="Use this account for this local profile, including any agents and conversations already saved here." checked={adopt} disabled={busy} onChange={event => setAdopt(event.target.checked)} />}
+      {!status.profile_bound && <Checkbox label="Use this account for this local profile, including any bots and conversations already saved here." checked={adopt} disabled={busy} onChange={event => setAdopt(event.target.checked)} />}
       {notice && <Banner>{notice}</Banner>}
       {error && <Banner tone="danger">{error}</Banner>}
       <Button type="submit" disabled={busy || (sent && !status.profile_bound && !adopt)}>{busy ? "Please wait…" : sent ? "Verify and continue" : "Email me a code"}</Button>

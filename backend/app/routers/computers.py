@@ -225,7 +225,7 @@ async def create_agent_computer(
             409,
             "engine_without_computers",
             f"This agent's engine ({agent.provider}) cannot run its tools in a computer. "
-            "Computers work with Claude for now.",
+            "Computers need Claude or Codex with this engine configuration.",
         )
     service = _service(rt)
     settings = payload.model_dump(exclude={"start", "image"}, exclude_none=True)
@@ -397,3 +397,27 @@ async def provider_tool(computer_id: int, request: Request, rt: ThreadRuntime = 
     if not isinstance(result, dict) or not isinstance(result.get("content"), list):
         raise HTTPException(status_code=502, detail={"error_code": "invalid_computer_tool_response"})
     return result
+
+
+async def _image_builder(computer_id, rt):
+    computer = await _computer_or_404(rt.computers, computer_id)
+    if computer.provider != "docker" or computer.kind != "desktop" or computer.image != docker_cli.DESKTOP_IMAGE:
+        raise _error(409, "not_bundled_image", "Only the bundled desktop image can be built here.")
+    from app.computers.image_build import ImageBuild
+    if not hasattr(rt.computers, "image_builder"):
+        rt.computers.image_builder = ImageBuild()
+    return rt.computers.image_builder
+
+
+@router.post("/computers/{computer_id}/build-image")
+async def build_image(computer_id: int, rt: ThreadRuntime = Depends(get_runtime)):
+    builder = await _image_builder(computer_id, rt)
+    try:
+        return builder.start(getattr(rt.computers.provider("docker"), "_docker", None))
+    except ComputerError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/computers/{computer_id}/build-image")
+async def image_build_progress(computer_id: int, rt: ThreadRuntime = Depends(get_runtime)):
+    return (await _image_builder(computer_id, rt)).snapshot()

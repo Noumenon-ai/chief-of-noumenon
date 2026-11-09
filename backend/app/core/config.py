@@ -1,6 +1,9 @@
+import re
 from pathlib import Path
+import sys
+from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 from sqlalchemy import URL
 
@@ -55,7 +58,15 @@ class Settings(BaseSettings):
 
     TOKEN_ENCRYPTION_KEYS: str
 
-    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_BOT_TOKEN: str = Field(default="", repr=False)
+    TELEGRAM_OWNER_ID: str = ""
+    # Languages voice notes may be in, such as "he,en". Empty detects any language.
+    TELEGRAM_VOICE_LANGUAGES: str = ""
+    # Optional local voice warmup. Disable for offline tests or on-demand loading.
+    VOICE_PRELOAD: bool = True
+    VOICE_BROWSER_SPEECH: bool = True
+    VOICE_MODEL: str = "small"
+    VOICE_DEVICE: Literal["auto", "cpu", "cuda"] = "auto"
     # Shown to web UI users as a clickable t.me/<username> link when linking
     # their Telegram account. Purely cosmetic — the link flow works without it.
     TELEGRAM_BOT_USERNAME: str = ""
@@ -87,7 +98,8 @@ class Settings(BaseSettings):
     # Working directory for local runs. Empty means ~/.open-dots/local.
     LOCAL_WORKSPACE_ROOT: str = ""
     # Linux server-only filesystem/PID isolation. A failed request never falls back.
-    TURN_SANDBOX_ENABLED: bool = False
+    API_UNSANDBOXED_SHELL: bool = False
+    TURN_SANDBOX_ENABLED: bool = Field(default_factory=lambda: sys.platform.startswith("linux") and not profile.active())
     # Opt-in stage D: private network namespace and public HTTP(S)-only gate.
     # Requires TURN_SANDBOX_ENABLED; never falls back to host networking.
     TURN_SANDBOX_NETWORK_ENABLED: bool = False
@@ -206,7 +218,17 @@ class Settings(BaseSettings):
     ROUTINE_WEBHOOK_MAX_BYTES: int = 65_536
     ROUTINE_TELEGRAM_CHAT_ID: str = ""
 
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', hide_input_in_errors=True)
+
+    @model_validator(mode="after")
+    def telegram_pair(self):
+        token, owner = self.TELEGRAM_BOT_TOKEN, self.TELEGRAM_OWNER_ID
+        if token or owner:
+            if not token or not owner.isascii() or not owner.isdigit() or int(owner) <= 0:
+                raise ValueError("Set TELEGRAM_BOT_TOKEN and TELEGRAM_OWNER_ID together; TELEGRAM_OWNER_ID must be a positive integer.")
+        if not re.fullmatch(r"(?:\s*[A-Za-z]{2,3}\s*(?:,|$))*", self.TELEGRAM_VOICE_LANGUAGES):
+            raise ValueError("TELEGRAM_VOICE_LANGUAGES must be comma separated language codes, such as he,en.")
+        return self
 
     @classmethod
     def settings_customise_sources(
@@ -239,6 +261,10 @@ class Settings(BaseSettings):
     @property
     def TRUSTED_HOST_LIST(self) -> list[str]:
         hosts = [host.strip().lower() for host in self.TRUSTED_HOSTS.split(",") if host.strip()]
+        from app.services.phone_access import private_origin
+        private = public_url.hostname(private_origin())
+        if private and private not in hosts:
+            hosts.append(private)
         public = public_url.hostname(self.OPEN_DOTS_PUBLIC_URL)
         return hosts + [public] if public and public not in hosts else hosts
 

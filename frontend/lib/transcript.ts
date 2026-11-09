@@ -19,7 +19,10 @@ export type TeamJobItem = { kind: "team_job"; key: string; turnId: number | null
 
 export type NeedsYouItem = { kind: "needs_you"; key: string; turnId: number | null; cardId: string; revision: number; title: string; subtitle: string; emptyText: string; more: number; checkedAt?: string; providerCheckedAt?: string; timeZone?: string; sources?: Record<string, string>; rows: NeedsYouRow[] };
 
+export type ChatCardItem = { kind: "chat_card"; key: string; turnId: number | null; cardId: string; cardKind: "question" | "connect" | "welcome" | "brief"; question: string; options: string[]; provider: string; name: string; brief: boolean; answer: string | null };
+
 export type TranscriptItem =
+  | ChatCardItem
   | TeamJobItem
   | NeedsYouItem
   | { kind: "team_notice"; key: string; turnId: number | null; tone: "incident" | "escalation" | "refused" | "retried"; text: string; threadId: number | null }
@@ -55,6 +58,9 @@ export type TranscriptItem =
       key: string;
       turnId: number | null;
       approvalId: string;
+      actionOutcome?: "done" | "failed" | "unknown";
+      // Presentation-only pairing; the reducer and authorization remain unchanged.
+      toolResult?: Extract<TranscriptItem, { kind: "tool" }>;
       tool: string;
       approvalKind: string;
       summary: string;
@@ -185,6 +191,17 @@ export function applyEvent(state: Transcript, event: ThreadEvent): Transcript {
   const base: Transcript = { ...state, lastSeq: event.seq };
 
   switch (event.type) {
+    case "chat.card": {
+      if (typeof data.id !== "string" || !/^[0-9a-f]{32}$/.test(data.id) || !["question", "connect", "welcome", "brief"].includes(text(data.kind))) return base;
+      const options = Array.isArray(data.options) ? data.options.filter((v): v is string => typeof v === "string" && v.length > 0 && v.length <= 200) : [];
+      if (data.kind === "question" && (options.length < 2 || options.length > 5)) return base;
+      return { ...base, items: [...state.items, { kind: "chat_card", key, turnId: id, cardId: data.id, cardKind: data.kind as ChatCardItem["cardKind"], question: text(data.question), options, provider: text(data.provider), name: text(data.name), brief: data.brief === true, answer: null }] };
+    }
+    case "chat.card.answered":
+      return { ...base, items: state.items.map(item => item.kind === "chat_card" && item.cardId === data.id && item.answer === null ? { ...item, answer: text(data.answer) } : item) };
+    case "user.message":
+      return { ...base, items: [...state.items, { kind: "user", key, turnId: id, text: text(data.text), attachments: [], ts: event.ts }] };
+
     case "turn.started":
       return {
         ...base,
@@ -225,6 +242,12 @@ export function applyEvent(state: Transcript, event: ThreadEvent): Transcript {
           },
         ],
       };
+
+    case "app.action_result": {
+      const outcome = data.outcome;
+      if (outcome !== "done" && outcome !== "failed" && outcome !== "unknown") return base;
+      return { ...base, items: state.items.map(i => i.kind === "approval" && i.approvalId === data.approval_id ? { ...i, actionOutcome: outcome } : i) };
+    }
 
     case "tool.completed": {
       const callId = text(data.call_id);

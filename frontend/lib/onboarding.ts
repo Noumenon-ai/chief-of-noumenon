@@ -19,6 +19,8 @@ export type OnboardingState = {
   first_reply_at: string | null;
   execution_host: "desktop" | "server";
   existing_agents: boolean;
+  auto_created?: boolean;
+  ready_choices?: { provider: string; model: string | null; label: string }[];
 };
 
 export const STARTER_ROLES = [
@@ -38,6 +40,7 @@ export function onboardingChatHref(state: OnboardingState): string {
 }
 
 export const onboarding = {
+  detect: () => request<OnboardingState>("/onboarding/detect", { method: "POST" }),
   get: () => request<OnboardingState>("/onboarding"),
   save: (expected_version: number, draft: OnboardingDraft) => request<OnboardingState>("/onboarding", { method: "PUT", body: JSON.stringify({ expected_version, draft }) }),
   complete: (expected_version: number, draft: OnboardingDraft) => request<OnboardingState>("/onboarding/complete", { method: "POST", body: JSON.stringify({ expected_version, draft }) }),

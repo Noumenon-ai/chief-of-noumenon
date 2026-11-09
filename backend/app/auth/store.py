@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import credentials
 from app.db.models.auth import SCOPES, AuthSession, OwnerAccount, PairingCode
-from app.db.transactions import begin_write
+from app.db.transactions import begin_write, release_snapshot
 
 SESSION_TTL = timedelta(days=30)
 SESSION_MAX_AGE = timedelta(days=180)
@@ -41,6 +41,8 @@ def parse_scopes(value: str) -> tuple[str, ...]:
 
 def scopes_for(scope: str) -> str:
     """'admin' includes everything; 'chat' is chat only; 'files' is chat plus reading workspace files."""
+    if scope == "assistant":
+        return "assistant"
     if scope == "admin":
         return "admin chat files"
     return "chat files" if scope == "files" else "chat"
@@ -97,6 +99,7 @@ async def set_passphrase(db: AsyncSession, passphrase: str, *, first_time_only: 
 async def verify_owner(db: AsyncSession, passphrase: str) -> bool:
     owner = await get_owner(db)
     stored = owner.password_hash if owner else None
+    await release_snapshot(db)
     if not stored:
         return False
     return await asyncio.to_thread(credentials.verify_passphrase, passphrase, stored)
@@ -123,6 +126,8 @@ async def set_identity(db: AsyncSession, user_id: str | None, *, only_if_unset: 
 
 
 async def create_session(db: AsyncSession, *, kind: str, label: str, scopes: str) -> tuple[str, AuthSession]:
+    # Discard any read snapshot and serialize the session INSERT on SQLite.
+    await begin_write(db)
     token = credentials.new_session_token()
     now = utcnow()
     record = AuthSession(

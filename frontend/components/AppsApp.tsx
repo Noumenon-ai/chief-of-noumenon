@@ -1,6 +1,9 @@
 "use client";
+import { useT as useUiText } from "@/lib/use-i18n";
 
 import Link from "next/link";
+import { appColor, appDescription } from "@/lib/local-apps-catalog";
+import { LocalApps } from "@/components/LocalApps";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type ComposioStatus } from "@/lib/api";
 import {
@@ -41,29 +44,22 @@ const STATE_BADGE: Record<CardState, { tone: "neutral" | "success" | "warning" |
 // The Apps page: Composio's catalog of apps, connecting and disconnecting them, and the owner's
 // Composio key. Agent access is granted separately in each eligible agent's settings.
 export function AppsApp() {
+  const tx = useUiText();
   return <div className="min-h-dvh">
-    <header className="flex h-12 items-center gap-4 border-b border-line px-4"><Link href="/chat/" className="text-sm text-muted hover:underline">← Chat</Link><h1 className="text-sm font-semibold">Apps</h1><Link href="/marketplace/" className="ml-auto text-sm underline">MCP Marketplace</Link></header>
+    <header className="flex h-12 items-center gap-4 border-b border-line px-4"><Link href="/chat/" className="text-sm text-muted hover:underline">{tx("← Chat")}</Link><h1 className="text-sm font-semibold">{tx("Apps")}</h1><Link href="/marketplace/" className="ml-auto text-sm underline">{tx("More tools")}</Link></header>
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-8">
-      <div>
-        <h2 className="text-xl font-semibold">Apps</h2>
-        <p className="mt-2 text-sm text-muted">Connect an app once, then choose which agents may use it under Agents → choose an agent → Connected apps. Connecting an app does not give any agent access. Agents can use an allowed app only in conversations you start.</p>
-      </div>
-      <AppsBrowser />
+      <LocalApps />
+      <details><summary className="cursor-pointer text-sm">{tx("Advanced")}</summary><p className="my-3 text-sm text-muted">{tx("Composio is an alternative connection service that needs its own account.")}</p><AppsBrowser /></details>
     </main>
   </div>;
 }
 
 function Icon({ app }: { app: CatalogApp }) {
-  const [broken, setBroken] = useState(false);
-  if (app.icon && !broken) {
-    // A remote picture, from a Composio host only (the server drops any other address); it never carries the referrer.
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={app.icon} alt="" width={36} height={36} loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} className="size-9 shrink-0 rounded-md bg-inset object-contain" />;
-  }
-  return <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-md bg-inset text-sm font-semibold text-muted">{app.name.charAt(0).toUpperCase()}</span>;
+  return <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-avatar text-sm font-semibold text-white" style={{ backgroundColor: appColor(app.app) }}>{app.name.charAt(0).toUpperCase()}</span>;
 }
 
 function AppsBrowser() {
+  const tx = useUiText();
   const [searchInput, setSearchInput] = useState("");
   const [filter, setFilter] = useState<AppFilter>(NO_FILTER);
   const [allCategories, setAllCategories] = useState(false);
@@ -225,33 +221,32 @@ function AppsBrowser() {
   const accountRow = (account: ComposioAccount) => <li key={account.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
     <span>{account.alias ?? account.id} <span className="text-xs text-muted">· {statusLabel(account.status)}</span></span>
     {confirming === account.id
-      ? <span className="flex items-center gap-2 text-xs">Disconnect this account?
-          <Button type="button" disabled={busy !== null} onClick={() => void disconnect(account)}>{busy === `remove:${account.id}` ? "Working…" : "Disconnect"}</Button>
-          <Button type="button" disabled={busy !== null} onClick={() => setConfirming(null)}>Keep</Button></span>
-      : <Button type="button" disabled={busy !== null} aria-label={`Disconnect ${account.alias ?? account.id}`} onClick={() => setConfirming(account.id)}>Disconnect</Button>}
+      ? <span className="flex items-center gap-2 text-xs">{tx("Disconnect this account?")}<Button type="button" disabled={busy !== null} onClick={() => void disconnect(account)}>{busy === `remove:${account.id}` ? tx("Working…") : tx("Disconnect")}</Button>
+          <Button type="button" disabled={busy !== null} onClick={() => setConfirming(null)}>{tx("Keep")}</Button></span>
+      : <Button type="button" disabled={busy !== null} aria-label={`Disconnect ${account.alias ?? account.id}`} onClick={() => setConfirming(account.id)}>{tx("Disconnect")}</Button>}
   </li>;
 
   const details = (app: CatalogApp, detailsId: string) => <div id={detailsId} className="mt-3 space-y-3">
     {app.agent_actions === "curated" && <>
-      <p className="text-xs text-muted">These are the only tools agents get for {app.name}. Write access also includes the reads. Every change asks you first on an approval card.</p>
+      <p className="text-xs text-muted">{tx("These are the only tools bots get for")}{" "}{app.name}{tx(". Write access also includes the reads. Every change asks you first on an approval card.")}</p>
       <ul className="divide-y divide-line text-sm">
         {app.curated_tools.map((tool) => <li key={tool.name} className="flex items-start justify-between gap-3 py-2">
           <span className="min-w-0 text-muted">{tool.description}</span>
-          <Badge tone={tool.kind === "write" ? "warning" : "neutral"} className="shrink-0">{tool.kind === "write" ? "Write" : "Read"}</Badge>
+          <Badge tone={tool.kind === "write" ? "warning" : "neutral"} className="shrink-0">{tool.kind === "write" ? tx("Write") : tx("Read")}</Badge>
         </li>)}
       </ul>
     </>}
     {app.agent_actions !== "curated" && app.agent_actions !== "unavailable" && <div className="space-y-2 text-xs text-muted">
-      <p><Badge tone="warning">Approval required</Badge> No action of this app is treated as a read, whatever its name says.</p>
+      <p><Badge tone="warning">{tx("Approval required")}</Badge> {tx("No action of this app is treated as a read, whatever its name says.")}</p>
       <ul className="list-disc space-y-1 pl-5">
-        <li>An agent with this app allowed can search for its actions. Search does not run anything and shows part of the list, not every action.</li>
-        <li>To run one, the agent needs the Read and change level, and you approve every call on a card that shows the app, account, action and exact arguments.</li>
-        <li>Plan mode and the Read level never run it. If Composio changes the action while a card waits, the call is cancelled.</li>
-        <li>Some actions need extra permissions Composio&apos;s sign-in does not ask for; those fail with a message.</li>
+        <li>{tx("A bot with this app allowed can search for its actions. Search does not run anything and shows part of the list, not every action.")}</li>
+        <li>{tx("To run one, the bot needs the Read and change level, and you approve every call on a card that shows the app, account, action and exact arguments.")}</li>
+        <li>{tx("Plan mode and the Read level never run it. If Composio changes the action while a card waits, the call is cancelled.")}</li>
+        <li>{tx("Some actions need extra permissions Composio's sign-in does not ask for; those fail with a message.")}</li>
       </ul>
     </div>}
     {app.agent_actions === "unavailable" && <p className="text-xs text-muted">{agentActionsText(app)}</p>}
-    <p className="text-xs text-muted">Connecting {app.name} does not allow any agent to use it. Allow it for an agent in that agent&apos;s settings (Agents → the agent → Connected apps).</p>
+    <p className="text-xs text-muted">{tx("Connecting")}{" "}{app.name} {tx("does not allow any bot to use it. Allow it for a bot in that bot's settings (Bots → the bot → Connected apps).")}</p>
   </div>;
 
   const card = (app: CatalogApp) => {
@@ -268,83 +263,83 @@ function AppsBrowser() {
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <Icon app={app} />
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2"><h4 className="font-medium">{app.name}</h4>{app.agent_actions !== "unavailable" && <Badge tone={badge.tone}>{badge.label}</Badge>}{counts && <Badge tone="accent">Own tools</Badge>}</div>
-            {app.description && <p className="mt-1 text-sm text-muted">{app.description}</p>}
-            <p className="mt-1 text-xs text-muted">{agentActionsText(app)}{note ? ` ${note}` : ""}</p>
+            <div className="flex flex-wrap items-center gap-2"><h4 className="font-medium">{app.name}</h4>{app.agent_actions !== "unavailable" && <Badge tone={badge.tone}>{badge.label}</Badge>}{counts && <Badge tone="accent">{tx("Own tools")}</Badge>}</div>
+            {app.description && <p className="mt-1 text-sm text-muted">{tx(appDescription({ service: app.app, category: app.categories[0] || "", description: app.description }))}</p>}
+            <p className="mt-1 text-xs text-muted">{tx(app.agent_actions === "curated" ? "Bots read freely and ask before changing anything." : agentActionsText(app))}{note ? ` ${note}` : ""}</p>
           </div>
         </div>
         {offered && <div className="flex items-center gap-2">
-          <label className="sr-only" htmlFor={`name-${app.app}`}>Name for a new {app.name} account (optional)</label>
-          <Input id={`name-${app.app}`} className="w-36" placeholder="Name (optional)" maxLength={40}
+          <label className="sr-only" htmlFor={`name-${app.app}`}>{tx("Name for a new")}{" "}{app.name} {tx("account (optional)")}</label>
+          <Input id={`name-${app.app}`} className="w-36" placeholder={tx("Name (optional)")} maxLength={40}
             value={names[app.app] ?? ""} disabled={busy !== null || waiting !== null || !configured} autoComplete="off"
             onChange={(event) => setNames((previous) => ({ ...previous, [app.app]: event.target.value }))} />
-          <Button type="button"  title={configured ? undefined : "Save your Composio key first"}
+          <Button type="button"  title={configured ? undefined : tx("Save your Composio key first")}
             disabled={busy !== null || waiting !== null || !configured || accounts === null} onClick={() => void connect(app)}>
-            {busy === `connect:${app.app}` ? "Opening…" : mine.length ? "Add another" : "Connect"}
+            {busy === `connect:${app.app}` ? tx("Opening…") : mine.length ? tx("Add another") : tx("Connect")}
           </Button>
         </div>}
       </div>
-      {connecting && <Banner action={<Button size="sm" type="button" onClick={() => { setWaiting(null); setNotice("Stopped waiting. A pending connection can be removed below; nothing was revoked."); }}>Stop waiting</Button>}>
-        Finish connecting {app.name} in your browser. This page notices when you are done.{" "}
+      {connecting && <Banner action={<Button size="sm" type="button" onClick={() => { setWaiting(null); setNotice("Stopped waiting. A pending connection can be removed below; nothing was revoked."); }}>{tx("Stop waiting")}</Button>}>
+        {tx("Finish connecting")}{" "}{app.name} {tx("in your browser. This page notices when you are done.")}{" "}
       </Banner>}
       {mine.length > 0 && <ul className="divide-y divide-line text-sm">{mine.map(accountRow)}</ul>}
       <div>
         <Button variant="ghost" type="button" aria-expanded={open === app.app} aria-controls={detailsId}
- onClick={() => setOpen(open === app.app ? null : app.app)}>{open === app.app ? "Hide details" : "What agents can do"}</Button>
+ onClick={() => setOpen(open === app.app ? null : app.app)}>{open === app.app ? tx("Hide details") : tx("What bots can do")}</Button>
         {open === app.app && details(app, detailsId)}
       </div>
     </li>;
   };
 
   return <div className="space-y-6">
-    {error && <Banner tone="danger" action={configured && accounts === null ? <Button type="button" onClick={() => void loadAccounts()}>Try again</Button> : undefined}>{error}</Banner>}
+    {error && <Banner tone="danger" action={configured && accounts === null ? <Button type="button" onClick={() => void loadAccounts()}>{tx("Try again")}</Button> : undefined}>{error}</Banner>}
     {notice && <Banner>{notice}</Banner>}
     {!status && !error && <SkeletonList rows={3} />}
 
     {showKeyForm && <section aria-labelledby="composio-key-title" className="rounded-lg border border-line p-5">
       <form onSubmit={saveKey} className="space-y-2">
-        <h3 id="composio-key-title" className="font-semibold">{configured ? "New Composio project key" : "Connect your Composio account"}</h3>
-        {!configured && <p className="text-sm text-muted">Add your own Composio project key to browse all of Composio&apos;s apps and connect them. It is stored encrypted on this computer and never shown again.</p>}
-        <label htmlFor="composio-key" className="sr-only">Composio project key</label>
+        <h3 id="composio-key-title" className="font-semibold">{configured ? tx("New Composio project key") : tx("Connect your Composio account")}</h3>
+        {!configured && <p className="text-sm text-muted">{tx("Add your own Composio project key to browse all of Composio's apps and connect them. It is stored encrypted on this computer and never shown again.")}</p>}
+        <label htmlFor="composio-key" className="sr-only">{tx("Composio project key")}</label>
         <Input id="composio-key" type="password" value={keyDraft} disabled={busy !== null} required minLength={11}
- onChange={(event) => setKeyDraft(event.target.value)} autoComplete="off" spellCheck={false} placeholder="ak_…" />
-        <p className="text-xs text-muted">Create a project key in your Composio dashboard (it starts with <code>ak_</code>). The key is checked with Composio before it is saved. A scoped key needs Connected accounts: Read, Session management: Write, Session tool execution: Write, and Toolkits: Read to list apps and their actions. Add Connected accounts: Write to disconnect accounts. Composio fixes scopes when you create a key, so make a new key after changing them.</p>
+ onChange={(event) => setKeyDraft(event.target.value)} autoComplete="off" spellCheck={false} placeholder={"ak_…"} />
+        <p className="text-xs text-muted">{tx("Create a project key in your Composio dashboard (it starts with")}{" "}<code>{"ak_"}</code>{tx("). The key is checked with Composio before it is saved. A scoped key needs Connected accounts: Read, Session management: Write, Session tool execution: Write, and Toolkits: Read to list apps and their actions. Add Connected accounts: Write to disconnect accounts. Composio fixes scopes when you create a key, so make a new key after changing them.")}</p>
         <div className="flex gap-2">
-          <Button type="submit" disabled={busy !== null || keyDraft.trim().length < 11}>{busy === "key" ? "Checking…" : "Save key"}</Button>
-          {replacing && <Button type="button" disabled={busy !== null} onClick={() => { setReplacing(false); setKeyDraft(""); }}>Cancel</Button>}
+          <Button type="submit" disabled={busy !== null || keyDraft.trim().length < 11}>{busy === "key" ? tx("Checking…") : tx("Save key")}</Button>
+          {replacing && <Button type="button" disabled={busy !== null} onClick={() => { setReplacing(false); setKeyDraft(""); }}>{tx("Cancel")}</Button>}
         </div>
       </form>
     </section>}
 
     <div className="space-y-3">
-      <label htmlFor="apps-search" className="sr-only">Search apps</label>
-      <Input id="apps-search" type="search" placeholder="Search apps" value={searchInput} autoComplete="off"
+      <label htmlFor="apps-search" className="sr-only">{tx("Search apps")}</label>
+      <Input id="apps-search" type="search" placeholder={tx("Search apps")} value={searchInput} autoComplete="off"
  onChange={(event) => setSearchInput(event.target.value)} />
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Filter apps">
+      <div className="flex flex-wrap gap-2" role="group" aria-label={tx("Filter apps")}>
         <button type="button" className={!filter.category && !filter.connectedOnly ? CHIP_ON : CHIP} aria-pressed={!filter.category && !filter.connectedOnly}
-          onClick={() => { setFilter({ ...filter, category: null, connectedOnly: false }); setMore(null); }}>All</button>
+          onClick={() => { setFilter({ ...filter, category: null, connectedOnly: false }); setMore(null); }}>{tx("All")}</button>
         {configured && <button type="button" className={filter.connectedOnly ? CHIP_ON : CHIP} aria-pressed={filter.connectedOnly}
-          onClick={() => setFilter({ ...filter, connectedOnly: !filter.connectedOnly })}>Connected</button>}
+          onClick={() => setFilter({ ...filter, connectedOnly: !filter.connectedOnly })}>{tx("Connected")}</button>}
         {shownChips.map((category) => <button key={category.name} type="button" className={filter.category === category.name ? CHIP_ON : CHIP} aria-pressed={filter.category === category.name}
           onClick={() => { setFilter({ ...filter, category: filter.category === category.name ? null : category.name, connectedOnly: false }); setMore(null); }}>{category.name}</button>)}
-        {categories.length > CHIPS_SHOWN && <button type="button" className={CHIP} aria-expanded={allCategories} onClick={() => setAllCategories(!allCategories)}>{allCategories ? "Fewer" : "More"}</button>}
+        {categories.length > CHIPS_SHOWN && <button type="button" className={CHIP} aria-expanded={allCategories} onClick={() => setAllCategories(!allCategories)}>{allCategories ? tx("Fewer") : tx("More")}</button>}
       </div>
     </div>
 
-    {loaded !== null && "error" in loaded && loaded.key === key && <Banner tone="danger" action={<Button type="button" onClick={() => setTick((n) => n + 1)}>Try again</Button>}>{loaded.error}</Banner>}
+    {loaded !== null && "error" in loaded && loaded.key === key && <Banner tone="danger" action={<Button type="button" onClick={() => setTick((n) => n + 1)}>{tx("Try again")}</Button>}>{loaded.error}</Banner>}
     {!ready && <SkeletonList rows={3} />}
     {banner && <Banner tone={banner.tone === "warning" ? "warning" : "info"}>{banner.text}</Banner>}
 
     {first && <>
       {shownCount === 0 && <EmptyState
-        title={filterActive(filter) ? "No apps match." : "No apps are available."}
-        description={filterActive(filter) ? "Try a different search or clear the filters." : "Check back after the catalog refreshes."}
-        action={filterActive(filter) ? <Button type="button" onClick={() => { setSearchInput(""); setFilter(NO_FILTER); setMore(null); }}>Reset filters</Button> : undefined}
+        title={filterActive(filter) ? tx("No apps match.") : tx("No apps are available.")}
+        description={filterActive(filter) ? tx("Try a different search or clear the filters.") : tx("Check back after the catalog refreshes.")}
+        action={filterActive(filter) ? <Button type="button" onClick={() => { setSearchInput(""); setFilter(NO_FILTER); setMore(null); }}>{tx("Reset filters")}</Button> : undefined}
       />}
       {configured && accounts === null && !error && <SkeletonList rows={3} />}
 
       {connected.length > 0 && <section aria-labelledby="apps-connected" className="space-y-3">
-        <h3 id="apps-connected" className="font-semibold">Connected</h3>
+        <h3 id="apps-connected" className="font-semibold">{tx("Connected")}</h3>
         <ul className="space-y-3">{connected.map(card)}</ul>
       </section>}
       {groups.map((group) => <section key={group.category} aria-label={group.category} className="space-y-3">
@@ -352,18 +347,17 @@ function AppsBrowser() {
         <ul className="space-y-3">{group.apps.map(card)}</ul>
       </section>)}
       {nextCursor && !filter.connectedOnly && <div className="flex items-center gap-3">
-        <Button type="button" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "Loading…" : "Show more apps"}</Button>
-        <span className="text-xs text-muted">{first.page.total} apps match.</span>
+        <Button type="button" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? tx("Loading…") : tx("Show more apps")}</Button>
+        <span className="text-xs text-muted">{first.page.total} {tx("apps match.")}</span>
       </div>}
     </>}
 
     {configured && <div className="flex flex-wrap gap-2 border-t border-line pt-4">
-      {!replacing && <Button type="button" disabled={busy !== null} onClick={() => setReplacing(true)}>Replace key</Button>}
+      {!replacing && <Button type="button" disabled={busy !== null} onClick={() => setReplacing(true)}>{tx("Replace key")}</Button>}
       {removingKey
-        ? <span className="flex flex-wrap items-center gap-2 text-xs">Remove the key from this app? Connected accounts stay at Composio; disconnect them first to revoke them.
-            <Button type="button" disabled={busy !== null} onClick={() => void removeKey()}>Remove key</Button>
-            <Button type="button" disabled={busy !== null} onClick={() => setRemovingKey(false)}>Keep</Button></span>
-        : <Button type="button" disabled={busy !== null} onClick={() => setRemovingKey(true)}>Remove key</Button>}
+        ? <span className="flex flex-wrap items-center gap-2 text-xs">{tx("Remove the key from this app? Connected accounts stay at Composio; disconnect them first to revoke them.")}<Button type="button" disabled={busy !== null} onClick={() => void removeKey()}>{tx("Remove key")}</Button>
+            <Button type="button" disabled={busy !== null} onClick={() => setRemovingKey(false)}>{tx("Keep")}</Button></span>
+        : <Button type="button" disabled={busy !== null} onClick={() => setRemovingKey(true)}>{tx("Remove key")}</Button>}
     </div>}
   </div>;
 }

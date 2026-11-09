@@ -168,17 +168,17 @@ class AcpAdapter:
 
     config_fields = [
         {"name": "command", "label": "ACP command", "required": True, "placeholder": "agent-cli --acp"},
-        {"name": "label", "label": "Display name", "placeholder": "ACP agent"},
+        {"name": "label", "label": "Display name", "placeholder": "Custom command engine"},
     ]
     setup = {
         "credential": "terminal",
         "notes": ["Sign in to this command in a terminal first. It uses its configured model and asks for tools through ACP."],
     }
     key = "acp"
-    label = "ACP agent"
+    label = "Custom command engine"
     kind = "acp"
     capabilities = Capabilities(
-        tools=True, approvals=True, mcp=False, images=False, resume=True, computers=False, memory_tools=True
+        tools=True, approvals=True, mcp=False, images=False, resume=True, computers=False, memory_tools=True, local_connected_apps=True
     )
     # The agent runs its own configured model; there is nothing to choose here.
     models: list[ModelOption] = []
@@ -316,6 +316,8 @@ class AcpAdapter:
                 "failed", error="This engine cannot run its tools in an agent computer.",
                 error_code="engine_without_computers",
             )
+        if ctx.connector_bridge is not None:
+            ctx.connector_gate_in_bridge = True
         env = self.child_env(config, ctx)
         result = await _AcpTurn(ctx, sink, gate, argv, adapter=self, env=env).go()
         if result.error:
@@ -341,7 +343,7 @@ def normalize_effort(value: str) -> str | None:
 def _initialize_params() -> dict:
     return {
         "protocolVersion": PROTOCOL_VERSION,
-        "clientInfo": {"name": "zed", "title": "Open Duet", "version": "0.1.0"},
+        "clientInfo": {"name": "zed", "title": "Chief of Noumenon", "version": "0.1.0"},
         "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False},
     }
 
@@ -390,7 +392,8 @@ class _AcpTurn:
                 self.argv, cwd=str(self.workspace), max_bytes=self.max_text * RAW_STREAM_SIZE_FACTOR, env=self.env,
                 diagnostic=self.adapter.diagnostic if self.adapter.redact_diagnostics else None,
                 sandbox=True,
-                sandbox_writable=turn_sandbox.mailbox_mounts((self.ctx.team_launch, self.ctx.memory_launch)),
+                sandbox_workspace_readonly=self.mode == 'plan' or not self.tools,
+                sandbox_writable=turn_sandbox.mailbox_mounts((self.ctx.team_launch, self.ctx.memory_launch, self.ctx.composio_launch)),
                 sandbox_readonly=[Path(image["path"]) for image in (self.ctx.images or [])],
             )
         except turn_sandbox.SandboxUnavailable as exc:
@@ -481,7 +484,7 @@ class _AcpTurn:
         try:
             self.adapter.validate_initialize(init)
         except InvalidConfig:
-            return self._failed("The runtime did not identify as a supported ACP agent.", "cli_error")
+            return self._failed("The runtime did not identify as a supported custom command engine.", "cli_error")
         config = self.ctx.engine_config or self.adapter.config or {}
         method = self.adapter.authenticate(init.get("authMethods") or [], self.env or {})
         if method:
@@ -558,19 +561,20 @@ class _AcpTurn:
         return f"{default} {tail}".strip() if tail else default
 
     def _mcp_servers(self) -> list[dict]:
-        """The read-only past-conversation search, the only MCP server this app mounts
-        for an ACP agent (stdio, as the protocol requires every agent to accept)."""
-        launch = self.ctx.memory_launch
-        if launch is None:
-            return []
-        return [{
-            "name": memory_bridge.SERVER, "command": launch.command, "args": list(launch.args),
-            "env": [{"name": k, "value": v} for k, v in launch.env.items()],
-        }]
+        """Credential-free memory and local connector shims over ACP stdio MCP."""
+        servers = []
+        for name, launch in ((memory_bridge.SERVER, self.ctx.memory_launch), ("composio", self.ctx.composio_launch), ("team", self.ctx.team_launch)):
+            if launch is not None:
+                servers.append({"name": name, "command": launch.command, "args": list(launch.args),
+                                "env": [{"name": k, "value": v} for k, v in launch.env.items()]})
+        return servers
 
     def _prompt_text(self) -> str:
         parts = []
         instructions = self.ctx.instructions
+        if self.ctx.connector_bridge is not None:
+            from app.services.connector_bridge import NOTE
+            instructions = (instructions or "") + "\n" + NOTE
         if self.ctx.memory_launch is not None:
             instructions = f"{instructions}\n\n{memory_bridge.TOOL_NOTE}" if instructions else memory_bridge.TOOL_NOTE
         if instructions:
@@ -720,6 +724,29 @@ class _AcpTurn:
             # approval mode (it only reads the agent's own history, memory_bridge.py).
             self.rpc.respond(rid, payload(True))
             return
+        if self.ctx.team_launch is not None and allow_id is not None:
+            from app.services.pdf_contract import NAMES
+            from app.services.chat_card_schema import TOOLS as CARD_TOOLS
+            title = call.get("title")
+            pdf_name = next((name for name in NAMES | set(CARD_TOOLS) if title in (
+                "mcp__team__" + name, f"{name} (team MCP Server)", "team/" + name,
+            )), None)
+            if pdf_name is not None:
+                request_id = f"acp-{rid}"
+                handle = await self.gate.open(request_id=request_id, tool="mcp__team__" + pdf_name,
+                                             input=raw, summary=title, kind="tool")
+                if handle is not None:
+                    task = asyncio.create_task(self._answer(handle, rid, payload))
+                    self.answering.add(task)
+                    task.add_done_callback(self.answering.discard)
+                return
+        if self.ctx.connector_bridge is not None and allow_id is not None:
+            # ACP agents vary in their permission metadata. This only permits
+            # reaching the shim; the backend mailbox independently asks the gate.
+            title = str(call.get("title", ""))
+            if any(name in title for name in ("apps_search", "apps_run")):
+                self.rpc.respond(rid, payload(True))
+                return
         if not self.tools or self.mode == "plan":
             self.rpc.respond(rid, payload(False))
             return

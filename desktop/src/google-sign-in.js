@@ -29,7 +29,7 @@ function registerGoogleSignIn({ ipcMain, openExternal, getWindow, getOrigin }) {
   ipcMain.handle("open-dots:google-sign-in", async (event, raw) => {
     const window = getWindow();
     if (!window || event.sender !== window.webContents || !sameOrigin(window.webContents.getURL(), getOrigin())) {
-      throw new Error("Google sign-in must be started from Open Duet Settings.");
+      throw new Error("Google sign-in must be started from Chief of Noumenon Settings.");
     }
     await openExternal(validateGoogleAuthorizationUrl(raw));
   });

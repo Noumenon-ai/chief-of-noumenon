@@ -143,10 +143,12 @@ async def viewer(websocket: WebSocket, computer_id: int, rt: ThreadRuntime = Dep
         except Exception: return False
     try:
         await websocket.accept(subprotocol="binary" if "binary" in websocket.scope.get("subprotocols", []) else None)
-        await bridge(websocket, service.spec(computer), getattr(service.provider(computer.provider), "_docker", None), valid)
+        await bridge(websocket, service.spec(computer), getattr(service.provider(computer.provider), "_docker", None), valid,
+                     input_allowed=lambda: service.control_input_allowed(computer_id, ticket.lease))
     except (WebSocketDisconnect, OSError): pass
     finally:
         manager.active.pop(ident, None)
         service.control.viewer_closed(computer_id, ident)
+        service.expire_control()
         try: await websocket.close()
         except Exception: pass

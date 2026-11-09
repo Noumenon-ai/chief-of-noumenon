@@ -89,7 +89,7 @@ export function LoginScreen() {
   const label = signedIn ? t("auth.signedInOpening") : busy ? t("auth.working") : settingUp ? t("auth.setupAndSignIn") : t("auth.signIn");
 
   return (
-    <div className="relative flex min-h-dvh items-center justify-center bg-inset px-4">
+    <div className="relative flex min-h-dvh items-center justify-center bg-app px-4">
       <div className="absolute right-4 top-4"><LanguageSelect /></div>
       <main className="w-full max-w-sm space-y-5 rounded-card border border-line bg-raised p-6 shadow-(--shadow-card)">
         <h1 className="text-title font-semibold">{settingUp ? t("auth.titleSetup") : t("auth.titleSignIn")}</h1>
@@ -110,8 +110,8 @@ export function LoginScreen() {
         )}
         {status && (!settingUp || status.setup_allowed) && (
           <form onSubmit={submit} className="space-y-4">
-            {settingUp && <p className="text-sm text-muted">{t("auth.setupHelp")}</p>}
-            <Field label={t("auth.passphrase")}>
+            <p className="text-sm text-muted">{t(settingUp ? "auth.setupHelp" : "auth.codeHelp")}</p>
+                <Field label={t("auth.passphrase")}>
               {(props) => (
                 <PasswordInput {...props} reveal={reveal} showLabel={t("auth.showPassphrase")} hideLabel={t("auth.hidePassphrase")} onToggle={() => setReveal((v) => !v)} value={passphrase} onChange={(e) => setPassphrase(e.target.value)}
                   autoComplete={settingUp ? "new-password" : "current-password"} required minLength={settingUp ? 10 : 1} autoFocus />

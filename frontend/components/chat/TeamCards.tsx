@@ -27,7 +27,7 @@ export function AgentCreatedCard({ item }: { item: Extract<TranscriptItem, { kin
     try { const result = await collaboration.undoCreate(item.agentId); setState(result.removed); }
     catch (err) { setState(""); setError(err instanceof ApiError ? err.message : "Could not undo this specialist."); }
   };
-  return <article className="space-y-2 rounded-field border border-line p-3 text-sm"><p><strong>Specialist created: {item.name || `Agent ${item.agentId}`}</strong>{item.title ? ` · ${item.title}` : ""}</p><p className="text-xs text-muted">Instructions were written by the lead. Review them in Agents.</p>{session?.scopes.includes("admin") && available && !state && <button type="button" className="text-xs underline" onClick={() => void undo()}>Undo creation</button>}{state && <p role="status" className="text-xs text-muted">{state === "busy" ? "Undoing…" : `Specialist ${state}.`}</p>}{error && <p role="alert" className="text-xs text-danger">{error}</p>}</article>;
+  return <article className="space-y-2 rounded-field border border-line p-3 text-sm"><p><strong>Specialist created: {item.name || `Bot ${item.agentId}`}</strong>{item.title ? ` · ${item.title}` : ""}</p><p className="text-xs text-muted">Instructions were written by the lead. Review them in Bots.</p>{session?.scopes.includes("admin") && available && !state && <button type="button" className="text-xs underline" onClick={() => void undo()}>Undo creation</button>}{state && <p role="status" className="text-xs text-muted">{state === "busy" ? "Undoing…" : `Specialist ${state}.`}</p>}{error && <p role="alert" className="text-xs text-danger">{error}</p>}</article>;
 }
 
 const STALE: Record<string, string> = {
@@ -64,9 +64,9 @@ export function TeamSetupCard({ item }: { item: Extract<TranscriptItem, { kind: 
     <article className="space-y-2 rounded-field border border-line p-3 text-sm">
       <p><strong>Team changes applied</strong></p>
       <ul className="space-y-2 text-xs text-muted">{item.rows.map((row) => <li key={`${row.action}-${row.agentId}`}>
-        {VERB[row.action] ?? row.action}: {row.name || `Agent ${row.agentId}`}
+        {VERB[row.action] ?? row.action}: {row.name || `Bot ${row.agentId}`}
         {row.changes && <details className="mt-1"><summary className="cursor-pointer underline">Details</summary><dl className="mt-2 space-y-2">{row.changes.map(change => <div key={change.field}><dt className="font-medium">{change.field.replaceAll("_", " ")}</dt><dd className="whitespace-pre-wrap break-words"><del>{change.before == null ? "Default / empty" : String(change.before)}</del>{" → "}{change.after == null ? "Default / empty" : String(change.after)}</dd></div>)}</dl><p className="mt-2">{t("agentTeam.teamSavedDefaults")}</p></details>}
-        {row.action !== "deleted" && <div className="mt-1 flex gap-3"><button type="button" className="underline" onClick={() => window.dispatchEvent(new CustomEvent("open-dots:open-agent", { detail: { id: row.agentId, edit: false } }))}>Start chat</button>{session?.scopes.includes("admin") && <button type="button" className="underline" onClick={() => window.dispatchEvent(new CustomEvent("open-dots:open-agent", { detail: { id: row.agentId, edit: true } }))}>Edit agent</button>}</div>}
+        {row.action !== "deleted" && <div className="mt-1 flex gap-3"><button type="button" className="underline" onClick={() => window.dispatchEvent(new CustomEvent("open-dots:open-agent", { detail: { id: row.agentId, edit: false } }))}>Start chat</button>{session?.scopes.includes("admin") && <button type="button" className="underline" onClick={() => window.dispatchEvent(new CustomEvent("open-dots:open-agent", { detail: { id: row.agentId, edit: true } }))}>Edit bot</button>}</div>}
       </li>)}</ul>
       {item.undoAvailable && <p className="text-xs text-muted">{t("agentTeam.undoCaveat")}</p>}
       {availability && !availability.available && !state && <p className="text-xs text-muted">{availability.reason}</p>}

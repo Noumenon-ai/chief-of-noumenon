@@ -19,8 +19,8 @@ from tests.routers.test_reply_active_conversation import conversation_boat_api  
 
 async def save_credential(db, user):
     await user_credential_service.save_token(
-        db, user_id=user, provider="claude", file_path=".claude/.credentials.json",
-        plaintext=json.dumps({"claudeAiOauth": {"expiresAt": 1}}),
+        db, user_id=user, provider="github", file_path=".config/gh/hosts.yml",
+        plaintext=json.dumps({"syntheticGithub": {"expiresAt": 1}}),
     )
 
 

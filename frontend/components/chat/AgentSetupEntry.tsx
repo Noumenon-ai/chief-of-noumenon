@@ -8,7 +8,7 @@ import { ApiError, type Agent, type Engine } from "@/lib/api";
 import { collaboration, type TeamState } from "@/lib/collaboration";
 import { useT } from "@/lib/use-i18n";
 
-export const SETUP_STARTER = "I'd like to create an agent. Help me define its purpose, expected output and constraints. Ask only the questions you need before creating it.";
+export const SETUP_STARTER = "I'd like to create a bot. Help me define its purpose, expected output and constraints. Ask only the questions you need before creating it.";
 
 export function AgentSetupEntry({ agents, engines, onStart, onCreateLead }: {
   agents: Agent[]; engines: Engine[]; onStart: (id: number) => void; onCreateLead: () => void;
@@ -18,7 +18,7 @@ export function AgentSetupEntry({ agents, engines, onStart, onCreateLead }: {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [choice, setChoice] = useState("");
-  useEffect(() => { let live = true; collaboration.team().then(value => { if (live) setTeam(value); }, () => { if (live) setError("Could not check your team. Reopen Agents to try again."); }); return () => { live = false; }; }, []);
+  useEffect(() => { let live = true; collaboration.team().then(value => { if (live) setTeam(value); }, () => { if (live) setError("Could not check your team. Reopen Bots to try again."); }); return () => { live = false; }; }, []);
   const lead = agents.find(agent => agent.id === team?.team?.lead_agent_id && !agent.archived_at);
   const engine = engines.find(item => item.id === lead?.provider);
   const ready = team?.enabled !== false && team?.lead_ready.ok && engine?.available;
@@ -37,10 +37,10 @@ export function AgentSetupEntry({ agents, engines, onStart, onCreateLead }: {
     </> : team && <>
       <p className="text-xs text-muted">{t("agentTeam.chooseLeadGuidance")}</p>
       <Select aria-label="Choose setup lead" value={choice} disabled={busy} onChange={event => setChoice(event.target.value)} className="w-full rounded-field border border-line bg-raised p-2">
-        <option value="">Choose an existing agent…</option>
+        <option value="">Choose an existing bot…</option>
         {agents.filter(agent => !agent.archived_at && engines.some(item => item.id === agent.provider && item.capabilities.mcp && item.available)).map(agent => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
       </Select>
-      <div className="flex flex-wrap gap-3"><button type="button" disabled={!choice || busy} className="text-xs underline disabled:opacity-50" onClick={() => void choose()}>Make selected agent lead</button><button type="button" className="text-xs underline" onClick={onCreateLead}>Create a lead in the form</button></div>
+      <div className="flex flex-wrap gap-3"><button type="button" disabled={!choice || busy} className="text-xs underline disabled:opacity-50" onClick={() => void choose()}>Make selected bot lead</button><button type="button" className="text-xs underline" onClick={onCreateLead}>Create a lead in the form</button></div>
     </>}
     {!team && !error && <p role="status" className="text-xs text-muted">Checking team…</p>}
     {error && <p role="alert" className="text-xs text-danger">{error}</p>}

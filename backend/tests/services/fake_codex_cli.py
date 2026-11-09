@@ -52,7 +52,7 @@ log(event="argv", argv=args, cwd=os.getcwd())
 if args[:1] == ["--version"]:
     if plan.get("version_hang"):
         time.sleep(60)
-    print("codex-cli 0.162.1")
+    print(plan.get("version", "codex-cli 0.162.1"))
     sys.exit(0)
 
 if args[:2] == ["login", "status"]:
@@ -65,7 +65,22 @@ if args[:2] == ["login", "status"]:
     print("Not logged in", file=sys.stderr)
     sys.exit(1)
 
+
+if args[:1] == ["sandbox"]:
+    # Protocol fake only: the host test separately proves kernel enforcement.
+    canary, readable, output = args[-3:]
+    log(event="canary", path=canary, readable=readable, output=output,
+        exists=pathlib.Path(canary).is_file())
+    if plan.get("preflight_fail"):
+        sys.exit(1)
+    print("con-sandbox-ok")
+    sys.exit(0)
+
 if args[:1] != ["app-server"]:
+    sys.exit(2)
+
+if plan.get("reject_override"):
+    print("Rejected configuration override: " + plan["reject_override"], file=sys.stderr, flush=True)
     sys.exit(2)
 
 lock = threading.Lock()
@@ -163,6 +178,29 @@ def play(thread_id, turn_id, step):
         notify("item/completed", {"threadId": thread_id, "turnId": turn_id, "item": {"type": "commandExecution", "id": item_id, "command": full, "status": "completed" if accepted else "declined", "aggregatedOutput": "" if accepted else None, "exitCode": 0 if accepted else None}})
         message(thread_id, turn_id, step.get("then", "done" if accepted else "it was declined"))
         complete(thread_id, turn_id)
+    elif kind == "native_request":
+        item_id = "native-request"
+        method = step.get("method", "item/fileChange/requestApproval")
+        answer = ask(method, {"threadId": thread_id, "turnId": turn_id, "itemId": item_id,
+                             "callId": item_id, "grantRoot": step.get("grant_root"),
+                             "fileChanges": step.get("changes", {step.get("path", "notes.txt"): {"type": "add"}}),
+                             **step.get("extra", {})})
+        log(event="approval_answer", answer=answer)
+        if step.get("report"):
+            item = {"type": "fileChange", "id": item_id, "status": step["report"]}
+            notify("item/completed", {"threadId": thread_id, "turnId": turn_id, "item": item})
+        message(thread_id, turn_id, "refused")
+        complete(thread_id, turn_id)
+    elif kind == "unrequested_native":
+        item = {"type": step.get("item_type", "commandExecution"), "id": "rogue",
+                "status": step.get("status", "completed")}
+        notify(step.get("event", "item/started"), {"threadId": thread_id, "turnId": turn_id, "item": item})
+        complete(thread_id, turn_id)
+    elif kind == "workspace":
+        text, is_error = call_mcp(thread_configs[thread_id], "workspace", step["tool"], step["arguments"])
+        log(event="mcp_result", content=text, is_error=is_error)
+        message(thread_id, turn_id, text)
+        complete(thread_id, turn_id)
     elif kind == "file":
         path = step.get("path", os.path.join(os.getcwd(), "notes.txt"))
         item_id = "patch-" + uuid.uuid4().hex[:8]
@@ -222,7 +260,9 @@ def thread_result(thread_id, params):
     sandbox = {"read-only": "readOnly", "workspace-write": "workspaceWrite", "danger-full-access": "dangerFullAccess"}.get(params.get("sandbox"), "readOnly")
     if plan.get("policy_mismatch"):
         policy, sandbox = "never", "dangerFullAccess"
-    return {"thread": {"id": thread_id}, "model": params.get("model") or "gpt-fake", "approvalPolicy": policy, "sandbox": {"type": sandbox}}
+    return {"thread": {"id": thread_id}, "model": params.get("model") or "gpt-fake", "approvalPolicy": policy, "sandbox": {"type": sandbox},
+            "activePermissionProfile": {"id": "wrong" if plan.get("profile_mismatch") else params.get("permissions", "con")},
+            "runtimeWorkspaceRoots": params.get("runtimeWorkspaceRoots", []), "approvalsReviewer": "user"}
 
 
 for line in sys.stdin:
@@ -251,6 +291,9 @@ for line in sys.stdin:
     elif method == "config/read":
         send({"id": rid, "result": {"config": {"mcp_servers": plan.get("user_mcp", {})}, "origins": {}}})
     elif method == "thread/start":
+        if plan.get("reject_thread_override"):
+            send({"id": rid, "error": {"code": -32602, "message": "Rejected config: " + plan["reject_thread_override"]}})
+            continue
         thread_id = str(uuid.uuid4())
         thread_configs[thread_id] = params.get("config") or {}
         (threads_dir / thread_id).write_text("x")

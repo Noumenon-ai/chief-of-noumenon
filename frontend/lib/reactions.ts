@@ -50,8 +50,8 @@ export function getReactionsStorageKey(threadId: number | null | undefined): str
 }
 
 export function loadThreadReactions(threadId: number | null | undefined): ReactionsMap {
-  if (typeof window === "undefined" || !window.localStorage) return {};
   try {
+    if (typeof window === "undefined" || !window.localStorage) return {};
     const raw = window.localStorage.getItem(getReactionsStorageKey(threadId));
     if (!raw) return {};
     const parsed = JSON.parse(raw);
@@ -84,17 +84,17 @@ export function saveThreadReaction(
     next[messageKey] = reaction;
   }
 
-  if (typeof window !== "undefined" && window.localStorage) {
-    try {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
       const key = getReactionsStorageKey(threadId);
       if (Object.keys(next).length === 0) {
         window.localStorage.removeItem(key);
       } else {
         window.localStorage.setItem(key, JSON.stringify(next));
       }
-    } catch {
-      // ignore storage errors
     }
+  } catch {
+    // Storage may be blocked, including the localStorage getter.
   }
 
   return next;

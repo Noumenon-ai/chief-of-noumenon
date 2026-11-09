@@ -1,245 +1,133 @@
 # Connected apps
 
-Connect an app on the Apps page (sidebar → Apps), then choose which Claude or Codex agents may use
-it. Apps are reached through [Composio](https://composio.dev) with **your own
-Composio project key**; there is no shared key and nothing is sent to a
-service run by this project.
+The default app integration is the self-hosted Open Agent Connector in `connector/` (Apache-2.0). It requires no Composio account. The registry currently contains **268 providers and 8,546 actions**, counted from `registry.list_providers()` and `registry.list_actions()`. Most providers have not been tested on live accounts. [Proven apps](PROVEN_APPS.md) records live proof separately.
 
-Any app Composio lists can be connected, and then allowed for Claude and Codex
-agents. Two kinds of app exist:
+## Setup
 
-- **GitHub, Gmail and Google Calendar have their own tools.** Each tool is
-  written and checked here: its arguments are fixed, its answer is cut to a few
-  fields, and Gmail can only save drafts or send one plain-text email to one recipient. For these apps, those tools are all an
-  agent gets.
-- **Every other app is used through two general tools**: one finds the app's
-  actions, the other runs one. No action of these apps is treated as a read, so
-  **you approve every call** (see "Other apps" below).
+`scripts/install.sh` installs the connector's locked dependencies and provisions its encryption key, admin token and database folder outside the checkout. `scripts/start-local.sh` starts the connector and backend as separate processes. `scripts/dev.sh` starts the connector in development mode. Neither installer nor these changes connect a real provider automatically.
 
-The app mounts a turn-scoped, permission-filtered MCP server and sends Codex MCP
-approval requests through the same approval gate used for Claude. Other engines
-cannot use connected apps yet.
+From `connector/server`, run `.venv/bin/python -m app.serve`. It binds only `127.0.0.1:8100`. Set `CONNECTOR_DATA_DIR` to an owner-only folder outside the checkout; the backend needs the same path to import the admin token into encrypted settings. `.secret.key` and `.admin_token` must be provisioned with mode 0600. Missing keys fail startup outside explicit `CONNECTOR_DEV=1`. The service uses umask 077. Docs, anonymous access, public access and local-token exposure are disabled. Browser clients talk to the backend; connector CORS has no allowed origins by default. No key is included in a turn's environment or MCP launch.
 
-## Set it up
+Bot access requires `TURN_SANDBOX_ENABLED=true` and `TURN_SANDBOX_NETWORK_ENABLED=true`. Without both, local connector tools are not mounted. A sandbox without network isolation would retain a route to loopback; silently accepting that would violate credential isolation. The isolated engine sees a mailbox, and the backend alone makes connector requests. Connector storage is explicitly excluded from sandbox mounts. The installation still needs a working Linux user-namespace sandbox.
 
-1. **Get a key.** Create a Composio account and a project, then copy the
-   project key (it starts with `ak_`).
-2. **Save it.** Apps → paste the key → Save. Without a key the Apps page shows
-   only a short starter list of common apps; with one it lists everything Composio
-   offers, with search, categories and "Show more apps". The key is
-   checked with Composio first, stored encrypted on this computer, and never
-   shown again. To change it, use Replace key.
-3. **Connect the app.** Choose Connect next to any app. Some apps have no sign-in
-   Composio supplies (they need an auth config of your own in Composio, which this
-   app does not set up); their card says so and has no Connect button. Your browser opens a Composio page; sign in to that app and
-   approve. This page notices when you are done. You may give the account a
-   name; you may connect up to five accounts for an app.
-4. **Allow an agent.** Open an existing Claude or Codex agent, find Connected
-   apps, choose **Off** or **Read only** for each app; every app also has
-   **Read and change**. Then check the exact connected account or accounts that
-   agent may use. If you allow several, the agent must say which one to use. An
-   app with no account selected is unavailable to that agent.
-   Any app you connected appears there. For apps without
-   their own tools, "Look up only" lets the agent see what actions exist and
-   "Look up and run" lets it ask to run them. Save, start a new conversation with that agent,
-   and ask naturally, for example, “Find the latest unread message from Alex
-   and summarize it,” “What is on my calendar tomorrow?” or “Draft a reply to
-   that email.” New agents and copies start with all apps Off. If the agent was
-   already chatting, start a new conversation so it receives the updated tool
-   list.
+On Apps, search the catalog and connect with an API key/token or your own OAuth client where supported. OAuth shows the provider callback URL and scopes; create the client in that provider's developer settings. There are no shared OAuth clients. OAuth callbacks pass through the owner-authenticated backend, with codes forwarded in a POST body. For a server reached at a public hostname, set `CONNECTOR_OAUTH_CALLBACK_BASE` to `https://YOUR_HOST/api/v1/integrations/connector/oauth`; keep the connector itself on loopback. Configure the UI origin in `FRONTEND_ORIGINS` and, if different from that callback origin, `CONNECTOR_ALLOWED_RETURN_ORIGINS`. Custom provider credential fields come from catalog auth configuration when available. An alias identifies an account, so two accounts at the same provider remain separate. Reconnect updates credentials for that alias. Remove deletes the connection. Check sign-in runs the provider's validation implementation. Added means credentials were saved; Signed in requires a recorded provider validation. A successful implementation check is not a claim that every action works on a live account.
 
-Only the owner can do this. A paired chat device cannot see or change the key
-or the connections.
+Select a bot on Apps and choose each account's grant:
 
-## What an agent can do
+| Grant | Behavior |
+| --- | --- |
+| Off (default) | The account is absent from action search and cannot run actions. |
+| Read only | Actions that are clearly reads can run without a card. See the rule below. |
+| Read and ask to act | Reads plus acts after a fresh Allow on the normal approval card. |
 
-| Level | It can |
-|---|---|
-| Read only · GitHub | Read your profile, repositories, issues and pull requests, issue comments, pull request files, commits, branches and file contents (or list a folder), and search issues and pull requests. |
-| Read only · Gmail | Search up to 30 messages per page, read one message or thread, and see the connected account profile. Message bodies and previews are cut to a small field allowlist. |
-| Read only · Google Calendar | List calendars, search events by words (a window of up to a year), and read event summaries in a timezone-qualified date window of up to 31 days. |
-| Read and change · GitHub | Everything above, and create an issue, comment on an issue or pull request, and close or reopen an issue. |
-| Read and change · Gmail | Read access plus creating a plain-text draft reply or sending a plain-text email to one recipient. Forward, archive and delete tools are unavailable. |
-| Read and change · Google Calendar | Read access plus creating one timed event (at most 7 days long) on a calendar. It has no guests and no video meeting, so nothing is emailed. |
+New bots and copies have no local connector grants. Only person-facing, authenticated owner routes can change grants. No tool can grant access, change the blocked list or alter the approval mode. Telegram can answer individual Allow/Deny cards but cannot change these settings.
 
-For an interactive Gmail draft, the recipient and subject are supplied by the
-agent and shown in the approval card. The current chat tool does not verify
-that recipient against the thread's sender; check it before approving.
+## Tool policy
 
-Not available at any level: forwarding email; adding Gmail cc/bcc or
-extra recipients; archive, label or delete actions; inviting guests to an event or
-changing or deleting an existing event; merging, deleting or pushing code; editing an existing issue or comment;
-creating a pull request; or changing repository settings, collaborators or
-secrets.
+`apps_search` and `apps_run` use the same turn-scoped mailbox transport on Claude, Codex and API engines (including local OpenAI-compatible engines with structured tool calls). ACP engines mount that mailbox and the backend performs the approval itself. The legacy detached Boat adapter has no approval/MCP channel and does not currently support connected apps.
 
-## Other apps
+The backend rechecks both the starting grant and current grant on every call. Actions are fetched from the local connector, never supplied as authoritative metadata by a model. An action counts as a read only when its catalog entry agrees: labelled `read` with a GET method, or with a POST or no method and a name that starts with a reading verb such as `list` or `search`. An unlabelled action, as in Gmail and Calendar, reads only with a GET method and a reading verb. Anything else, including unknown labels and any DELETE, PATCH or PUT, is an act. Extra approval cards are the accepted cost of this rule. A read label cannot authorize sending, posting, deleting, inviting, sharing, permission changes or payment actions. The reviewed override currently includes `patsnap_mcp.transfer_data`. Known financial providers, financial/billing categories and payment action patterns refuse non-read operations outright: **Payments are off**, with no approval card. `CONNECTOR_BLOCKED_PROVIDERS` adds comma-separated fully blocked provider IDs; they disappear from search and cannot run.
 
-For an app that has no tools of its own, an agent gets two tools. **Search** lists
-a page of the app's actions with their parameters and a `revision`; it changes
-nothing. **Run** runs one named action.
+Act cards include provider, account alias, action and exact input. Every act needs a one-use approval; saved command rules and uninterrupted routines do not bypass it. Denied calls cannot be forged through the mailbox. The action/account description is compared again before dispatch, and approval is consumed durably before the single provider request. An uncertain result is not retried automatically. Check the provider before trying again.
 
-- **No action is treated as a read.** Composio publishes nothing that proves an
-  action only reads, so a name or a tag is not trusted. Running needs the Read and
-  change level, and you approve **every call** on a card showing the app, the
-  account, the action and the exact arguments (nothing is added to them). Plan mode
-  and the Read level never run one.
-- The backend fetches the action's description from Composio itself, checks that
-  it belongs to that app, and checks the arguments against it. An action whose
-  description uses anything the checker does not understand is not run. Arguments
-  must be small enough to show in full, and credentials are refused.
-- If Composio changes the action while a card waits, if you disconnect the
-  account, remove that account from the agent, lower the agent's access or
-  remove the key, the call is cancelled, not run. An agent cannot switch to a
-  different connected account unless you selected it for that agent.
-- Nothing that runs code, a shell or a raw request to an app is available, and
-  GitHub, Gmail and Calendar stay limited to their own tools (so Gmail still
-  cannot send, and GitHub still cannot delete or merge).
-- An answer is cut by size, depth and count, anything that looks like a secret is
-  replaced, and it is marked as other people's text. There is no per-field
-  summary as for the apps with their own tools, so this is looser than those.
-- A reviewed read could one day run after its first approved use; none has been
-  reviewed, so every call asks.
+Requests and outcomes are recorded in the existing decision log without raw provider content or credential values. Results are bounded and labelled untrusted. An email or web page cannot approve another action. Provider credential echoes are scrubbed at the connector before results or connector audit records are written. The backend also removes its admin token from responses. Sensitive argument keys are rejected.
 
-## How changes are approved
+In the composer, `@app` selects a connected account without granting access. “Add the Linear app” offers a Connect link to Apps. Telegram redirects incoming messages to the website. Recognizable pasted keys are removed before turn persistence and memory capture; the composer warns about credentials; Telegram starts no turns. Unrecognizable arbitrary strings cannot reliably be identified as secrets: always enter credentials on Apps.
 
-Every change shows an approval card with its exact arguments. This includes
-every action of an app without its own tools, creating a Gmail draft, and sending email: the action waits until you press Allow. There is
-no "always allow" for these. Deny, Read only, or Plan mode means it does not
-run. An approval covers exactly what the card showed, once.
+Composio remains an optional alternative under Apps, retaining its existing curated GitHub/Gmail/Calendar tools and legacy permission behavior. Local connector grants take precedence when present; the two systems do not silently share accounts or grants. The local connector's stricter payment and routine policy applies to its own bridge.
 
-A change is sent one time and never retried automatically. If the answer is
-lost (a network error or a failure at Composio), the agent is told the outcome
-is unknown and not to repeat it: check the app before asking again. If a change
-went through but its reply could not be read, the agent is told it is done.
+## Verification limits
 
-Connected apps are available in conversations you start yourself and explicitly
-granted scheduled/manual routines (see below). Routine grants must use an account
-the agent is already allowed to access. They are not
-available in webhooks or other messages that arrive from outside, and not
-to an agent that has its own computer.
+Automated tests use a local fake provider and throwaway credentials. They cover policy, approval/denial, account routing, redaction, authentication, unavailable connector responses and the shared tool bridge. They do not prove live provider compatibility. No real provider or OAuth account was used for this integration.
 
-## What stays where
+## Gmail: your own Google OAuth client
 
-- The Composio key is encrypted with this installation's encryption key and
-  kept with the other credentials. It is never returned by the API, logged or
-  put in an error. Until a credential broker exists, the saved key is visible
-  to this local user's agent shell commands.
-- Composio holds each provider authorization. The app shows each connected
-  account's app, name, status and dates, and drops everything else Composio
-  returns about it.
-- The agent talks to a small helper process that holds no key and makes no
-  network call; the backend makes each call.
-- What an agent reads from an app is added to the conversation like any other
-  text, so it reaches the model provider you chose. Answers are cut to a short
-  list of fields and marked as other people's text, which an agent must treat as
-  information and never as your approval.
+Gmail needs **your own Google OAuth client and your own Google sign-in**. An API
+key alone cannot read a mailbox; Chief of Noumenon supplies no shared Google client.
 
-## Disconnecting and removing the key
+1. In your Google Cloud project, enable the Gmail API (and Calendar API if wanted).
+2. Configure the OAuth consent screen. If the project is in testing, add your
+   Google account as a test user. Choose a Web application OAuth client.
+3. Open Apps, choose Gmail and OAuth. Copy the exact callback URL shown there into
+   the client's authorized redirect URIs. Public installations use the configured
+   `CONNECTOR_OAUTH_CALLBACK_BASE`; the connector stays on loopback.
+4. Enter the client ID and secret on Apps, never in chat. Review the requested
+   scopes, continue to Google, and sign in yourself. For briefs and triage,
+   `gmail.readonly` is sufficient; the current connector's default OAuth request
+   also includes send/modify scopes, so review the consent carefully. Bot grants
+   still restrict which actions are allowed independently of OAuth consent.
+   While a Google project's publishing status is Testing, Google ends the access
+   after 7 days and you sign in again. Publishing it needs Google's Branding page
+   completed, and an unverified app then shows a warning and has a 100 user limit.
+5. Give the connection a distinct alias, such as Personal or Work. Repeat for
+   each mailbox, then explicitly grant each exact account to the intended bot.
+   Select Read only for briefs and triage. Added and Signed in remain separate states.
 
-Disconnect on the Apps page removes the account from Composio. To also remove the
-app's grant at GitHub, use GitHub → Settings → Applications; that step was not
-checked. Remove key deletes the key from this app only: connected accounts stay
-at Composio, so disconnect them first if you want them gone.
+In Settings → Your day, add the paused day routines for that bot and enable the
+ones you want. Gmail triage reads unread mail, classifies it using conservative
+English/Hebrew rules, and sends Telegram alerts only for urgent items. Every
+alert names the account alias. It does not mark mail read, draft, reply or send.
+Ask in an ordinary bot chat for a proposed reply; sending requires the normal
+approval card and the person's explicit account grant.
 
-## If something does not work
+The built-in reader handles up to five pages of 50 messages and reports partial
+coverage. It retains hashed account/message identities for deduplication, never
+message bodies. Subjects in reports are privacy-filtered; bodies/snippets are
+used transiently for classification. The Telegram filter masks grouped and
+international phone numbers, cards, one-time codes and identity-like numbers,
+including Unicode digits, before truncation. It deliberately over-redacts numeric
+runs; free text can still contain sensitive information that no pattern detects.
+Synthetic provider tests are not live Gmail OAuth or mailbox proof.
 
-- **The agent ignores a connected app.** Check the app and at least one exact
-  account are allowed on that existing Claude or Codex agent, then start a new conversation. For GitHub,
-  name the repository as `owner/name`; for Gmail and Calendar, ask for a
-  specific search or date window.
-- **"No account named …" or "more than one account".** Name the account to use,
-  or disconnect the extra one.
-- **"answered in a form this app does not read".** The message lists the
-  answer's field names (never its values); include them when reporting it.
-- **Composio says the key is invalid.** Check that it is a project key. A
-  scoped key may also be missing permissions even when Composio reports an
-  invalid key; allow Connected accounts Read, Session management Write and
-  Session tool execution Write, then create and save a replacement key.
-- **Composio denies a scoped key.** This can mean a permission is missing even
-  when account listing worked. Allow Connected accounts Read, Session
-  management Write and Session tool execution Write. Connected accounts Write
-  is needed to disconnect accounts. Composio fixes scoped permissions when the
-  key is created, so generate a new key after changing them. See Composio's
-  [project API key permissions guide](https://docs.composio.dev/kb/guide/platform-project-api-key-permissions).
-- **An unknown outcome.** Look on GitHub before asking again.
+The connector's Gmail GET audit records retain operational metadata only: neither
+input nor output summaries, nor provider error text, are stored. The day routines
+never request response caching through an idempotency header.
 
-## What has been checked
+## Connect from a conversation
 
-The generic path and the app catalog were checked against a fake Composio that
-follows Composio's published API description (OpenAPI v3.1, read on 2026-10-28):
-Claude and Codex turns through the real approval gate, the checks above, and the
-catalog's cache and key isolation. **Not checked against the real Composio**: the
-size and paging of the real catalog, a real action description for any
-non-curated app, running an action of such an app, and what Composio answers
-when an app has no sign-in it supplies. Nothing in the real catalog has been
-reviewed as a read.
+A bot can suggest a local catalog app; a suggestion does not connect an account
+or grant access. An explicit “Connect Gmail” message also opens a card without
+calling a model. Unknown and blocked provider IDs are refused. The person opens
+the existing Apps form in a dialog, signs in in a separate tab or enters an API
+key in that form, then chooses access for this bot. Read only is selected first.
+Saving access continues the conversation. Failed cards can be retried. Payments
+remain refused, including when an account has Read and ask to act access.
 
-Earlier automated checks use a fake Composio and a real runtime, approval
-gate and Claude adapter. The Codex adapter now mounts the same scoped tools
-and routes Codex's MCP request through that approval gate; live Codex use has
-not yet been checked. By hand, on Windows with the desktop app and the web
-build, the real Claude CLI, your own Composio project and a private test
-repository: GitHub connecting, listing, disconnecting and approved issue
-changes, plus Deny and the Read-only refusal. Gmail and Calendar agent tools
-have not been run against live accounts. The desktop static UI build succeeded
-and the source-checkout Mac app was relaunched, but no Gmail or Calendar call
-was made in it. No automated tests were run for the Codex increment. A
-packaged installer, Gmail or Calendar live calls from Codex, Linux and its
-sandbox, a real lost-answer failure, and revocation at GitHub remain unchecked.
+Keys and OAuth client fields are never chat inputs. They go through the existing
+owner-only connector configuration endpoints; cards contain only catalog names,
+provider IDs, questions, choices and answer receipts. Only an authenticated
+person may answer; connecting and grants require the owner browser and CSRF.
 
-## Routine-specific app access
+## Your own Google project
 
-With Uninterrupted access off, the routine editor binds exact actions to stable connected account IDs. Grants
-start empty and do not inherit the agent's broader access. You authorize each
-selected action once for that routine and account; it can then run without a
-fresh approval card. The agent must also have the matching read/write app scope.
-Plan mode continues to refuse writes.
+There is no shared Google client. Choosing Gmail or Google Calendar in Apps
+opens six short steps: create a project, enable Gmail, enable Calendar, configure
+Branding and External audience, add your own email as a test user, and create a
+Web application OAuth client. Each step links directly to its Google Cloud page.
+Copy both callback addresses displayed by this installation into Authorized
+redirect URIs. Paste the client ID and secret once; the local connector saves
+the same client for Gmail and Calendar, encrypted on the host computer. Fields
+may be left empty to reuse the saved client. Web-client formats are checked
+before configuration; fields are cleared after starting sign-in.
 
-In addition to existing read actions, the available write grants are:
+While the project is in Testing, Google refresh tokens for these scopes expire
+after seven days, so a new sign-in is needed. `redirect_uri_mismatch` means the
+exact callback address needs correcting. For `access_denied`, check the test-user
+email and any work-account administrator restrictions. “Google hasn't verified
+this app” is expected for an unverified personal project: confirm it is your
+project, then use Advanced and Go to your app (unsafe), if offered.
 
-- Send one-recipient plain-text Gmail email immediately (`gmail_send_email`).
-  No cc/bcc, extra recipients, attachments or HTML are accepted.
-- Create a new GitHub `campaign/` branch (`github_create_branch`).
-- Commit one text file on a `campaign/` branch (`github_commit_file`). The
-  existing current-blob-SHA requirement for replacements remains in force.
+The installer uses `OPEN_DOTS_PUBLIC_URL` (default `http://127.0.0.1:8000`) as the
+callback base and includes that address and both local aliases in allowed return
+origins. When the public address is local, opening the other alias redirects
+pages to the configured host before sign-in, keeping the browser's host-bound
+cookie on the same host as the callback. API requests are not redirected. For a
+custom address, set the public URL before installation and register the callbacks
+shown in Apps. Existing configuration is preserved on reinstall.
 
-A separate checked-message reply-draft grant is available only in a confined
-fresh Claude run with Read message and Read Gmail profile grants for the same
-account. It cannot be combined with send or repository-write grants. The
-server derives the sender, rechecks source headers and allows at most one draft
-attempt in the run. See [checked-message draft mode](ROUTINES.md#checked-message-draft-mode).
-The existing interactive draft tool still requires a person approval and is
-not itself preauthorized by a routine. Other write tools are unavailable. Imports
-and chat-created routines receive no grant; only the person-facing editor can
-assign one. Local shell commands such as `git commit` use command permissions,
-independently of these connected-app grants.
-
-These grants apply directly on eligible scheduled/manual runs. The safety box
-and credential isolation have separate qualification gates; local shell
-visibility of saved keys remains a separate safety limitation.
-
-Only scheduled/manual runs qualify; webhook runs, retries and runs with an agent
-computer receive no connected-app tools in this mode. Each run records its starting grants.
-New permissions apply on the next run; grant/account revocation stops later calls.
-App content is untrusted data and cannot authorize actions.
-
-With **Uninterrupted access** enabled by the owner, scheduled and manual runs
-instead use the selected agent's configured app read/write scopes and exact
-connected accounts, bounded by the run-start snapshot and current permissions.
-Configured generic actions and granted marketplace tools can execute without
-fresh approval cards, including alongside the attached isolated computer.
-The provider's current OAuth rights, action schema checks, app blocklists,
-Plan mode and at-most-once write receipts continue to apply. Revoking the
-routine setting, agent scope or account prevents later calls. Imports and
-chat-created routines cannot enable this setting. See
-[Uninterrupted access](ROUTINES.md#uninterrupted-access) for scheduling and
-computer scope. Real AppSumo and updated installed-package runs remain unqualified.
-
-Every write is durably reserved before provider dispatch. The same tool/account/
-arguments cannot execute again in that run, including concurrent calls, process
-restarts and uncertain outcomes. A crash may leave a reserved receipt; check the
-external account before starting a new manual run. A new scheduled/manual run is
-newly authorized work and can perform the action again. Run history shows the
-latest 100 app-action receipts, including results and refusals. File Undo does
-not undo email sends or repository changes. Interactive changes retain their
-existing one-use approval cards.
+Steps checked against Google's documentation on 2026-11-04 (public documentation
+only; no provider sign-in or API request):
+[Create credentials](https://developers.google.com/workspace/guides/create-credentials),
+[Configure consent](https://developers.google.com/workspace/guides/configure-oauth-consent),
+[Web application OAuth](https://developers.google.com/identity/protocols/oauth2/web-server),
+and [token expiration](https://developers.google.com/identity/protocols/oauth2#expiration).

@@ -55,7 +55,7 @@ class Viewers:
                 except Exception: pass
 
 
-async def bridge(websocket, spec, docker, valid):
+async def bridge(websocket, spec, docker, valid, input_allowed=None):
     """Bounded binary messages, backpressure, first-byte timeout and revalidation."""
     # No browser credentials or engine API keys reach the child process.
     env = {k: v for k, v in os.environ.items() if k in {"PATH", "HOME", "SYSTEMROOT", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "SSH_AUTH_SOCK"}}
@@ -78,6 +78,8 @@ async def bridge(websocket, spec, docker, valid):
             data = await websocket.receive_bytes()
             if len(data) > 65536:
                 await websocket.close(code=1009); return
+            if input_allowed is not None and not input_allowed():
+                await websocket.close(code=4409); return
             proc.stdin.write(data)
             await proc.stdin.drain()
     async def revalidate():

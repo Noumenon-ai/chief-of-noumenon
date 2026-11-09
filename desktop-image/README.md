@@ -34,5 +34,10 @@ browser-tool inactivity closes Chromium; the broker remains ready to reopen it.
 Chromium runs without its own sandbox because the non-root container cannot
 create Chromium's sandbox namespaces with the existing Docker restrictions.
 The container remains hardened; this is a residual browser isolation risk.
-The normal no-network default also applies to Chromium. Internet mode allows
+The API no-network option also applies to Chromium; the app defaults to Internet. Internet mode allows
 general outbound access and is not a site allowlist.
+
+The bundled Chromium managed policy disables password saving. The broker also
+disables password saving and automatic password sign-in in profile preferences
+before launching. People sign in through hand-off; agents never request
+passwords in chat. Rebuild older desktop images to install the policy.

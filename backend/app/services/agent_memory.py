@@ -51,12 +51,15 @@ _REDACTION = "[redacted]"
 _KEY_SHAPES = tuple(
     re.compile(p)
     for p in (
+        r"\b(?:lin_api_|ntn_|(?:sk|pk|rk)_(?:live|test)_)[A-Za-z0-9_\-]{16,}",
         r"\bsk-[A-Za-z0-9_\-]{16,}",  # Anthropic, OpenAI and similar
         r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}",  # GitHub tokens
         r"\bgithub_pat_[A-Za-z0-9_]{20,}",
         r"\bxox[abposr]-[A-Za-z0-9\-]{10,}",  # Slack
         r"\bAKIA[0-9A-Z]{16}\b",  # AWS access key id
         r"\bAIza[0-9A-Za-z_\-]{30,}",  # Google API key
+        r"\bGOCSPX-[A-Za-z0-9_-]{20,}",  # Google OAuth client secret
+        r"\b[0-9]+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com",
         r"\bhf_[A-Za-z0-9]{30,}",  # Hugging Face
         r"\bnpm_[A-Za-z0-9]{20,}",
         r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}",  # JWT
@@ -66,7 +69,7 @@ _KEY_SHAPES = tuple(
 _LABELLED = (
     re.compile(r"(?i)(\bbearer\s+)[A-Za-z0-9._~+/\-]{12,}=*"),
     re.compile(
-        r"(?i)(\b[A-Za-z0-9_.\-]*(?:api[_\-]?key|secret|token|passw(?:or)?d|passphrase)[A-Za-z0-9_.\-]*"
+        r"(?i)(\b[A-Za-z0-9_.\-]{0,128}(?:api[_\-]?key|secret|token|passw(?:or)?d|passphrase)[A-Za-z0-9_.\-]{0,128}"
         r"\s*[:=]\s*)(?:\"[^\"\n]{6,}\"|'[^'\n]{6,}'|[^\s,;]{6,})"
     ),
 )

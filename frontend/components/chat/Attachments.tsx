@@ -38,7 +38,7 @@ function Thumbnail({ threadId, item }: { threadId: number; item: AttachmentRef }
 function FileChip({ item, note }: { item: { name: string; bytes: number }; note?: string }) {
   return (
     <span className="inline-flex max-w-56 items-center gap-1 rounded-field border border-line bg-raised px-2 py-1 text-xs text-ink">
-      <span aria-hidden>📄</span>
+      <span aria-hidden>File</span>
       <span className="truncate">{item.name}</span>
       <span className="shrink-0 text-muted">{note ?? formatBytes(item.bytes)}</span>
     </span>
@@ -105,7 +105,7 @@ export function PendingAttachments({
             // eslint-disable-next-line @next/next/no-img-element -- a local data URL
             <img src={previews.get(file)} alt="" className="h-8 w-8 rounded object-cover" />
           ) : (
-            <span aria-hidden>📄</span>
+            <span aria-hidden>File</span>
           )}
           <span className="max-w-40 truncate">{file.name}</span>
           <span className="text-muted">{formatBytes(file.size)}</span>

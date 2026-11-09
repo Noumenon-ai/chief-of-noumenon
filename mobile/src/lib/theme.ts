@@ -42,55 +42,55 @@ export type Palette = {
 };
 
 export const light: Palette = {
-  background: '#f7f6f3',
-  surface: '#e9e6df',
-  surfaceStrong: '#f0ede6',
-  bubbleUser: '#ebe7dd',
-  text: '#1c1b19',
-  muted: '#5b574f',
-  border: '#dcd8cf',
-  inputBorder: '#6b665d',
-  accent: '#3151c8',
+  background: '#ffffff',
+  surface: '#efebf8',
+  surfaceStrong: '#f6f4fb',
+  bubbleUser: '#ebe6ff',
+  text: '#1d1828',
+  muted: '#575064',
+  border: '#e2deea',
+  inputBorder: '#655d72',
+  accent: '#5b3fd6',
   onAccent: '#ffffff',
-  accentText: '#3151c8',
-  danger: '#b92b27',
-  success: '#17703f',
-  dangerFill: '#b92b27',
-  notice: '#8f5200',
+  accentText: '#5b3fd6',
+  danger: '#ad2241',
+  success: '#17633f',
+  dangerFill: '#ad2241',
+  notice: '#6b507e',
   warnBackground: '#fff8e1',
-  warnBorder: '#8f5200',
-  warnText: '#8f5200',
-  quoteBar: '#6b665d',
+  warnBorder: '#6b507e',
+  warnText: '#6b507e',
+  quoteBar: '#655d72',
 };
 
 export const dark: Palette = {
-  background: '#0e0e10',
-  surface: '#2a2a2e',
-  surfaceStrong: '#19191c',
-  bubbleUser: '#2a2a30',
-  text: '#ececee',
-  muted: '#a3a3ab',
-  border: '#2f2f35',
-  inputBorder: '#9595a0',
-  accent: '#7b95ff',
-  onAccent: '#0b0d14',
-  accentText: '#7b95ff',
-  danger: '#ff7b7b',
-  success: '#4cc38a',
-  dangerFill: '#ff7b7b',
-  notice: '#e5a03a',
+  background: '#17151c',
+  surface: '#3c3545',
+  surfaceStrong: '#211e27',
+  bubbleUser: '#494053',
+  text: '#f0edf5',
+  muted: '#bfb7c8',
+  border: '#49434f',
+  inputBorder: '#aaa3b5',
+  accent: '#d5cedc',
+  onAccent: '#17151c',
+  accentText: '#d5cedc',
+  danger: '#ff92aa',
+  success: '#73d6aa',
+  dangerFill: '#ff92aa',
+  notice: '#c5afe5',
   warnBackground: '#2e2608',
-  warnBorder: '#e5a03a',
-  warnText: '#e5a03a',
-  quoteBar: '#9595a0',
+  warnBorder: '#c5afe5',
+  warnText: '#c5afe5',
+  quoteBar: '#aaa3b5',
 };
 
 /**
  * Corner radii, in points. `field` (inputs, buttons, chips) and `card` (bubbles, cards, blocks) are the web's
- * `--radius-field` and `--radius-card`, 0.625rem and 0.875rem at 16 points to the rem; `theme-drift.test.ts`
+ * `--radius-field` and `--radius-card`, 0.5rem and 0.75rem at 16 points to the rem; `theme-drift.test.ts`
  * checks them. `round` makes a circle of any small square.
  */
-export const radius = { field: 10, card: 14, round: 999 } as const;
+export const radius = { field: 8, card: 12, round: 999 } as const;
 
 /** The smallest a tappable control may be, in points (the platform guidelines say 44 on iOS and 48 dp on Android; 44 here, with `hitSlop` for a smaller-looking one). */
 export const touch = { min: 44 } as const;

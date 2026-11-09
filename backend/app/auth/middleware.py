@@ -25,7 +25,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.auth import credentials, request_info, store, tenancy
 from app.db import tenant_schema
-from app.auth.policy import Principal, allows, is_public, required_scope
+from app.auth.policy import Principal, allows_request, is_public, required_scope
 from app.core.config import settings
 from app.desktop import profile
 
@@ -144,6 +144,14 @@ class AuthMiddleware:
         method = scope.get("method", "GET").upper()
         path = scope.get("path", "")
         if is_public(method, path):
+            # An autonomous device cannot use public owner setup/pairing routes
+            # to acquire authority. Anonymous human bootstrap stays unchanged.
+            bearer = _bearer(scope) if path.startswith('/api/v1/auth/') else None
+            if bearer is not None:
+                async with self.sessions()() as db:
+                    device = await store.authenticate(db, bearer, kind='device')
+                if device is not None and 'assistant' in device.scopes and not allows_request(device.scopes, method, path):
+                    return (403, 'scope_denied', 'This assistant device cannot administer authentication.', False)
             return None
 
         resolver = tenancy.principal_resolver()
@@ -151,7 +159,7 @@ class AuthMiddleware:
             hosted = await resolver(scope)
             if hosted is None:
                 return (401, "auth_required", "Sign in to use this server.", False)
-            if not allows(hosted.scopes, required_scope(method, path)):
+            if not allows_request(hosted.scopes, method, path):
                 return (403, "scope_denied", "This sign-in cannot do that.", False)
             set_principal(scope, hosted)
             return None
@@ -173,7 +181,7 @@ class AuthMiddleware:
                 if len(presented) != 1 or not hmac.compare_digest(presented[0].encode(), expected.encode()):
                     return (403, "csrf_failed", "Missing or wrong CSRF token. Reload the page.", False)
             needed = required_scope(method, path)
-            if not allows(session.scopes, needed):
+            if not allows_request(session.scopes, method, path):
                 return (403, "scope_denied", f"This device needs the {needed} scope for that.", False)
             set_principal(scope, Principal(kind=session.kind, scopes=session.scopes,
                                            session_id=session.id, label=session.label))

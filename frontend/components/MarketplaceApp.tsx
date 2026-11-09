@@ -1,4 +1,6 @@
 "use client";
+import { useT as useUiText } from "@/lib/use-i18n";
+import { screenText } from "@/lib/screen-text";
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -13,6 +15,7 @@ import { SkeletonList } from "@/components/ui/Skeleton";
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "The marketplace request failed.";
 
 export function MarketplaceApp() {
+  const tx = useUiText();
   const [catalog, setCatalog] = useState<MarketplaceCatalog | null>(null);
   const [connections, setConnections] = useState<MarketplaceConnection[]>([]);
   const [agents, setAgents] = useState<MarketplaceAgent[]>([]);
@@ -66,9 +69,9 @@ export function MarketplaceApp() {
     if (existing && existing.manifest_digest !== listing.manifest_digest) forgetConnectionTools(existing.id);
     setNotice(existing
       ? existing.manifest_digest === listing.manifest_digest
-        ? `${listing.name} is now shown under ${section === "tested" ? "Tested by Open Dots" : "Community"}. Its pinned manifest, credential, and grants are unchanged.`
-        : `${listing.name} updated. The old credential and grants were cleared; connect again, discover tools, and grant them to agents.`
-      : `${listing.name} installed. Connect its credential separately, then discover tools and choose exact per-agent grants.`);
+        ? `${screenText(listing.name)} is now shown under ${section === "tested" ? "Tested by Chief of Noumenon" : "Community"}. Its pinned manifest, credential, and grants are unchanged.`
+        : `${screenText(listing.name)} updated. The old credential and grants were cleared; connect again, discover tools, and grant them to bots.`
+      : `${screenText(listing.name)} installed. Connect its credential separately, then discover tools and choose exact per-bot grants.`);
     await refresh();
   });
 
@@ -100,61 +103,62 @@ export function MarketplaceApp() {
     const grants = grantKey ? selectedTools[grantKey] ?? [] : [];
     return <article key={`${section}:${listing.slug}`} className="space-y-4 rounded-lg border border-line p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0"><h3 className="font-semibold">{listing.name}</h3><p className="mt-1 text-sm text-muted">{listing.summary}</p></div>
-        <span className="rounded-full border border-line px-2 py-1 text-xs">{section === "tested" ? "Tested by Open Dots" : "Community"}</span>
+        <div className="min-w-0"><h3 className="font-semibold">{screenText(listing.name)}</h3><p className="mt-1 text-sm text-muted">{screenText(listing.summary)}</p></div>
+        <span className="rounded-full border border-line px-2 py-1 text-xs">{section === "tested" ? tx("Tested by Chief of Noumenon") : tx("Community")}</span>
       </div>
-      <p className="text-xs text-muted">Version {listing.version} · {listing.publisher} · {listing.license}</p>
+      <p className="text-xs text-muted">{tx("Version")}{" "}{listing.version} · {listing.publisher} · {listing.license}</p>
+      <details><summary className="cursor-pointer text-sm">{tx("Details")}</summary>
       <dl className="grid gap-2 rounded-md bg-inset p-3 text-xs sm:grid-cols-[8rem_1fr]">
-        <dt className="font-medium">Remote endpoint</dt><dd className="break-all"><code>{listing.endpoint}</code></dd>
-        <dt className="font-medium">Authentication</dt><dd>{listing.auth_mode === "bearer_token" ? "Bearer token" : "None"}</dd>
-        <dt className="font-medium">Setup instructions</dt><dd className="whitespace-pre-wrap">{listing.setup_instructions}</dd>
-        <dt className="font-medium">Test instructions</dt><dd className="whitespace-pre-wrap">{listing.test_instructions}</dd>
-        <dt className="font-medium">Manifest digest</dt><dd className="break-all"><code>{listing.manifest_digest}</code></dd>
+        <dt className="font-medium">{tx("Remote endpoint")}</dt><dd className="break-all"><code>{listing.endpoint}</code></dd>
+        <dt className="font-medium">{tx("Authentication")}</dt><dd>{listing.auth_mode === "bearer_token" ? tx("Bearer token") : tx("None")}</dd>
+        <dt className="font-medium">{tx("Setup instructions")}</dt><dd className="whitespace-pre-wrap">{listing.setup_instructions}</dd>
+        <dt className="font-medium">{tx("Test instructions")}</dt><dd className="whitespace-pre-wrap">{listing.test_instructions}</dd>
+        <dt className="font-medium">{tx("Manifest digest")}</dt><dd className="break-all"><code>{listing.manifest_digest}</code></dd>
       </dl>
-      {listing.evidence && <p className="text-xs text-muted">Tested {listing.evidence.tested_on} · <a className="underline" href={listing.evidence.evidence_url} target="_blank" rel="noreferrer">Evidence</a></p>}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs"><a className="underline" href={listing.source_repo} target="_blank" rel="noreferrer">Source</a><a className="underline" href={listing.privacy_url} target="_blank" rel="noreferrer">Privacy</a><a className="underline" href={listing.terms_url} target="_blank" rel="noreferrer">Terms</a></div>
+      </details>
+      {listing.evidence && <p className="text-xs text-muted">{tx("Tested")}{" "}{listing.evidence.tested_on} · <a className="underline" href={listing.evidence.evidence_url} target="_blank" rel="noreferrer">{tx("Evidence")}</a></p>}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs"><a className="underline" href={listing.source_repo} target="_blank" rel="noreferrer">{tx("Source")}</a><a className="underline" href={listing.privacy_url} target="_blank" rel="noreferrer">{tx("Privacy")}</a><a className="underline" href={listing.terms_url} target="_blank" rel="noreferrer">{tx("Terms")}</a></div>
       {!connection ? <div className="space-y-2">
-        {installedElsewhere && <p className="text-xs text-muted">Already installed under {installedElsewhere.section === "tested" ? "Tested by Open Dots" : "Community"} at version {installedElsewhere.manifest.version}.</p>}
-        <Button disabled={busy !== null} onClick={() => void install(section, listing)}>{busy === `install:${listing.slug}` ? "Installing…" : installedElsewhere?.manifest_digest === listing.manifest_digest ? `Show under ${section === "tested" ? "Tested" : "Community"}` : installedElsewhere ? `Update to version ${listing.version}` : "Install"}</Button>
+        {installedElsewhere && <p className="text-xs text-muted">{tx("Already installed under")}{" "}{installedElsewhere.section === "tested" ? tx("Tested by Chief of Noumenon") : tx("Community")} {tx("at version")}{" "}{installedElsewhere.manifest.version}.</p>}
+        <Button disabled={busy !== null} onClick={() => void install(section, listing)}>{busy === `install:${listing.slug}` ? tx("Installing…") : installedElsewhere?.manifest_digest === listing.manifest_digest ? `Show under ${section === "tested" ? tx("Tested") : tx("Community")}` : installedElsewhere ? `Update to version ${listing.version}` : tx("Install")}</Button>
       </div> : <div className="space-y-4 border-t border-line pt-4">
-        <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-medium">Installed · pinned to version {connection.manifest.version}</span>
-          <Button disabled={busy !== null} onClick={() => void run(`disconnect:${connection.id}`, async () => { await api.disconnectMarketplaceListing(connection.id); forgetConnectionTools(connection.id); setNotice(`${listing.name} disconnected.`); await refresh(); })}>Disconnect</Button>
-          <Button disabled={busy !== null || (connection.manifest.auth_mode === "bearer_token" && !connection.credential_configured)} onClick={() => void discover(connection)}>{busy === `discover:${connection.id}` ? "Discovering…" : "Discover tools"}</Button>
+        <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-medium">{tx("Installed · pinned to version")}{" "}{connection.manifest.version}</span>
+          <Button disabled={busy !== null} onClick={() => void run(`disconnect:${connection.id}`, async () => { await api.disconnectMarketplaceListing(connection.id); forgetConnectionTools(connection.id); setNotice(`${screenText(listing.name)} disconnected.`); await refresh(); })}>{tx("Disconnect")}</Button>
+          <Button disabled={busy !== null || (connection.manifest.auth_mode === "bearer_token" && !connection.credential_configured)} onClick={() => void discover(connection)}>{busy === `discover:${connection.id}` ? tx("Discovering…") : tx("Discover tools")}</Button>
         </div>
-        <dl className="grid gap-2 rounded-md bg-inset p-3 text-xs sm:grid-cols-[10rem_1fr]">
-          <dt className="font-medium">Active installed endpoint</dt><dd className="break-all"><code>{connection.manifest.endpoint}</code></dd>
-          <dt className="font-medium">Active authentication</dt><dd>{connection.manifest.auth_mode === "bearer_token" ? "Bearer token" : "None"}</dd>
-          <dt className="font-medium">Pinned catalog section</dt><dd>{connection.section === "tested" ? "Tested by Open Dots" : "Community"}</dd>
-        </dl>
+        <details><summary className="cursor-pointer text-sm">{tx("Installed details")}</summary><dl className="grid gap-2 rounded-md bg-inset p-3 text-xs sm:grid-cols-[10rem_1fr]">
+          <dt className="font-medium">{tx("Active installed endpoint")}</dt><dd className="break-all"><code>{connection.manifest.endpoint}</code></dd>
+          <dt className="font-medium">{tx("Active authentication")}</dt><dd>{connection.manifest.auth_mode === "bearer_token" ? tx("Bearer token") : tx("None")}</dd>
+          <dt className="font-medium">{tx("Pinned catalog section")}</dt><dd>{connection.section === "tested" ? tx("Tested by Chief of Noumenon") : tx("Community")}</dd>
+        </dl><p className="break-all text-xs text-muted">{tx("Installed manifest:")}{" "}<code>{connection.manifest_digest}</code></p></details>
         {connection.manifest_digest !== listing.manifest_digest && <div className="space-y-2 rounded-md border border-line p-3 text-sm">
-          <p>A newer listing is available. This installation continues using its pinned manifest until you update it.</p>
-          <p className="break-all text-xs">Proposed endpoint: <code>{listing.endpoint}</code> · Authentication: {listing.auth_mode === "bearer_token" ? "Bearer token" : "None"}</p>
-          <p className="text-xs text-muted">Updating replaces the endpoint and clears the saved credential and all agent tool grants. You will need to connect and grant tools again.</p>
-          <Button disabled={busy !== null} onClick={() => void install(section, listing)}>Update to version {listing.version}</Button>
+          <p>{tx("A newer listing is available. This installation continues using its pinned manifest until you update it.")}</p>
+          <p className="break-all text-xs">{tx("Proposed endpoint:")}{" "}<code>{listing.endpoint}</code> {tx("· Authentication:")}{" "}{listing.auth_mode === "bearer_token" ? tx("Bearer token") : tx("None")}</p>
+          <p className="text-xs text-muted">{tx("Updating replaces the endpoint and clears the saved credential and all bot tool grants. You will need to connect and grant tools again.")}</p>
+          <Button disabled={busy !== null} onClick={() => void install(section, listing)}>{tx("Update to version")}{" "}{listing.version}</Button>
         </div>}
-        <p className="break-all text-xs text-muted">Installed manifest: <code>{connection.manifest_digest}</code></p>
         {connection.manifest.auth_mode === "bearer_token" && <div className="space-y-2 rounded-md border border-line p-3">
-          <p className="text-xs text-muted">This token is sent by the local backend to the active installed endpoint above for tool discovery and calls. It is not sent to the agent.</p>
-          <label className="block space-y-1 text-sm">{connection.credential_configured ? "Replace stored bearer token" : "Set bearer token"}
+          <p className="text-xs text-muted">{tx("This token is sent by the local backend to the active installed endpoint above for tool discovery and calls. It is not sent to the bot.")}</p>
+          <label className="block space-y-1 text-sm">{connection.credential_configured ? tx("Replace stored bearer token") : tx("Set bearer token")}
             <Input type="password" autoComplete="new-password" value={tokens[listing.slug] ?? ""} onChange={(event) => setTokens((old) => ({ ...old, [listing.slug]: event.target.value }))} />
           </label>
           <div className="flex flex-wrap gap-2">
             <Button  disabled={busy !== null || !tokens[listing.slug]?.trim()} onClick={() => void run(`credential:${connection.id}`, async () => {
               await api.saveMarketplaceCredential(connection.id, tokens[listing.slug].trim());
-              setTokens((old) => ({ ...old, [listing.slug]: "" })); forgetConnectionTools(connection.id); await refresh(); setNotice("Bearer token saved. Discover tools again, then review and grant them to an agent.");
-            })}>Save token</Button>
+              setTokens((old) => ({ ...old, [listing.slug]: "" })); forgetConnectionTools(connection.id); await refresh(); setNotice("Bearer token saved. Discover tools again, then review and grant them to a bot.");
+            })}>{tx("Save token")}</Button>
             {connection.credential_configured && <Button  disabled={busy !== null} onClick={() => void run(`remove-credential:${connection.id}`, async () => {
               await api.removeMarketplaceCredential(connection.id);
-              forgetConnectionTools(connection.id); await refresh(); setNotice("Stored bearer token removed; agent grants were cleared.");
-            })}>Remove stored token</Button>}
+              forgetConnectionTools(connection.id); await refresh(); setNotice("Stored bearer token removed; bot grants were cleared.");
+            })}>{tx("Remove stored token")}</Button>}
           </div>
         </div>}
         {currentTools && <div className="space-y-3">
-          <p className="text-sm font-medium">Exact per-agent tool grants</p>
-          <p className="text-xs text-muted">Only checked tools are available to the selected agent. Every tool call requires your approval, with the tool and arguments shown before it runs.</p>
-          {agents.length === 0 ? <p className="text-sm text-muted">Create an agent before granting tools.</p> : <>
+          <p className="text-sm font-medium">{tx("Exact per-bot tool grants")}</p>
+          <p className="text-xs text-muted">{tx("Only checked tools are available to the selected bot. Every tool call requires your approval, with the tool and arguments shown before it runs.")}</p>
+          {agents.length === 0 ? <p className="text-sm text-muted">{tx("Create a bot before granting tools.")}</p> : <>
             <Select value={agentId} onChange={(event) => { const value = event.target.value; if (value) void loadGrants(connection.id, Number(value)); }}>
-              <option value="">Choose an agent</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
+              <option value="">{tx("Choose a bot")}</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
             </Select>
             {agentId !== "" && <>
               <ul className="space-y-2">{currentTools.map((tool) => <li key={tool.name}>
@@ -165,7 +169,7 @@ export function MarketplaceApp() {
                 const exactTools = currentTools.filter((tool) => grants.includes(tool.name)).map(({ name, schema_digest }) => ({ name, schema_digest }));
                 await api.saveMarketplaceAgentGrants(connection.id, Number(agentId), exactTools);
                 setNotice("Exact tool grants saved.");
-              })}>{busy === `grants:${grantKey}` ? "Saving…" : "Save grants"}</Button>
+              })}>{busy === `grants:${grantKey}` ? tx("Saving…") : tx("Save grants")}</Button>
             </>}
           </>}
         </div>}
@@ -174,18 +178,18 @@ export function MarketplaceApp() {
   };
 
   return <div className="min-h-dvh">
-    <header className="flex h-12 items-center gap-4 border-b border-line px-4"><Link href="/apps/" className="text-sm text-muted hover:underline">← Apps</Link><h1 className="text-sm font-semibold">MCP Marketplace</h1></header>
+    <header className="flex h-12 items-center gap-4 border-b border-line px-4"><Link href="/apps/" className="text-sm text-muted hover:underline">{tx("← Apps")}</Link><h1 className="text-sm font-semibold">{tx("More tools")}</h1></header>
     <main className="mx-auto max-w-3xl space-y-8 px-5 py-8">
-      <div><h2 className="text-xl font-semibold">MCP Marketplace</h2><p className="mt-2 text-sm text-muted">Install remote MCP services, then grant specific tools to each agent. Every call asks for your approval before it runs.</p></div>
+      <div><h2 className="text-xl font-semibold">{tx("More tools")}</h2><p className="mt-2 text-sm text-muted">{tx("Connect extra tools for your bots. Choose which tools each bot can use; every call asks for your approval.")}</p></div>
       {error && <Banner tone="danger">{error}</Banner>}{notice && <p role="status" className="text-sm text-muted">{notice}</p>}
+      {catalog && !catalog.tested.length && !catalog.community.length && !connections.length && <p className="text-sm text-muted">{tx("No tools listed yet.")}</p>}
       {!catalog ? <SkeletonList rows={3} /> : ([
-        ["Tested by Open Dots", "tested", catalog.tested], ["Community", "community", catalog.community],
+        ["Tested by Chief of Noumenon", "tested", catalog.tested], ["Community", "community", catalog.community],
       ] as const).map(([heading, section, listings]) => <section key={section} className="space-y-3">
-        <h2 className="text-lg font-semibold">{heading}</h2>
+        {(listings.length > 0 || connections.some(c => c.section === section)) && <h2 className="text-lg font-semibold">{heading}</h2>}
         {listings.map((listing) => listingCard(section, listing))}
         {connections.filter((connection) => connection.section === section && !Object.values(catalog).some((items) => items.some((listing) => listing.slug === connection.slug)))
-          .map((connection) => <div key={`withdrawn:${connection.id}`}><p className="mb-2 text-xs text-muted">This listing is no longer in the current catalog. You can still manage or disconnect the installed copy.</p>{listingCard(section, connection.manifest, connection)}</div>)}
-        {!listings.length && !connections.some((connection) => connection.section === section) && <p className="text-sm text-muted">No listings yet.</p>}
+          .map((connection) => <div key={`withdrawn:${connection.id}`}><p className="mb-2 text-xs text-muted">{tx("This listing is no longer in the current catalog. You can still manage or disconnect the installed copy.")}</p>{listingCard(section, connection.manifest, connection)}</div>)}
       </section>)}
     </main>
   </div>;

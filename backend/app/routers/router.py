@@ -93,3 +93,18 @@ from app.routers.desktop_account import router as desktop_account_router
 router.include_router(onboarding_router)
 router.include_router(engine_install_router)
 router.include_router(desktop_account_router)
+
+from app.routers.telegram import router as telegram_router
+router.include_router(telegram_router)
+
+from app.routers.connector import router as connector_router
+router.include_router(connector_router)
+
+from app.routers.voice import router as voice_router
+router.include_router(voice_router)
+
+from app.routers.chief import router as chief_router
+router.include_router(chief_router)
+
+from app.routers.phone import router as phone_router
+router.include_router(phone_router)

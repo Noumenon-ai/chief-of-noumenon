@@ -217,3 +217,45 @@ async def test_a_hosted_server_reports_it_and_makes_no_local_computer(api, docke
     agent = await new_agent(api)
     made = await api.post(f"/api/v1/agents/{agent['id']}/computer", json={})
     assert made.status_code == 409
+
+
+async def test_build_image_rejects_non_bundled_and_foreign_computers(api, rt):
+    agent = await new_agent(api)
+    computer = (await api.post(f"/api/v1/agents/{agent['id']}/computer", json={})).json()
+    path = f"/api/v1/computers/{computer['id']}/build-image"
+    assert (await api.post(path)).status_code == 409
+    rt.computers.owner_id = "not-this-owner"
+    assert (await api.get(path)).status_code == 404
+    assert (await api.post(path)).status_code == 404
+
+
+async def test_build_image_no_auth_remote_request_is_denied(api):
+    transport = httpx.ASGITransport(app=api._transport.app, client=("192.0.2.1", 50000))
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as remote:
+        assert (await remote.post("/api/v1/computers/1/build-image")).status_code == 403
+        assert (await remote.get("/api/v1/computers/1/build-image")).status_code == 403
+
+
+@pytest.mark.parametrize("exit_code", [0, 1])
+async def test_bundled_image_builder_fixed_arguments_and_honest_outcome(tmp_path, exit_code):
+    import asyncio
+    import json
+    import sys
+    from app.computers.image_build import ImageBuild
+    from app.computers.docker_cli import DESKTOP_IMAGE
+    binary = tmp_path / "fake-builder"
+    recorded = tmp_path / "arguments.json"
+    binary.write_text(f'#!{sys.executable}\nimport json,sys\nfrom pathlib import Path\nPath({str(recorded)!r}).write_text(json.dumps(sys.argv[1:]))\nprint("step one", flush=True)\nraise SystemExit({exit_code})\n')
+    binary.chmod(0o755)
+    builder = ImageBuild()
+    assert builder.start(str(binary))["status"] == "building"
+    task = builder.task
+    builder.start(str(binary))
+    assert builder.task is task
+    await asyncio.wait_for(task, 10)
+    state = builder.snapshot()
+    assert state["status"] == ("succeeded" if exit_code == 0 else "failed")
+    assert "step one" in state["output"]
+    argv = json.loads(recorded.read_text())
+    assert argv[:4] == ["build", "--progress=plain", "-t", DESKTOP_IMAGE]
+    assert len(argv) == 5 and argv[4].endswith("/desktop-image")

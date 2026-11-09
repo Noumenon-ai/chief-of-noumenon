@@ -27,13 +27,13 @@ export function NativeComputer({ agent, supported }: { agent: number; supported:
   }
   return <section className="mb-4 space-y-2 rounded-md border border-line p-3 text-sm" aria-label="Native desktop">
     <h3 className="font-medium">This Mac — native desktop</h3>
-    <p className="text-xs text-muted">Optional access to apps across this Mac, including outside the workspace. Each input needs approval. When enabled, this agent uses the native desktop for new turns.</p>
-    <p>{status.enabled ? (status.held ? "You have control. Agent input is stopped." : status.busy ? "A native desktop turn is active." : "Enabled for this agent.") : "Disabled for this agent. Docker computers remain available below."}</p>
+    <p className="text-xs text-muted">Optional access to apps across this Mac, including outside the workspace. Each input needs approval. When enabled, this bot uses the native desktop for new turns.</p>
+    <p>{status.enabled ? (status.held ? "You have control. Bot input is stopped." : status.busy ? "A native desktop turn is active." : "Enabled for this bot.") : "Disabled for this bot. Docker computers remain available below."}</p>
     {status.reason && <p className="text-xs text-muted">{status.reason}</p>}
     {!supported && <p className="text-xs text-muted">Choose Claude to use native desktop tools.</p>}
     {error && <p role="alert">{error}</p>}
     <div className="flex flex-wrap gap-2">
-      <button className="rounded border border-line px-2 py-1 disabled:opacity-50" disabled={busy || (!supported && !status.enabled)} onClick={() => void act(status.enabled ? "disable" : "enable")}>{status.enabled ? "Disable native desktop" : "Enable for this agent…"}</button>
+      <button className="rounded border border-line px-2 py-1 disabled:opacity-50" disabled={busy || (!supported && !status.enabled)} onClick={() => void act(status.enabled ? "disable" : "enable")}>{status.enabled ? "Disable native desktop" : "Enable for this bot…"}</button>
       {status.enabled && <button className="rounded border border-line px-2 py-1 disabled:opacity-50" disabled={busy} onClick={() => void act(status.held ? "release" : "take")}>{status.held ? "Hand control back" : "Take control"}</button>}
     </div>
   </section>;

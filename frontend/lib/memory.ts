@@ -1,3 +1,4 @@
+import { t as englishText } from "./i18n.ts";
 // Topic notes, recall chips, compaction markers, the journal and proposed
 // notes (docs/MEMORY.md). Pure: no React, no network.
 import type { CaptureReport, MemoryJournalRow, MemoryUpkeepStatus } from "./api";
@@ -49,7 +50,7 @@ export function compactedLabel(folded: number, writtenBy?: string): string {
   return writtenBy ? `${base} Written by the helper model ${writtenBy}.` : base;
 }
 
-const ACTORS: Record<string, string> = { person: "You", proposal: "Accepted proposal", undo: "Undo", upkeep: "Memory upkeep", agent: "Agent", import: "Imported agent file" };
+const ACTORS: Record<string, string> = { person: "You", proposal: "Accepted proposal", undo: "Undo", upkeep: "Memory upkeep", agent: "Bot", import: "Imported bot file" };
 const KINDS: Record<string, string> = { created: "created", edited: "edited", deleted: "deleted" };
 const VIA: Record<string, string> = { tidy: "tidy-up", organize: "organizing", capture: "noticing" };
 
@@ -68,14 +69,14 @@ export function tidyHourLabel(hour: number): string {
 }
 
 // What the last capture noticed, or "" when it noticed nothing.
-export function captureLine(r: CaptureReport | null | undefined): string {
+export function captureLine(r: CaptureReport | null | undefined, tx = englishText): string {
   if (!r) return "";
   const parts = [
-    r.added ? `${r.added} for the notes` : "",
-    r.topics ? `${r.topics} for topic notes` : "",
-    r.about_me ? `${r.about_me} for About me` : "",
+    r.added ? tx("{count} for the notes", { count: r.added }) : "",
+    r.topics ? tx("{count} for topic notes", { count: r.topics }) : "",
+    r.about_me ? tx("{count} for About me", { count: r.about_me }) : "",
   ].filter(Boolean);
-  if (parts.length) return `Last noticed: ${parts.join(", ")}.`;
+  if (parts.length) return tx("Last noticed: {parts}.", { parts: parts.join(", ") });
   return r.note ?? "";
 }
 
@@ -83,21 +84,22 @@ export function captureLine(r: CaptureReport | null | undefined): string {
 export function helperModelLine(
   status: Pick<MemoryUpkeepStatus, "engine" | "helper_model" | "engine_can_call" | "helper" | "helper_used"> | null,
   allowed = true,
+  tx = englishText,
 ): string {
   if (!status) return "";
   if (!status.engine_can_call) {
     const helper = status.helper;
     if (helper && helper.usable && allowed) {
-      return `This agent's engine cannot make the quick call, so the helper model (${helper.label}${helper.model ? `, ${helper.model}` : ""}) writes it: the text read goes to ${helper.label}, not to this agent's provider.`;
+      return tx("This bot's engine cannot make the quick call, so the helper model ({model}) writes it: the text read goes to {provider}, not to this bot's provider.", { model: helper.label + (helper.model ? ', ' + helper.model : ''), provider: helper.label });
     }
-    if (helper && !allowed) return "This agent's engine cannot make the quick call and it never uses the helper model, so only expired notes and repeats are tidied.";
-    if (helper) return `This agent's engine cannot make the quick call and the helper model (${helper.label}) is not usable, so only expired notes and repeats are tidied.`;
-    return "This agent's engine cannot make the quick call, so only expired notes and repeats are tidied.";
+    if (helper && !allowed) return tx("This bot's engine cannot make the quick call and it never uses the helper model, so only expired notes and repeats are tidied.");
+    if (helper) return tx("This bot's engine cannot make the quick call and the helper model ({provider}) is not usable, so only expired notes and repeats are tidied.", { provider: helper.label });
+    return tx("This bot's engine cannot make the quick call, so only expired notes and repeats are tidied.");
   }
   const engine = status.engine ?? "its engine";
   return status.helper_model
-    ? `Quick calls use ${status.helper_model} on ${engine}.`
-    : `Quick calls use this agent's own model on ${engine}.`;
+    ? tx("Quick calls use {model} on {engine}.", { model: status.helper_model, engine })
+    : tx("Quick calls use this bot's own model on {engine}.", { engine });
 }
 
 // The settings change that sets (or, with an empty engine, removes) the helper model.

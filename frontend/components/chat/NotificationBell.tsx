@@ -1,5 +1,6 @@
 "use client";
 
+import { waitingNotification } from "@/lib/control-room";
 import { Bell } from "lucide-react";
 import { EmptyPanel, LoadingState } from "./PanelState";
 import { useRouter } from "next/navigation";
@@ -15,17 +16,25 @@ const POLL_MS = 15_000;
 // The header's bell: the unread count, and the feed when opened. A click on an
 // entry marks it read and opens its conversation when it has one.
 export function NotificationBell({
+  waitingThreadIds = [],
   elevated = false,
   onOpen,
 }: {
+  waitingThreadIds?: number[];
   elevated?: boolean;
   onOpen?: () => void;
 }) {
   const t = useT();
   const router = useRouter();
+  const [latestItems, setLatestItems] = useState<AppNotification[]>([]);
+  const isWaiting = (item: AppNotification) => waitingNotification(item.kind) && item.thread_id !== null && waitingThreadIds.includes(item.thread_id);
+  const waiting = latestItems.some(item => !item.read_at && isWaiting(item));
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<AppNotification[] | null>(null);
+  const [feedError, setFeedError] = useState(false);
+  const [feedTick, setFeedTick] = useState(0);
+  const [marking, setMarking] = useState(false);
   const [failed, setFailed] = useState(false);
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
   const opener = useRef<HTMLButtonElement>(null);
@@ -47,6 +56,7 @@ export function NotificationBell({
         // Compare IDs so a read item being replaced by a new one cannot hide the alert.
         // The first successful list establishes a baseline without alerting old unread items.
         void api.listNotifications(200).then((latest) => {
+          setLatestItems(latest);
           const seenIds = seenNotificationIds.current;
           seenNotificationIds.current = new Set(latest.map((item) => item.id));
           if (!seenIds || !preferences?.desktop_enabled) return;
@@ -68,8 +78,10 @@ export function NotificationBell({
 
   useEffect(() => {
     if (!open) return;
-    api.listNotifications().then(setItems).catch(() => setItems([]));
-  }, [open, unread]);
+    let alive = true;
+    api.listNotifications().then(value => { if (alive) { setItems(value); setFeedError(false); } }).catch(() => { if (alive) setFeedError(true); });
+    return () => { alive = false; };
+  }, [open, unread, feedTick]);
 
   // Escape closes the feed and puts focus back on the bell, wherever focus is inside it.
   useEffect(() => {
@@ -91,9 +103,15 @@ export function NotificationBell({
   };
 
   const readAll = async () => {
-    await api.readAllNotifications().catch(() => undefined);
-    setItems((current) => current?.map((item) => ({ ...item, read_at: item.read_at ?? new Date().toISOString() })) ?? null);
-    refresh();
+    if (marking) return;
+    setMarking(true);
+    try {
+      await api.readAllNotifications();
+      setItems((current) => current?.map((item) => ({ ...item, read_at: item.read_at ?? new Date().toISOString() })) ?? null);
+      setFeedError(false);
+      refresh();
+    } catch { setFeedError(true); }
+    finally { setMarking(false); }
   };
 
   if (failed && unread === 0 && !open) return null; // an older backend without the feed
@@ -113,17 +131,18 @@ export function NotificationBell({
       >
         <Bell size={18} />
         {badge && (
-          <span className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-4 text-accent-fg">{badge}</span>
+          <span className={`notification-badge ${waiting ? "waiting" : ""} absolute right-0.5 top-0.5 min-w-4 rounded-full px-1 text-center text-[10px] font-semibold leading-4`}>{badge}</span>
         )}
       </IconButton>
       {open && (
         <div role="dialog" aria-label={t("notifications.title")} className="absolute right-0 top-11 z-40 w-[min(20rem,calc(100vw-1.5rem))] animate-pop-in rounded-card border border-line bg-raised shadow-xl">
           <div className="flex items-center gap-2 border-b border-line px-3 py-2">
             <p className="flex-1 text-xs font-semibold">{t("notifications.title")}</p>
-            <button onClick={() => void readAll()} className="cursor-pointer text-xs text-accent underline">{t("notifications.markAll")}</button>
+            {unread > 0 && <button disabled={marking} onClick={() => void readAll()} className="cursor-pointer text-xs text-accent underline">{t("notifications.markAll")}</button>}
           </div>
+          {unread > 0 && <p className="px-3 py-2 text-xs text-muted">{t(unread === 1 ? "notifications.countOne" : "notifications.countMany", {count: unread})}{waiting ? ` · ${t("status.waiting")}` : ""}</p>}
           <ul className="max-h-96 overflow-y-auto">
-            {items === null ? (
+            {feedError ? <li className="p-3 text-xs" role="alert">{t("notifications.loadError")} <button className="underline" onClick={() => setFeedTick(value => value + 1)}>{t("auth.tryAgain")}</button></li> : items === null ? (
               <li className="p-3"><LoadingState rows={3} /></li>
             ) : items.length === 0 ? (
               <li><EmptyPanel title={t("notifications.empty")} /></li>
@@ -132,8 +151,9 @@ export function NotificationBell({
                 <li key={item.id}>
                   <button onClick={() => void choose(item)} className={`block w-full cursor-pointer px-3 py-2 text-left hover:bg-hover ${item.read_at ? "" : "bg-accent/10"}`}>
                     <p className="text-xs font-medium">{item.title}</p>
-                    {item.body && <p className="line-clamp-2 text-xs text-muted">{item.body}</p>}
-                    <p className="text-[10px] text-faint">{formatWhen(item.created_at)}</p>
+                    {item.body && <p className="text-xs text-muted">{item.body}</p>}
+                    {waitingNotification(item.kind) && <p className="text-xs text-muted">{isWaiting(item) ? t("status.waiting") : t("notifications.noLongerWaiting")}</p>}
+                    <p dir="auto" className="text-[10px] text-faint">{formatWhen(item.created_at)}</p>
                   </button>
                 </li>
               ))

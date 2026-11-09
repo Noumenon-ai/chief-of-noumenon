@@ -50,6 +50,7 @@ class StdioRpc:
         self.over_limit = False
         self.stderr_tail = ""
         self.diagnostic = diagnostic
+        self.sandbox_active = False
         self._next_id = 1
         self._pending: dict[int, asyncio.Future] = {}
         self._closed = asyncio.get_running_loop().create_future()
@@ -57,13 +58,16 @@ class StdioRpc:
         self._stderr = asyncio.create_task(self._read_stderr())
 
     @classmethod
-    async def spawn(cls, args: list[str], *, cwd: str, max_bytes: int, env: dict | None = None, diagnostic=None, sandbox: bool = False, sandbox_writable=(), sandbox_readonly=()) -> "StdioRpc":
+    async def spawn(cls, args: list[str], *, cwd: str, max_bytes: int, env: dict | None = None, diagnostic=None, sandbox: bool = False, sandbox_writable=(), sandbox_readonly=(), sandbox_workspace_readonly: bool = False, sandbox_engine: str | None = None) -> "StdioRpc":
         host_exec.ensure_allowed("an engine process")
         env = env if env is not None else child_env()
+        sandbox_active = False
         if sandbox:
             from app.core import turn_sandbox
-            await asyncio.to_thread(turn_sandbox.self_check)
-            args = turn_sandbox.command(args, cwd=cwd, env=env, writable=sandbox_writable, readonly=sandbox_readonly)
+            args, sandbox_active = await asyncio.to_thread(
+                turn_sandbox.prepare, args, cwd=cwd, env=env, writable=sandbox_writable,
+                readonly=sandbox_readonly, workspace_readonly=sandbox_workspace_readonly, engine=sandbox_engine,
+            )
         proc = await asyncio.create_subprocess_exec(
             *args,
             stdin=asyncio.subprocess.PIPE,
@@ -78,6 +82,7 @@ class StdioRpc:
         # the next start cannot find (app/core/engine_processes.py).
         await asyncio.to_thread(engine_processes.record, proc.pid, args[0])
         rpc = cls(proc, max_bytes=max_bytes, diagnostic=diagnostic)
+        rpc.sandbox_active = sandbox_active
         rpc._forget = asyncio.create_task(_forget_when_done(proc))
         return rpc
 

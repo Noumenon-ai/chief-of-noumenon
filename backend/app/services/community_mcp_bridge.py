@@ -128,7 +128,7 @@ class CommunityMcpBridge:
         """Snapshot exact agent grants for a person chat or authorized routine."""
         from app.core.config import settings
 
-        if settings.HOST_EXECUTION_DISABLED or getattr(adapter, "key", None) not in {"claude", "codex"}:
+        if settings.HOST_EXECUTION_DISABLED or getattr(adapter, "key", None) not in {"claude", "codex", "openai_compat", "openrouter"}:
             return []
         capabilities = getattr(adapter, "capabilities", None)
         uninterrupted = getattr(run, "uninterrupted_access", False)
@@ -526,7 +526,7 @@ class CommunityMcpBridge:
                 if result is None:
                     return {"error": "This call no longer has an active, unused approval and grant.",
                             "code": "not_approved"}
-                return _redact(result, token)
+                return await asyncio.to_thread(_redact, result, token)
             finally:
                 await session.close()
         except community_mcp.McpError as exc:

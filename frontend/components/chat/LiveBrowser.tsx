@@ -143,7 +143,7 @@ export function LiveBrowser({ agentId }: { agentId: number }) {
     </div>
     {state !== "waiting" && <>
       <canvas ref={canvas} width={1280} height={800} tabIndex={driving ? 0 : -1} role="application"
-        aria-label={driving ? "The agent's browser. Click to focus; Hand control back returns control to the agent." : "The agent's browser, watch only. Take control to use it."}
+        aria-label={driving ? "The bot's browser. Click to focus; Hand control back returns control to the bot." : "The bot's browser, watch only. Take control to use it."}
         className={`aspect-[16/10] w-full touch-none rounded border border-line bg-black object-contain outline-accent ${driving ? "" : "pointer-events-none"}`}
         onPointerDown={event => { event.preventDefault(); event.currentTarget.focus(); event.currentTarget.setPointerCapture(event.pointerId); pointer(event, "down"); }}
         onPointerMove={event => pointer(event, "move")} onPointerUp={event => pointer(event, "up")} onContextMenu={event => event.preventDefault()}

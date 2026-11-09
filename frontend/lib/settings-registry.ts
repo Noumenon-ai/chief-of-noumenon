@@ -18,18 +18,20 @@ const pageHref = Object.fromEntries(SETTINGS_PAGES.map((page) => [page.id, page.
 
 /** The searchable index for every settings section and control row. */
 export const SETTINGS_REGISTRY = [
+  { id: "day", page: "day", pageHref: pageHref.day, section: "Your day", title: "Time zone, briefs and reminders", keywords: ["quiet", "timezone", "reminders", "briefs"], anchorId: "setting-day", focusLabel: "Time zone" },
+  { id: "advanced-contacts", page: "advanced", pageHref: pageHref.advanced, section: "Contact aliases", title: "Contact aliases", keywords: ["hubspot", "front", "contacts"], anchorId: "setting-advanced-contacts" },
+  { id: "advanced-drafts", page: "advanced", pageHref: pageHref.advanced, section: "Post drafts", title: "Post drafts", keywords: ["social", "post", "draft"], anchorId: "setting-advanced-drafts" },
+  { id: "phone", page: "phone", pageHref: pageHref.phone, section: "Use on your phone", title: "Use on your phone", keywords: ["tailscale", "private", "qr", "install", "home screen"], anchorId: "setting-phone" },
   { id: "general-appearance", page: "general", pageHref: pageHref.general, section: "Appearance", title: "Appearance", keywords: ["theme", "light", "dark", "system", "colour", "color"], anchorId: "setting-general-appearance", focusLabel: "Theme" },
   { id: "general-language", page: "general", pageHref: pageHref.general, section: "Language", title: "Language", keywords: ["locale", "english", "spanish", "translation", "regional"], anchorId: "setting-general-language", focusLabel: "Language" },
   { id: "general-updates", page: "general", pageHref: pageHref.general, section: "App updates", title: "Check for updates", keywords: ["version", "upgrade", "new version", "desktop"], anchorId: "setting-general-updates", focusLabel: "Check for updates" },
-  { id: "general-setup", page: "general", pageHref: pageHref.general, section: "Getting started", title: "Setup guide", keywords: ["onboarding", "first agent", "engine choice", "getting started"], anchorId: "setting-general-setup", focusLabel: "Open setup guide" },
-  { id: "general-apps", page: "general", pageHref: pageHref.general, section: "Connected apps", title: "Connected apps", keywords: ["integrations", "connections", "app access", "connected services"], anchorId: "setting-general-apps", focusLabel: "Open Apps" },
+  { id: "general-setup", page: "general", pageHref: pageHref.general, section: "Getting started", title: "Setup guide", keywords: ["onboarding", "first bot", "engine choice", "getting started"], anchorId: "setting-general-setup", focusLabel: "Open setup guide" },
 
   { id: "notifications-desktop", page: "notifications", pageHref: pageHref.notifications, section: "Desktop alerts", title: "Desktop notifications", keywords: ["desktop", "notifications", "alerts", "os", "system", "popups"], anchorId: "setting-notifications-desktop", focusLabel: "Enable desktop notifications" },
-  { id: "notifications-categories", page: "notifications", pageHref: pageHref.notifications, section: "What notifies you", title: "Notification events", keywords: ["approval", "needs you", "failures", "task due", "reminders", "events"], anchorId: "setting-notifications-categories", focusLabel: "Agent input & approvals" },
+  { id: "notifications-categories", page: "notifications", pageHref: pageHref.notifications, section: "What notifies you", title: "Notification events", keywords: ["approval", "needs you", "failures", "task due", "reminders", "events"], anchorId: "setting-notifications-categories", focusLabel: "Bot input & approvals" },
   { id: "notifications-sound", page: "notifications", pageHref: pageHref.notifications, section: "Alert sound", title: "Notification sound", keywords: ["sound", "audio", "chime", "beep", "volume"], anchorId: "setting-notifications-sound", focusLabel: "Notification sound" },
 
   { id: "channels-telegram", page: "channels", pageHref: pageHref.channels, section: "Telegram", title: "Telegram connection", keywords: ["telegram", "channel", "channels", "messaging", "bot", "link code"], anchorId: "setting-channels-telegram", focusLabel: "Link Telegram" },
-  { id: "channels-boat-tasks", page: "channels", pageHref: pageHref.channels, section: "Boat tasks", title: "Boat tasks", keywords: ["boat", "tasks", "legacy", "sandbox", "task submission"], anchorId: "setting-channels-boat-tasks", focusLabel: "Boat tasks" },
 
   { id: "profile-details", page: "profile", pageHref: pageHref.profile, section: "Profile", title: "Profile details", keywords: ["name", "avatar", "photo", "bio", "edit profile", "share"], anchorId: "setting-profile-details", focusLabel: "Edit profile" },
   { id: "profile-summary", page: "profile", pageHref: pageHref.profile, section: "Annual summary", title: "Annual summary", keywords: ["tokens", "peak day", "messages", "streak", "activity stats"], anchorId: "setting-profile-summary", focusLabel: "Annual summary" },
@@ -37,7 +39,6 @@ export const SETTINGS_REGISTRY = [
   { id: "profile-insights", page: "profile", pageHref: pageHref.profile, section: "Insights", title: "Usage insights", keywords: ["provider", "busiest day", "estimated cost", "teammates", "model distribution"], anchorId: "setting-profile-insights", focusLabel: "Insights" },
   { id: "profile-teammates", page: "profile", pageHref: pageHref.profile, section: "Most active teammates", title: "Most active teammates", keywords: ["agents", "tokens", "usage"], anchorId: "setting-profile-teammates", focusLabel: "Most active teammates" },
   { id: "profile-models", page: "profile", pageHref: pageHref.profile, section: "Model distribution", title: "Model distribution", keywords: ["models", "provider", "tokens", "usage"], anchorId: "setting-profile-models", focusLabel: "Model Distribution" },
-  { id: "profile-local-account", page: "profile", pageHref: pageHref.profile, section: "Connected account", title: "Local profile and data", keywords: ["sign out", "reset", "delete", "account", "conversations", "local data"], anchorId: "setting-profile-account", focusLabel: "Sign out" },
 
   { id: "engine-cli", page: "engines", pageHref: pageHref.engines, section: "Claude Code", title: "Claude executable", keywords: ["path", "cli", "binary", "claude code", "command line"], anchorId: "setting-engine-claude-executable", focusLabel: "Claude executable" },
   { id: "engine-workspace", page: "engines", pageHref: pageHref.engines, section: "Claude Code", title: "Workspace root", keywords: ["folder", "directory", "workspace", "new conversations"], anchorId: "setting-engine-workspace-root", focusLabel: "Workspace root" },

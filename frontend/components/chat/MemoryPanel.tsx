@@ -1,7 +1,9 @@
 "use client";
+import { useT as useUiText } from "@/lib/use-i18n";
 
 // Below an agent's MEMORY.md editor: its topic notes, the notes proposed from
 // quiet conversations, and the history of changes with Undo (docs/MEMORY.md).
+import { relativeReceipt } from "@/lib/control-room";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, type Agent, type MemoryJournalRow, type MemoryProposal, type TopicDoc, type TopicList } from "@/lib/api";
 import { useT } from "@/lib/use-i18n";
@@ -29,6 +31,7 @@ export function MemoryPanel({
   onAgentChange: (patch: Partial<Agent>) => void;
   onNotesChanged: () => void;
 }) {
+  const tx = useUiText();
   const agentId = agent.id;
   const [tab, setTab] = useState<Tab>("topics");
   const [proposed, setProposed] = useState<MemoryProposal[] | null>(null);
@@ -55,7 +58,7 @@ export function MemoryPanel({
     ["history", "History"],
   ];
   return (
-    <section className="space-y-3 border-t border-line pt-3" aria-label="More memory">
+    <section className="space-y-3 border-t border-line pt-3" aria-label={tx("More memory")}>
       <UpkeepCard agent={agent} onAgentChange={onAgentChange} onError={setError} onNotesChanged={onNotesChanged} />
       <div role="tablist" className="flex flex-wrap gap-1">
         {tabs.map(([id, label]) => (
@@ -92,6 +95,7 @@ export function MemoryPanel({
 type Open = { doc: TopicDoc; text: string; conflict: boolean; saved: string | null };
 
 function Topics({ agentId, onError }: { agentId: number; onError: (e: string | null) => void }) {
+  const tx = useUiText();
   const t = useT();
   const [list, setList] = useState<TopicList | null>(null);
   const [open, setOpen] = useState<Open | null>(null);
@@ -167,16 +171,14 @@ function Topics({ agentId, onError }: { agentId: number; onError: (e: string | n
     return (
       <div className="space-y-2">
         <p className="text-xs text-muted">
-          <span className="font-mono">memory/{open.doc.name}</span>
-          {open.doc.exists ? "" : " (new)"} · not loaded whole: the agent reads it when relevant, and matching passages
-          are recalled in front of a message. Start with front matter (<span className="font-mono">title:</span>,{" "}
-          <span className="font-mono">aliases:</span>) to give other words for the subject.
-        </p>
+          <span className="font-mono">{"memory/"}{open.doc.name}</span>
+          {open.doc.exists ? "" : tx(" (new)")} {tx("· not loaded whole: the bot reads it when relevant, and matching passages are recalled in front of a message. Start with front matter (")}{" "}<span className="font-mono">{tx("title:")}</span>,{" "}
+          <span className="font-mono">{tx("aliases:")}</span>{tx(") to give other words for the subject.")}</p>
         <textarea
           value={open.text}
           rows={10}
           onChange={(e) => setOpen({ ...open, text: e.target.value, saved: null })}
-          aria-label={`Topic note ${open.doc.name}`}
+          aria-label={tx("Topic note {name}", { name: open.doc.name })}
           placeholder={"---\ntitle: Travel\naliases: [trips, flights]\n---\n- Prefers aisle seats"}
           className={`${FIELD} resize-y font-mono`}
         />
@@ -185,26 +187,23 @@ function Topics({ agentId, onError }: { agentId: number; onError: (e: string | n
             <p>{t("agentTeam.topicNotesConflict")}</p>
             <div className="mt-2 flex gap-2">
               <button onClick={() => openTopic(open.doc.name)} disabled={busy} className={SMALL}>
-                Load its version
-              </button>
+                {tx("Load its version")}</button>
               <button onClick={() => save(true)} disabled={busy} className={SMALL}>
-                Overwrite with mine
-              </button>
+                {tx("Overwrite with mine")}</button>
             </div>
           </div>
         )}
         {open.saved && <p className="text-xs text-muted">{open.saved}</p>}
         <div className="flex flex-wrap gap-2">
           <button onClick={() => save(false)} disabled={busy || !dirty} className={PRIMARY_SMALL}>
-            {busy ? "Saving…" : "Save topic"}
+            {busy ? tx("Saving…") : tx("Save topic")}
           </button>
           <button onClick={() => setOpen(null)} disabled={busy} className={SMALL}>
-            {dirty ? "Discard" : "Back to topics"}
+            {dirty ? tx("Discard") : tx("Back to topics")}
           </button>
           {open.doc.exists && (
             <button onClick={remove} disabled={busy} className={SMALL}>
-              Delete (History can bring it back)
-            </button>
+              {tx("Delete (History can bring it back)")}</button>
           )}
         </div>
       </div>
@@ -214,7 +213,7 @@ function Topics({ agentId, onError }: { agentId: number; onError: (e: string | n
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted">
-        {t("agentTeam.topicListGuidance", { folder: list?.folder ?? "memory/" })}
+        {t("agentTeam.topicListGuidance", { folder: relativeReceipt(list?.folder ?? "memory/") })}
       </p>
       {list === null ? (
         <LoadingState rows={3} />
@@ -227,7 +226,7 @@ function Topics({ agentId, onError }: { agentId: number; onError: (e: string | n
               <button onClick={() => openTopic(t.name)} className="text-left text-sm hover:underline">
                 <span className="font-mono">{t.name}</span>
                 {t.title && <span className="text-muted"> — {t.title}</span>}
-                <span className="text-xs text-muted"> · {Math.max(1, Math.round(t.bytes / 1024))} KB</span>
+                <span className="text-xs text-muted"> · {Math.max(1, Math.round(t.bytes / 1024))} {"KB"}</span>
               </button>
             </li>
           ))}
@@ -240,13 +239,12 @@ function Topics({ agentId, onError }: { agentId: number; onError: (e: string | n
           onKeyDown={(e) => {
             if (e.key === "Enter") void create();
           }}
-          placeholder="New topic, e.g. travel"
-          aria-label="New topic name"
+          placeholder={tx("New topic, e.g. travel")}
+          aria-label={tx("New topic name")}
           className={FIELD}
         />
         <button onClick={create} disabled={!newName.trim()} className={SMALL}>
-          New topic
-        </button>
+          {tx("New topic")}</button>
       </div>
     </div>
   );
@@ -263,6 +261,7 @@ function Proposed({
   onError: (e: string | null) => void;
   onDone: () => void;
 }) {
+  const tx = useUiText();
   const [busy, setBusy] = useState<string | null>(null);
   const decide = async (p: MemoryProposal, accept: boolean) => {
     setBusy(p.id);
@@ -281,26 +280,22 @@ function Proposed({
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted">
-        Lines picked from your own messages once a conversation has been quiet for two minutes. Nothing is saved until
-        you accept it; a rejected line is not proposed again.
-      </p>
+        {tx("Lines picked from your own messages once a conversation has been quiet for two minutes. Nothing is saved until you accept it; a rejected line is not proposed again.")}</p>
       {items.length === 0 ? (
-        <p className="text-xs text-muted">Nothing proposed right now.</p>
+        <p className="text-xs text-muted">{tx("Nothing proposed right now.")}</p>
       ) : (
         <ul className="space-y-2">
           {items.map((p) => (
             <li key={p.id} className="rounded-md border border-line p-2 text-sm">
               <p className="font-mono text-xs break-words">{p.line}</p>
               <p className="mt-1 text-xs text-muted">
-                From “{p.thread_title || "a conversation"}” · would go to {p.target}
+                {tx("From “")}{" "}{p.thread_title || tx("a conversation")}{tx("” · would go to")}{" "}{p.target}
               </p>
               <div className="mt-2 flex gap-2">
                 <button onClick={() => decide(p, true)} disabled={busy !== null} className={PRIMARY_SMALL}>
-                  Accept
-                </button>
+                  {tx("Accept")}</button>
                 <button onClick={() => decide(p, false)} disabled={busy !== null} className={SMALL}>
-                  Reject
-                </button>
+                  {tx("Reject")}</button>
               </div>
             </li>
           ))}
@@ -319,6 +314,7 @@ function History({
   onError: (e: string | null) => void;
   onUndone: () => void;
 }) {
+  const tx = useUiText();
   const [rows, setRows] = useState<MemoryJournalRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [shown, setShown] = useState<string | null>(null);
@@ -354,11 +350,9 @@ function History({
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted">
-        Changes made here, by accepted proposals and by undo. Undo puts a file back the way it was before that change.
-        Edits the agent makes with its own file tools are not listed.
-      </p>
+        {tx("Changes made here, by accepted proposals and by undo. Undo puts a file back the way it was before that change. Edits the bot makes with its own file tools are not listed.")}</p>
       {rows.length === 0 ? (
-        <EmptyPanel title="No changes yet" description="Accepted proposals and undo actions are listed here." />
+        <EmptyPanel title={tx("No changes yet")} description={tx("Accepted proposals and undo actions are listed here.")} />
       ) : (
         <ul className="space-y-1">
           {rows.map((row) => (
@@ -368,17 +362,16 @@ function History({
                 <span className="text-muted">{new Date(row.at).toLocaleString()}</span>
                 {row.diff && (
                   <button onClick={() => setShown(shown === row.id ? null : row.id)} className="underline">
-                    {shown === row.id ? "Hide" : "Diff"}
+                    {shown === row.id ? tx("Hide") : tx("Diff")}
                   </button>
                 )}
                 {row.can_undo ? (
                   <button onClick={() => undo(row)} disabled={busy !== null} className={SMALL}>
-                    {busy === row.id ? "Undoing…" : "Undo"}
+                    {busy === row.id ? tx("Undoing…") : tx("Undo")}
                   </button>
                 ) : (
                   <span className="text-muted" title={row.reason ?? ""}>
-                    cannot be undone
-                  </span>
+                    {tx("cannot be undone")}</span>
                 )}
               </div>
               {shown === row.id && (

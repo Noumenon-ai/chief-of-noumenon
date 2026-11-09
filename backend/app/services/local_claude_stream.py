@@ -38,15 +38,22 @@ def _clip(text: str, limit: int) -> str:
 
 
 def _result_text(content) -> str:
+    # One character beyond the durable cap lets cap_tool_output mark truncation.
+    # Do not assemble unbounded snapshots just to keep a small preview.
+    remaining = 100_001
     if isinstance(content, str):
-        return content
+        return content[:remaining]
+    parts = []
     if isinstance(content, list):
-        return "".join(
-            part.get("text", "")
-            for part in content
-            if isinstance(part, dict) and isinstance(part.get("text"), str)
-        )
-    return ""
+        for part in content:
+            text = part.get('text') if isinstance(part, dict) else None
+            if isinstance(text, str):
+                text = text[:remaining]
+                parts.append(text)
+                remaining -= len(text)
+                if remaining == 0:
+                    break
+    return ''.join(parts)
 
 
 def summarize_tool(name: str, tool_input: dict) -> str:
@@ -66,6 +73,12 @@ def summarize_tool(name: str, tool_input: dict) -> str:
         label = f"{name[len('mcp__composio__'):].replace('_', ' ')} {where}{number}".strip()
         return _clip(f"{label}: {what}" if isinstance(what, str) and what else label, SUMMARY_CHARS)
     key = {
+        "api__shell": "command",
+        "api__read": "path",
+        "api__write": "path",
+        "api__edit": "path",
+        "api__glob": "pattern",
+        "api__grep": "text",
         "Bash": "command",
         "Read": "file_path",
         "Write": "file_path",
@@ -300,15 +313,16 @@ class StreamNormalizer:
             tool_use_id = block.get("tool_use_id")
             if not isinstance(tool_use_id, str):
                 continue
+            output = _result_text(block.get("content"))
             self._tool_events.append(
                 ToolEvent(
                     "tool_completed",
                     {
                         "tool_use_id": tool_use_id,
                         "is_error": bool(block.get("is_error")),
-                        "preview": _clip(_result_text(block.get("content")), RESULT_PREVIEW_CHARS),
+                        "preview": _clip(output, RESULT_PREVIEW_CHARS),
                     },
-                    extra={"output": _result_text(block.get("content"))},
+                    extra={"output": output},
                 )
             )
 

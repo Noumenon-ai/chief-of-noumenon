@@ -204,3 +204,28 @@ inbox/calendar. A five-minute cache shows when providers were checked and is
 invalidated for changed grants, owner, lead, timezone or day. These records
 perform no external writes and do not themselves trigger attention alerts.
 Live accounts and installed apps remain unqualified.
+
+### Settings and personal details
+
+General contains appearance, language, updates and the setup guide. Your day
+contains the time-zone list, quiet hours, briefs and reminders. Advanced groups
+contact aliases and post drafts and explains which app to connect first.
+Settings navigation wraps on phones so every page stays discoverable.
+
+A profile uses a display name chosen in the app, defaulting to “You”. The app
+never reads a host git name, email or operating-system username for a profile.
+It does not represent a local display name as an email account.
+
+The old hosted tasks page redirects to chat. Local computer setup no longer
+offers hosted Boat accounts. Apps puts connected accounts and bot access before
+its searchable, categorized catalog. The chat engine label omits a model when
+its actual identity is unknown. Full file paths remain in advanced fields or
+hover descriptions; approval content and commands remain available for review.
+
+Hebrew coverage now includes settings navigation, bot rail controls, file-panel
+headings, known approval fields, app-picker controls and phone setup. Specialist
+forms and some engine/provider status messages still use English. This includes
+Apps and More tools, the bot editor and its Notes and Skills forms, routine and
+planner editors, profile statistics, notification settings and advanced engine
+configuration. Chat errors now offer a retry when the computer cannot be reached;
+a failed notification save keeps the previous preference and reports the failure.

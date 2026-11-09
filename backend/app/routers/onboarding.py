@@ -200,3 +200,13 @@ async def first_reply(body: FirstReplyBody, rt: ThreadRuntime = Depends(get_runt
     except state_store.VersionConflict:
         raise _conflict() from None
     return await _response(rt, state)
+
+
+@router.post("/detect")
+async def detect_first_run(rt: ThreadRuntime = Depends(get_runtime)):
+    from app.services.first_run import detect
+    state, choices = await detect(rt)
+    result = await _response(rt, state)
+    result['ready_choices'] = choices
+    result['auto_created'] = bool(state and state.get('auto_created'))
+    return result

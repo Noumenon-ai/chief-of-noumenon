@@ -128,7 +128,7 @@ export function TemplateSkillChoices({
 }) {
   return (
     <fieldset className="text-xs text-muted">
-      <legend>Suggested skills (added after the agent is created)</legend>
+      <legend>Suggested skills (added after the bot is created)</legend>
       <ul className="mt-1 space-y-1">
         {skills.map((skill) => (
           <li key={skill.name}>

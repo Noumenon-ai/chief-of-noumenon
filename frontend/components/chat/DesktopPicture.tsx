@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, type Computer } from "@/lib/api";
 
-export function DesktopPicture({ computer }: { computer: Computer }) {
+export function DesktopPicture({ computer, onStart, busy }: { computer: Computer; onStart?: () => void; busy?: boolean }) {
   const [picture, setPicture] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -43,10 +43,10 @@ export function DesktopPicture({ computer }: { computer: Computer }) {
       <span>{running ? "Desktop preview" : "Start the computer to see its screen"}</span>
       <button className="rounded border border-line px-2 py-1" onClick={() => setExpanded(!expanded)}>{expanded ? "Exit full screen" : "Full screen"}</button>
     </div>
-    <div role="img" aria-label={running ? "Desktop screen preview" : "Desktop stopped"} className="relative flex aspect-[16/10] min-h-0 items-center justify-center overflow-hidden rounded border border-line bg-black">
+    <div aria-label={running ? "Desktop screen preview" : "Desktop stopped"} className="relative flex aspect-[16/10] min-h-0 items-center justify-center overflow-hidden rounded border border-line bg-black">
       {/* Blob URLs require a normal image rather than Next image optimization. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {picture && running ? <img src={picture} alt="Current desktop" className="h-full w-full object-contain" /> : <p className="p-4 text-sm text-white">{running ? "The desktop is starting…" : "Computer stopped"}</p>}
+      {picture && running ? <img src={picture} alt="Current desktop" className="h-full w-full object-contain" /> : <div className="space-y-3 p-4 text-center text-sm text-white"><p>{running ? "The desktop is starting…" : "Computer stopped"}</p>{!running && onStart && <button className="min-h-11 rounded-field bg-accent px-5 text-accent-fg" disabled={busy} onClick={onStart}>{busy ? "Starting…" : "Start"}</button>}</div>}
     </div>
     {error && <p role="status" className="text-xs text-warning">{error}</p>}
   </section>;

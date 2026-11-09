@@ -1,6 +1,6 @@
 # Authentication: owner, sessions and paired devices
 
-Open Duet runs agents with access to your machine, so the server must know who
+Chief of Noumenon runs agents with access to your machine, so the server must know who
 is asking. This document is the design and the operating guide for a
 self-hosted, single-owner install. The desktop app requires an app account as
 well as its local launch-token boundary (see Desktop app below).
@@ -196,11 +196,11 @@ id) in the browser's `localStorage` and send it with each request; the server
 believed it. Now the identity is stored on the owner row and returned by
 `GET /api/v1/auth/session` as `user_id`:
 
-- **Telegram:** the link-code flow is unchanged (the bot claims the code), but
-  the page then calls `PUT /api/v1/auth/identity {"link_code": …}` and the
-  server copies the user id from the link record it saw claimed (within an
-  hour). The browser no longer supplies the id.
-- **Continue without Telegram:** `PUT /api/v1/auth/identity {"guest": true}`;
+- **Legacy Telegram identities:** existing identities and already-claimed link
+  records remain readable. New Telegram linking is no longer offered. The
+  compatibility `PUT /api/v1/auth/identity {"link_code": …}` still requires a
+  record claimed within an hour; the browser cannot supply an arbitrary id.
+- **Continue to tasks:** `PUT /api/v1/auth/identity {"guest": true}`;
   the server makes the `web_…` id.
 - **Start over:** `DELETE /api/v1/auth/identity`.
 
@@ -293,3 +293,21 @@ shutdown. Flow state lives in one backend worker; refreshing Settings loses
 the handle, and multiple workers require session affinity. Signing out and
 switching accounts remain terminal operations. Real-account, Windows and
 installed-app verification have not been run for this flow.
+
+## Telegram owner boundary
+
+The Telegram poller accepts only the positive `TELEGRAM_OWNER_ID` in that same
+private chat. It sends alerts and accepts bound approval buttons only.
+Incoming messages and media never start turns or download files. Approval buttons can decide only their one
+pending approval. Telegram cannot change modes, saved grants or Settings.
+Neither a message nor an attachment caption grants authority. See
+[TELEGRAM.md](TELEGRAM.md) for setup and recovery behavior.
+
+Claude authentication belongs to the official CLI's terminal flow. The app
+uses CLI status detection; it does not inspect a credential file, copy OAuth
+credentials from Boat, or decrypt credentials left by the removed legacy
+Claude sign-in flow. Other providers' API-key storage is unchanged.
+
+The legacy desktop account sign-in endpoint belongs to the upstream hosted
+service, not to Chief of Noumenon. Its screen identifies that separate service.
+The self-hosted web app uses the local owner passphrase described above.

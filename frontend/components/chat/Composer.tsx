@@ -7,9 +7,13 @@ import { isLongPaste, isSendKey, livePastes, removePaste } from "@/lib/composer"
 import { loadDraft, saveDraft } from "@/lib/drafts";
 import { useT } from "@/lib/use-i18n";
 import { MAX_SKILLS_PER_MESSAGE, skillCompletions, type SkillSummary } from "@/lib/skills";
+import { Menu, MenuItem } from "@/components/ui/Menu";
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { PendingAttachments } from "./Attachments";
+import { VoiceRecorder, type VoiceRecorderHandle } from "./VoiceRecorder";
+import type { VoicePhase } from "@/lib/voice-session";
+import { AppPicker } from "./AppPicker";
 
 const MAX_HEIGHT_PX = 200;
 
@@ -36,6 +40,7 @@ export function Composer({
   chosenSkills = [],
   onToggleSkill,
   onSaveAsSkill,
+  onAudioLink,
   draftKey = null,
 }: {
   value: string;
@@ -70,11 +75,29 @@ export function Composer({
   onToggleSkill?: (name: string) => void;
   // Opens the skill editor seeded from this conversation. Sends and saves nothing.
   onSaveAsSkill?: () => void;
+  onAudioLink?: () => void;
   // Identifies the conversation (its id, or "new"). With it the unsent text is kept per
   // conversation and put back when you return. Without it nothing is stored.
   draftKey?: string | null;
 }) {
   const t = useT();
+  const [appPickerOpen, setAppPickerOpen] = useState(false);
+  const voice = useRef<VoiceRecorderHandle>(null);
+  const [voiceState, setVoiceState] = useState<{ key: string | null; phase: VoicePhase }>({ key: draftKey, phase: "idle" });
+  const voicePhase = voiceState.key === draftKey ? voiceState.phase : "idle";
+  const pendingVoiceSend = useRef<{ key: string | null; text: string } | null>(null);
+  // Wait for the parent to render the final draft before invoking its send
+  // callback, which reads that draft. Consume first, including in Strict Mode.
+  useEffect(() => {
+    const pending = pendingVoiceSend.current;
+    if (!pending) return;
+    if (pending.key !== draftKey || sending || running || blockedReason !== null) {
+      pendingVoiceSend.current = null;
+    } else if (pending.text === value) {
+      pendingVoiceSend.current = null;
+      onSend();
+    }
+  }, [value, draftKey, sending, running, blockedReason, onSend, voicePhase]);
   const box = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -104,7 +127,7 @@ export function Composer({
   // A changed query or available list starts at the first result, even after Escape.
   const menuContext = JSON.stringify([value, completions.map((s) => s.name)]);
   const activeIndex = menu.context === menuContext ? Math.min(menu.index, Math.max(0, completions.length - 1)) : 0;
-  const slashOpen = focused && !sending && !pickerOpen && !!onToggleSkill && /^\/[a-z0-9-]*$/.test(value)
+  const slashOpen = voicePhase === "idle" && focused && !sending && !pickerOpen && !!onToggleSkill && /^\/[a-z0-9-]*$/.test(value)
     && !(menu.context === menuContext && menu.dismissed);
   const activeOption = slashOpen && completions.length > 0 ? `${menuId}-${activeIndex}` : undefined;
   const dismissMenu = () => setMenu({ context: menuContext, index: activeIndex, dismissed: true });
@@ -121,20 +144,36 @@ export function Composer({
     onFocused?.();
   }, [focusRequested, onFocused]);
 
-  // Grows with the text up to a limit.
+  // Placeholder changes and narrower panels can wrap onto another line too.
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT_PX)}px`;
-  }, [value]);
+    const resize = () => {
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT_PX)}px`;
+    };
+    resize();
+    let width = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      resize();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [value, blockedReason, t]);
 
-  const canSend = !sending && blockedReason === null && value.trim() !== "";
+  const canSend = !sending && !running && blockedReason === null && (voicePhase === "recording" || (voicePhase === "idle" && value.trim() !== ""));
+  const send = () => {
+    if (!canSend) return;
+    if (voicePhase === "recording") voice.current?.stopAndSend();
+    else onSend();
+  };
   const carriesFiles = (types: readonly string[]) => types.includes("Files");
 
   return (
     <div
-      className="shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-6"
+      className="chat-composer shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-6"
       onDragOver={(e) => {
         if (!onAddFiles || !carriesFiles(Array.from(e.dataTransfer.types))) return;
         e.preventDefault();
@@ -151,12 +190,20 @@ export function Composer({
       <div className="mx-auto max-w-3xl">
         {error && <p role="alert" className="mb-2 text-sm text-danger">{error}</p>}
         {attachNotice && <p role="status" className="mb-2 text-sm text-warning">{attachNotice}</p>}
+          <AppPicker value={value} onChange={onChange} expanded={appPickerOpen} onClose={() => setAppPickerOpen(false)} />
         <div
           className={cn(
             "flex flex-col rounded-2xl border bg-raised p-2 shadow-sm transition-colors duration-(--dur-fast) focus-within:border-accent/60",
             dragging ? "border-accent bg-accent/10" : "border-line",
           )}
         >
+          <VoiceRecorder key={draftKey} ref={voice} draft={value} disabled={sending}
+            onDraft={onChange} onPhase={phase => setVoiceState({ key: draftKey, phase })}
+            onFinal={(text, send) => {
+              if (send) pendingVoiceSend.current = { key: draftKey, text };
+              onChange(text);
+            }} />
+          {/(?:api[_-]?key|token|password)\s*[:=]|\b(?:sk-|ghp_|github_pat_|xoxb-|lin_api_|ntn_|sk_live_|sk_test_)/i.test(value) && <p role="alert" className="m-2 text-sm text-danger">This may contain a credential. Remove it and use the Apps page. Rotate any key you already shared; credentials must not be saved in notes.</p>}
           {onRemoveFile && files.length > 0 && (
             <div className="px-2 pt-1 pb-1">
               <PendingAttachments files={files} onRemove={onRemoveFile} disabled={sending} />
@@ -256,6 +303,7 @@ export function Composer({
               aria-controls={activeOption ? menuId : undefined}
               aria-activedescendant={activeOption}
               onPaste={(e) => {
+                if (voicePhase !== "idle") { e.preventDefault(); return; }
                 const pasted = Array.from(e.clipboardData.files);
                 if (pasted.length === 0) {
                   const text = e.clipboardData.getData("text");
@@ -297,19 +345,21 @@ export function Composer({
                 }
                 if (isSendKey({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing, keyCode: e.nativeEvent.keyCode })) {
                   e.preventDefault();
-                  if (canSend) onSend();
+                  send();
                 }
               }}
+              readOnly={voicePhase === "recording" || voicePhase === "transcribing"}
               rows={1}
               placeholder={blockedReason ?? t("composer.placeholder")}
               aria-label={t("composer.label")}
-              className="block w-full max-h-52 min-h-11 resize-none bg-transparent px-2.5 pt-1.5 pb-1 text-[15px] leading-relaxed text-ink outline-none placeholder:text-faint focus-visible:outline-none"
+              className="voice-composer-input block w-full max-h-52 min-h-11 resize-none bg-transparent px-2.5 pt-1.5 pb-1 text-[15px] leading-relaxed text-ink outline-none placeholder:text-faint focus-visible:outline-none"
             />
           </div>
 
           {/* Action Toolbar */}
           <div className="flex items-center justify-between gap-2 px-1 pt-1">
             <div className="flex items-center gap-1">
+          <button type="button" className="app-mention" aria-expanded={appPickerOpen} aria-label={t("composer.chooseApp")} onClick={() => setAppPickerOpen(open => !open)}>@app</button>
               {onAddFiles && (
                 <>
                   <input
@@ -325,17 +375,11 @@ export function Composer({
                       e.target.value = "";
                     }}
                   />
-                  <Tooltip content={t("composer.attach")}>
-                    <button
-                      type="button"
-                      onClick={() => picker.current?.click()}
-                      disabled={sending}
-                      aria-label={t("composer.attachButton")}
-                      className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted transition-colors duration-(--dur-fast) hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 touch:size-10"
-                    >
-                      <Paperclip size={18} aria-hidden="true" />
-                    </button>
-                  </Tooltip>
+                  <Menu trigger={<button type="button" disabled={sending} aria-label={t("composer.attachButton")} className="inline-flex size-11 items-center justify-center rounded-full text-muted hover:bg-hover"><Paperclip size={18} aria-hidden="true" /></button>}>
+                    <MenuItem onSelect={() => picker.current?.click()}>Attach files</MenuItem>
+                    {onAudioLink && <MenuItem onSelect={onAudioLink}>{t("chat.audioLink")}</MenuItem>}
+                    {onSaveAsSkill && <MenuItem onSelect={onSaveAsSkill}>{t("composer.saveSkill")}</MenuItem>}
+                  </Menu>
                 </>
               )}
               {onToggleSkill && (
@@ -375,7 +419,7 @@ export function Composer({
                   <span>
                     <button
                       type="button"
-                      onClick={onSend}
+                      onClick={send}
                       disabled={!canSend}
                       aria-label={t("composer.sendMessage")}
                       className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-accent text-accent-fg shadow-xs transition-all duration-(--dur-fast) hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 touch:size-10"
@@ -388,13 +432,6 @@ export function Composer({
             </div>
           </div>
         </div>
-        {onSaveAsSkill && (
-          <div className="mt-1 flex justify-end px-3">
-            <button type="button" onClick={onSaveAsSkill} className="cursor-pointer text-xs text-muted underline-offset-2 hover:text-ink hover:underline">
-              {t("composer.saveSkill")}
-            </button>
-          </div>
-        )}
         {blockedAction && blockedReason && (
           <div className="mt-2 px-3">
             <Button variant="primary" size="sm" onClick={blockedAction.onClick}>{blockedAction.label}</Button>

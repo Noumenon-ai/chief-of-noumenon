@@ -96,9 +96,9 @@ async def test_reply_to_finished_ancestor_observes_conversation(
 ):
     """Actual REST writes/reads, installed SDK over TCP and disposable Postgres."""
     await user_credential_service.save_token(
-        db_session, user_id=user_id, provider='claude',
-        file_path='.claude/.credentials.json',
-        plaintext=json.dumps({'claudeAiOauth': {'expiresAt': 1, 'accessToken': 'owned-fixture'}}),
+        db_session, user_id=user_id, provider='github',
+        file_path='.config/gh/hosts.yml',
+        plaintext=json.dumps({'syntheticGithub': {'expiresAt': 1, 'accessToken': 'owned-fixture'}}),
     )
     base_url, state = conversation_boat_api
     monkeypatch.setattr(settings, 'BOAT_BASE_URL', base_url)

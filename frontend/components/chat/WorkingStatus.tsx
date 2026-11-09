@@ -35,7 +35,7 @@ export function WorkingStatus({ phase, turnId }: { phase: WorkingPhase; turnId: 
   return (
     <p className="flex items-center gap-2 text-xs text-muted" role="status" aria-label={label}>
       {waiting ? (
-        <Clock size={13} aria-hidden="true" className="text-warning" />
+        <Clock size={13} aria-hidden="true" className="text-signal" />
       ) : (
         <Loader2 size={13} aria-hidden="true" className="animate-spin text-faint motion-reduce:animate-none" />
       )}

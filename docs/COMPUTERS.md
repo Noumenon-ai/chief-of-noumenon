@@ -1,7 +1,7 @@
 # Agent computers
 
 An agent can have its own computer: an isolated machine where its turns run
-their commands and file edits instead of on the machine running Open Duet.
+their commands and file edits instead of on the machine running Chief of Noumenon.
 Local Docker computers can be a shell or an isolated Linux desktop with screen
 tools, live viewing and takeover. In the Desktop app, a person can also choose
 a Boat cloud computer. Cloud computers have internet access, use a separate
@@ -142,7 +142,21 @@ last parts (30,000 characters).
 
 ### The default image, and choosing another
 
-The default is `python:3.12-slim-bookworm`, pinned by digest (Debian 12 with
+The app defaults to a desktop with browser tools and Internet enabled. Internet
+uses Docker bridge networking and can also reach the host network and LAN; it
+is separate from the engine turn egress gate. Blocking a connected app does
+not block its website. Signed-in sessions on a bot computer are available to
+that bot. Each bot has a distinct container and a browser profile outside the
+shared workspace.
+
+Give it a computer is one action. If the desktop image is missing, use
+**Build bundled desktop image** in the panel. The owner-only endpoint runs
+`docker build --progress=plain -t open-dots-desktop:local desktop-image` with a
+fixed repository context, accepts no build arguments, and reports bounded
+progress and the actual exit outcome. No turn may start a build. Docker must
+be installed and running.
+
+The lower-level shell API default remains `python:3.12-slim-bookworm`, pinned by digest (Debian 12 with
 bash, coreutils, Python 3.12 and pip; about 45 MB to download). It has no git
 and the agent is not root, so it cannot `apt-get install`. To use another
 image:
@@ -166,38 +180,46 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 
 ## How a turn reaches the computer
 
-```text
-ThreadRuntime ── attach (start if needed, lease) ──> ComputerService ──> DockerProvider ──> docker
-     │
-ClaudeAdapter ── claude -p --tools "" --strict-mcp-config
-     │               --permission-prompt-tool stdio
-     │               --mcp-config {"mcpServers": {"computer": …}}
-     │
-     ├─ can_use_tool(mcp__computer__exec, input) ──> approval gate ──> card / rule / automatic answer
-     │         on Allow: write a one-use permit for exactly that tool and input
-     │
-claude CLI ── tools/call ──> computer MCP server (python -m app.computers.mcp_server)
-                                 removes the matching permit, else refuses
-                                 docker exec … in the agent's container
-```
+The Claude or Codex engine runs in the default turn sandbox and starts a
+credential-free `app.computers.mailbox` MCP shim. Only a turn-scoped mailbox
+is mounted into the sandbox. The shim has no container connection, Docker
+configuration, state path or permit path. The backend `ComputerBridge` reads
+requests through the same bounded mailbox transport as connected apps.
 
-- The turn's CLI gets no host tools at all (`--tools ""`) and one MCP server,
-  `computer`, with four tools: `exec`, `read_file`, `write_file`,
-  `list_files`. `--strict-mcp-config` keeps every other MCP server out. Checked
-  with Claude Code 2.1.302: the session reports exactly the four
-  `mcp__computer__*` tools, and a call is put to the app through the
-  permission prompt before it runs.
-- **Permits.** On Allow, the adapter writes a permit file for exactly that tool
-  and those arguments into a private folder for the turn (in the data folder,
-  outside every workspace, never mounted). The MCP server runs a call only
-  after it removed a matching permit. So a call the gate never saw cannot run,
-  even if the CLI were configured not to ask, and an approval is spent once.
-  Permits older than 15 minutes are ignored, and the folder is removed when the
-  turn ends.
-- The agent is told it works on its own computer, that its folder is
-  `/workspace` there, and that every call needs approval.
-- The packaged desktop app starts the MCP server through its own executable
-  (`--computer-mcp`), since it has no separate Python.
+The normal approval gate records a decision and issues an exact one-use
+permit. Before execution the backend checks the live turn ownership, the
+exact tool and arguments, the delivered approval, its 15-minute expiry and
+unspent state. It consumes the permit and records `consumed_at`, then runs the
+existing computer server's validation, takeover, screen lease, freshness and
+action-budget checks on the backend. Wrong arguments and replay cannot run.
+Docker sockets and computer state are never mounted in a turn; the sandbox
+also masks the Docker CLI found on the turn's PATH. No approval/grant tool is
+exposed to a model.
+
+Both the filesystem sandbox and its network gate remain enabled. If the
+sandbox cannot start, the engine fails with the existing explicit error;
+there is no host fallback. With sandboxing explicitly off, the setting's
+existing warning applies, and computer calls still use the backend bridge.
+The packaged desktop uses `--computer-mailbox` for its child shim.
+
+`api_tools.py` supports the same computer launch and gate while removing host
+workspace tools for a computer turn. Engine capability flags remain the
+source of truth; the currently unsupported API/local configurations explicitly
+say to use Claude or Codex.
+
+### Hand-off
+
+Docker desktop computers expose `request_handoff(reason)`. It requests no
+permission to act: a durable Continue/Cancel card pauses the tool at the gate
+and emits a `needs_input` notification. The person takes control in the live
+Computer panel, signs in or completes a CAPTCHA, QR, passkey or confirmation,
+then presses Continue. Continue revokes viewer input across web and Telegram backend processes and
+waits for the live view to release its control hold. The tool returns only
+that the person finished, never takeover input. A fresh observation is required.
+The wait expires after ten minutes with an explicit incomplete message. Cancel
+refuses the hand-off and tells the agent not to continue it. Cards use the same
+owner checks and one-use decision as other waiting cards. No password store,
+vault, automatic password login or Secure Form is supplied.
 
 ### Approvals
 
@@ -259,10 +281,10 @@ sends it to Boat's API over HTTPS for authentication; the key is not included in
 agent turns or sent to the cloud computer. Commands and files go to the cloud
 computer. Screenshots can be returned to the selected engine when the agent
 requests them. No local workspace is mounted into or synced with the cloud
-machine. The live desktop view uses a secret provider URL. Open Dots clears it
+machine. The live desktop view uses a secret provider URL. Chief of Noumenon clears it
 from the view when control is handed back, but Boat does not expose a URL
 revocation endpoint. Remove all cloud computers before resetting or deleting
-the Desktop profile. Boat deletion is accepted asynchronously; Open Dots keeps
+the Desktop profile. Boat deletion is accepted asynchronously; Chief of Noumenon keeps
 the local computer record and blocks profile reset until Boat reports deletion
 complete. The resources may incur charges until removed or archived.
 

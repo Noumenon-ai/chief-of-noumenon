@@ -1,4 +1,4 @@
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Bot
 from telegram.error import TelegramError
 
 from app.core.config import settings
@@ -16,43 +16,17 @@ def telegram_chat_id(user_id: str) -> int | None:
 
 
 async def send_telegram_message(chat_id: int, text: str) -> bool:
-    if not settings.TELEGRAM_BOT_TOKEN:
+    if not settings.TELEGRAM_BOT_TOKEN or str(chat_id) != settings.TELEGRAM_OWNER_ID:
         return False
     try:
         async with Bot(token=settings.TELEGRAM_BOT_TOKEN) as bot:
             await bot.send_message(chat_id=chat_id, text=text)
         return True
     except TelegramError:
-        logger.exception("failed to send telegram message", chat_id=chat_id)
+        logger.warning("telegram_delivery_failed")
         return False
 
 
 async def send_permission_ask(chat_id: int, ask: PermissionAsk) -> bool:
-    """Notify a user that a task is waiting on a permission decision, with
-    inline buttons that answer it directly from this message. The callback
-    data encodes everything telegram_bot.py's handler needs to resolve it:
-    "ask:<id>:<decision>:<always 0|1>"."""
-    if not settings.TELEGRAM_BOT_TOKEN:
-        return False
-
-    what = ask.tool or ask.connector or ask.bucket
-    text = (
-        f"Task #{ask.task_id} wants to use: {what} (bucket: {ask.bucket}).\n"
-        "Allow it?"
-    )
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("Allow once", callback_data=f"ask:{ask.id}:allow:0"),
-                InlineKeyboardButton("Always allow", callback_data=f"ask:{ask.id}:allow:1"),
-            ],
-            [InlineKeyboardButton("Deny", callback_data=f"ask:{ask.id}:deny:0")],
-        ]
-    )
-    try:
-        async with Bot(token=settings.TELEGRAM_BOT_TOKEN) as bot:
-            await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard)
-        return True
-    except TelegramError:
-        logger.exception("failed to send permission ask", chat_id=chat_id, ask_id=ask.id)
-        return False
+    """Legacy Boat approvals stay in the app; the owner channel sends runtime cards."""
+    return False

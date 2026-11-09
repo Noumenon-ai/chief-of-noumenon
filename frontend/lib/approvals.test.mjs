@@ -50,12 +50,14 @@ test('rule words', () => {
   assert.equal(ruleCommand(null), '');
   assert.equal(ruleMatchLabel({ match: 'prefix' }), 'Starts with');
   assert.equal(ruleMatchLabel({ match: 'exact' }), 'Exactly');
-  assert.equal(ruleScopeLabel({ workspace: '/w' }), 'In /w');
+  assert.equal(ruleScopeLabel({ workspace: '/w' }), 'In w');
   assert.equal(ruleScopeLabel({ workspace: null }), 'In every folder');
 });
 
 test('only a shell command with text can be always allowed', () => {
   assert.equal(canAlwaysAllow('Bash', { command: 'ls' }), true);
+  assert.equal(canAlwaysAllow('api__shell', { command: 'ls' }), true);
+  assert.equal(canAlwaysAllow('api__write', { command: 'ls' }), false);
   assert.equal(canAlwaysAllow('Bash', { command: '  ' }), false);
   assert.equal(canAlwaysAllow('Bash', {}), false);
   assert.equal(canAlwaysAllow('Write', { command: 'ls' }), false);

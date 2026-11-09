@@ -308,9 +308,8 @@ async def start_task(db: AsyncSession, task_id: int) -> Tasks:
         )
         await release_snapshot(db)  # the box calls below are slow
         await _ensure_box_running(task.box_id)
-        await user_credential_service.inject_credential_into_box(
-            db, box_id=task.box_id, user_id=task.user_id, provider=task.provider
-        )
+        # The official Claude CLI owns its login on the computer. This app
+        # never reads or injects a Claude credential file.
         try:
             await user_credential_service.inject_credential_into_box(
                 db, box_id=task.box_id, user_id=task.user_id, provider="github"
@@ -689,17 +688,6 @@ async def sync_task_status(db: AsyncSession, task: Tasks) -> Tasks:
         .values(**values)
     )
     await db.commit()
-
-    # The CLI may have renewed its login during the run; keep that renewal
-    # even if the box is replaced before the next task.
-    if applied.rowcount and values["status"] in FINISHED_STATUSES:
-        try:
-            await user_credential_service.pull_renewed_credential_from_box(
-                db, box_id=task.box_id, user_id=task.user_id, provider=task.provider
-            )
-        except Exception:
-            await db.rollback()
-            logger.exception("failed to pull renewed credential", task_id=task.id)
 
     return await _reload(db, task.id)
 

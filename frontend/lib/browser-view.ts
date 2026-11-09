@@ -87,11 +87,11 @@ export function retryDelayMs(attempt: number, notRunning = false): number {
 
 export function viewNote(state: ViewState): string {
   switch (state) {
-    case "waiting": return "The agent's browser is not running right now. It opens when the agent next uses it.";
-    case "starting": return "Connecting to the agent's browser…";
-    case "watching": return "Watching the agent's browser. The agent keeps working.";
+    case "waiting": return "The bot's browser is not running right now. It opens when the bot next uses it.";
+    case "starting": return "Connecting to the bot's browser…";
+    case "watching": return "Watching the bot's browser. The bot keeps working.";
     case "taking": return "Taking control…";
-    case "driving": return "You are in control of the browser. The agent's browser calls wait until you hand control back.";
+    case "driving": return "You are in control of the browser. The bot's browser calls wait until you hand control back.";
     case "lost": return "Connection lost. Reconnect within 20 seconds to keep control.";
   }
 }

@@ -18,8 +18,8 @@ export function SettingsCard({
 }) {
   return (
     <section aria-label={title} className={cn("rounded-card border border-line bg-raised p-5 shadow-card", className)}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:flex-wrap">
+        <div className="min-w-0 w-full sm:w-auto sm:flex-1">
           <h3 className="text-title font-semibold">{title}</h3>
           {description ? <p className="mt-1 text-caption text-muted">{description}</p> : null}
         </div>

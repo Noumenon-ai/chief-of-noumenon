@@ -1,4 +1,7 @@
 "use client";
+import { useT as useUiText } from "@/lib/use-i18n";
+import { auth } from "@/lib/auth";
+import { SandboxStatus } from "@/components/SandboxStatus";
 
 import { useEffect, useState } from "react";
 import { api, ApiError, isLaunchTokenMissing, type ApplicationSetting, type DesktopSettings } from "@/lib/api";
@@ -51,6 +54,7 @@ const display = (value: unknown) => value === null || value === undefined ? "Una
 const applies = (row: ApplicationSetting) => row.key === "LOCAL_WORKSPACE_ROOT" ? "New conversations" : row.key === "LOCAL_APPROVAL_TIMEOUT_SECONDS" ? "New approvals" : row.applies === "next_run" ? "Next turn" : row.applies === "restart" ? "After restart" : "Immediately";
 
 export function EnginesSettings() {
+  const tx = useUiText();
   const [data, setData] = useState<DesktopSettings | null>(null);
   const [drafts, setDrafts] = useState<Record<string, unknown>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
@@ -66,7 +70,11 @@ export function EnginesSettings() {
 
   useEffect(() => {
     let cancelled = false;
-    api.getDesktopSettings().then((value) => {
+    auth.status().then(async (status) => {
+      if (!status.desktop) { if (!cancelled) setHeadless(true); return null; }
+      return api.getDesktopSettings();
+    }).then((value) => {
+      if (!value) return;
       if (cancelled) return;
       setData(value);
       setHeadless(false);
@@ -75,7 +83,7 @@ export function EnginesSettings() {
     }).catch((err: unknown) => {
       if (cancelled) return;
       if (err instanceof ApiError && err.status === 404) { setHeadless(true); setError(null); }
-      else setError(isLaunchTokenMissing(err) ? "Open Settings inside the Open Duet app window." : err instanceof ApiError ? err.message : "Could not reach the backend. Check that the app is running.");
+      else setError(isLaunchTokenMissing(err) ? "Open Settings inside the Chief of Noumenon app window." : err instanceof ApiError ? err.message : "Could not reach the backend. Check that the app is running.");
     });
     return () => { cancelled = true; };
   }, [loadTick]);
@@ -137,7 +145,7 @@ export function EnginesSettings() {
   };
 
   return <div className="space-y-6" data-setting-root>
-      <div className="sr-only" aria-label="Engine setting anchors">
+      <div className="sr-only" aria-label={tx("Engine setting anchors")}>
         <span id="setting-engine-claude-executable" />
         <span id="setting-engine-workspace-root" />
         <span id="setting-engine-local-tools" />
@@ -145,12 +153,13 @@ export function EnginesSettings() {
         <span id="setting-engine-approval-timeout" />
         <span id="setting-engine-output-limit" />
       </div>
-      {error && <Banner tone="danger" action={!headless ? <Button size="sm" onClick={() => setLoadTick((n) => n + 1)}>Try again</Button> : undefined}>{error}</Banner>}
-      {headless && <p className="text-sm text-muted">Workspace, executable and timeout preferences use the backend environment configuration in this installation.</p>}
+      {error && <Banner tone="danger" action={!headless ? <Button size="sm" onClick={() => setLoadTick((n) => n + 1)}>{tx("Try again")}</Button> : undefined}>{error}</Banner>}
+      <SandboxStatus problemsOnly />
+      <details className="text-sm"><summary className="min-h-11 cursor-pointer py-3">{tx("Advanced")}</summary><SandboxStatus />{headless && <><p className="mt-2 text-muted">{tx("Folder, program path and timeout preferences are managed in the server configuration.")}</p></>}</details>
       {!data && !error && !headless && <SkeletonList rows={4} />}
-      {!headless && data && <Button disabled={busy !== null} onClick={() => setLoadTick((n) => n + 1)}>Reload saved settings</Button>}
+      {!headless && data && <Button disabled={busy !== null} onClick={() => setLoadTick((n) => n + 1)}>{tx("Reload saved settings")}</Button>}
       {data && !settingUp && <>
-        <SettingsCard title="Claude Code" className="space-y-5">
+        <SettingsCard title={"Claude Code"} className="space-y-5">
           {data.settings.map((row) => {
             const field = fields[row.key];
             if (!field) return null;
@@ -158,16 +167,16 @@ export function EnginesSettings() {
             const dirty = JSON.stringify(value) !== JSON.stringify(row.value);
             const formId = `local-setting-${row.key}`;
             return <form key={row.key} id={formId} data-setting-id={settingAnchors[row.key]} onSubmit={(event) => { event.preventDefault(); void save(row); }} className="space-y-2 border-b border-line pb-5 last:border-0 last:pb-0">
-              <label htmlFor={row.key} className="block text-sm font-medium">{field.label}</label>
+              <label htmlFor={row.key} className="block text-sm font-medium">{tx(field.label)}</label>
               <div className="flex items-center gap-2">
-                {field.type === "checkbox" ? <Checkbox id={row.key} label="On" disabled={busy !== null} checked={value === true} onChange={(event) => void saveInstant(row, event.target.checked)} /> : <Input id={row.key} disabled={busy !== null} type={field.type === "number" ? "number" : "text"} min={field.min} max={field.max} step={1} required={field.type === "number"} value={field.type === "number" ? typeof value === "number" ? value : "" : typeof value === "string" ? value : ""} onChange={(event) => { setDrafts((previous) => ({ ...previous, [row.key]: field.type === "number" ? event.target.value === "" ? null : Number(event.target.value) : event.target.value })); setRowErrors((previous) => ({ ...previous, [row.key]: "" })); confirmation.clearSaved(row.key); }} autoComplete="off" spellCheck={false} />}
-                {(field.type === "file" || field.type === "folder") && <Button aria-label={`Browse ${field.label}`} disabled={busy !== null} onClick={() => browse(row)}>Browse</Button>}
+                {field.type === "checkbox" ? <Checkbox id={row.key} label={tx("On")} disabled={busy !== null} checked={value === true} onChange={(event) => void saveInstant(row, event.target.checked)} /> : <Input id={row.key} disabled={busy !== null} type={field.type === "number" ? "number" : "text"} min={field.min} max={field.max} step={1} required={field.type === "number"} value={field.type === "number" ? typeof value === "number" ? value : "" : typeof value === "string" ? value : ""} onChange={(event) => { setDrafts((previous) => ({ ...previous, [row.key]: field.type === "number" ? event.target.value === "" ? null : Number(event.target.value) : event.target.value })); setRowErrors((previous) => ({ ...previous, [row.key]: "" })); confirmation.clearSaved(row.key); }} autoComplete="off" spellCheck={false} />}
+                {(field.type === "file" || field.type === "folder") && <Button aria-label={tx("Browse {name}", { name: tx(field.label) })} disabled={busy !== null} onClick={() => browse(row)}>{tx("Browse")}</Button>}
               </div>
-              <p className="text-xs text-muted">{field.help}{field.type === "number" ? ` Range: ${field.min}–${field.max}.` : ""}</p>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted"><span className="rounded bg-inset px-2 py-1">Source: {row.source}</span><Applies when={applies(row)} /></div>
-              <p className="break-all text-xs text-muted">Effective: {display(row.effective_value)} · Default: {display(row.default)}</p>
-              {row.resolved_path && <p className="break-all font-mono text-xs text-muted">New conversation folder: {row.resolved_path}</p>}
-              {row.error && <p role="alert" className="text-xs text-danger">{row.error} Stored value: {display(row.value)}</p>}
+              <p className="text-xs text-muted">{tx(field.help)}{field.type === "number" ? " " + tx("Range: {min}–{max}.", { min: field.min ?? 0, max: field.max ?? 0 }) : ""}</p>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted"><span className="rounded bg-inset px-2 py-1">{tx("Source:")}{" "}{tx(row.source)}</span><Applies when={applies(row)} /></div>
+              <p className="break-all text-xs text-muted">{tx("Effective:")}{" "}{tx(display(row.effective_value))} {tx("· Default:")}{" "}{tx(display(row.default))}</p>
+              {row.resolved_path && <p className="break-all font-mono text-xs text-muted">{tx("New conversation folder:")}{" "}{row.resolved_path}</p>}
+              {row.error && <p role="alert" className="text-xs text-danger">{row.error} {tx("Stored value:")}{" "}{display(row.value)}</p>}
               {field.type === "checkbox" ? <>
                 <SavedConfirmation visible={confirmation.saved.has(row.key)} />
                 {rowErrors[row.key] && <p role="alert" className="text-xs text-danger">{rowErrors[row.key]}</p>}
@@ -179,16 +188,16 @@ export function EnginesSettings() {
               </>}
             </form>;
           })}
-          <Button loading={checking} disabled={busy !== null} onClick={check}>{checking ? "Checking…" : "Check Claude status"}</Button>
+          <Button loading={checking} disabled={busy !== null} onClick={check}>{checking ? tx("Checking…") : tx("Check Claude status")}</Button>
           {status && <p role="status" className="text-sm">{status}</p>}
-          <p className="text-xs text-muted">Checks saved settings. To sign in, use Sign in to Claude under Engines (or run <code>claude auth login</code> in a terminal), then check again.</p>
+          <p className="text-xs text-muted">{tx("Install Claude Code from Anthropic, run")}{" "}<code>{"claude"}</code> {tx("in a terminal, sign in there, then press Refresh.")}</p>
         </SettingsCard>
         <div id="setting-engine-storage" data-setting-id="setting-engine-storage" data-setting-container tabIndex={-1}>
-          <SettingsCard title="Storage" description="Managed by the desktop app. These locations cannot be changed here."><dl className="space-y-3 text-sm">{Object.entries(data.storage).map(([name, value]) => <div key={name}><dt className="font-medium capitalize">{name.replaceAll("_", " ")}</dt><dd className="mt-1 break-all text-xs text-muted">{value}</dd></div>)}</dl></SettingsCard>
+          <SettingsCard title={tx("Storage")} description={tx("Managed by the desktop app. These locations cannot be changed here.")}><dl className="space-y-3 text-sm">{Object.entries(data.storage).map(([name, value]) => <div key={name}><dt className="font-medium capitalize">{name.replaceAll("_", " ")}</dt><dd className="mt-1 break-all text-xs text-muted">{value}</dd></div>)}</dl></SettingsCard>
         </div>
       </>}
       {!settingUp && <div className="space-y-3" data-setting-root data-setting-container data-setting-id="setting-engine-connections" tabIndex={-1}>
-        <div className="sr-only" aria-label="Engine connection anchors">
+        <div className="sr-only" aria-label={tx("Engine connection anchors")}>
           <span id="setting-engine-connections" />
           <span id="setting-engine-api-key" />
           <span id="setting-engine-endpoint" />

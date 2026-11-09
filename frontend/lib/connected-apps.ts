@@ -106,7 +106,7 @@ export const AGENT_APPS: { slug: string; label: string; read: string; write: str
     write: "Also add an event to a calendar. No guests are invited and nothing is emailed. You approve each event first.",
   },
 ];
-const APPS_ENGINES = new Set(["claude", "codex"]);
+const APPS_ENGINES = new Set(["claude", "codex", "openai_compat", "openrouter"]);
 
 export function supportsConnectedApps(provider: string): boolean {
   return APPS_ENGINES.has(provider);

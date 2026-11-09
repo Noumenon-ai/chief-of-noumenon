@@ -525,7 +525,7 @@ class MemoryCapture:
         that fails part way never replays it twice. Returns turns restored."""
         path = _pending_path()
         try:
-            raw = path.read_text(encoding="utf-8")
+            raw = await asyncio.to_thread(path.read_text, encoding="utf-8")
         except OSError:
             return 0
         try:

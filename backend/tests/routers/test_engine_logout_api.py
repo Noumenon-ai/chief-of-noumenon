@@ -10,7 +10,7 @@ import pytest
 from app.core.config import settings
 from app.routers.engines import get_runtime
 from app.services import codex_adapter, engine_logout, local_claude_runner
-from app.services.codex_login import LoginError
+from app.services.engine_logout import LoginError
 from app.services.thread_runtime import ProviderUnavailable, ThreadRuntime
 from tests.auth.test_auth_api import (  # noqa: F401
     app, factory, auth_settings, client, login, pairing_code, set_owner,
@@ -25,7 +25,7 @@ def account(request, app, monkeypatch):
     monkeypatch.setattr(local_claude_runner, "resolve_claude_executable", lambda: Path("/fake/claude"))
     operation = AsyncMock()
     monkeypatch.setattr(engine_logout, "logout", operation)
-    rt = SimpleNamespace(claude_login=object(), codex_login=object(), adapters={engine: object()},
+    rt = SimpleNamespace(claude_account=object(), codex_account=object(), adapters={engine: object()},
                          _closing=False, engines=Mock(), _runs={}, _starting_turns=0, _account_changing=False)
     app.dependency_overrides[get_runtime] = lambda: rt
     return f"/api/v1/engines/{engine}/logout", engine, rt, operation

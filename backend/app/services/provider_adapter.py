@@ -68,6 +68,8 @@ class Capabilities:
     computers: bool = False
     memory_tools: bool = False
     connected_apps: bool = False
+    # Local connector can gate calls in its mailbox even without native MCP approvals.
+    local_connected_apps: bool = False
 
     @property
     def can_search_history(self) -> bool:
@@ -171,6 +173,7 @@ class TurnContext:
     # Confined turns cannot act through alternate tools.
     draft_only: bool = False
     media_review_only: bool = False
+    chat_cards_allowed: bool = False
     # Extra instructions from the thread's named agent, for the provider's
     # system prompt (appended, never replacing it), or None. Read fresh each turn.
     instructions: str | None = None
@@ -189,9 +192,11 @@ class TurnContext:
     # The MCP server giving the turn the agent's past-conversation search
     # (memory_bridge.py), when the engine can mount one.
     memory_launch: object | None = None
+    workspace_launch: object | None = None
     # The MCP server giving the turn read access to connected apps (composio_bridge.py)
     # and the apps it was started for. Both None unless the agent was allowed some.
     composio_launch: object | None = None
+    connector_bridge: object | None = None
     # Per-turn local MCP shim for exact grants from the public MCP marketplace.
     # It receives only bounded tool metadata; remote credentials stay in backend.
     community_launch: object | None = None
@@ -210,6 +215,8 @@ class TurnContext:
     # set for an engine whose capabilities include `images`; attached text
     # files are already folded into `prompt`.
     images: list[dict] = field(default_factory=list)
+    # Local API tools require a named agent, never the shared default workspace.
+    agent_id: int | None = None
     _abort_callbacks: list[Callable[[], None]] = field(default_factory=list)
     aborted: bool = False
 

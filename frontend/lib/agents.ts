@@ -1,3 +1,4 @@
+import { t as englishText } from "./i18n.ts";
 import type { Agent, AgentMemory, ApprovalMode } from "./api";
 
 // Suggestions for the model box; any text the Claude CLI accepts also works.
@@ -7,7 +8,7 @@ export const APPROVAL_MODES: { value: ApprovalMode; label: string; description: 
   {
     value: "ask",
     label: "Ask first",
-    description: "Your agent asks before it writes a file or runs a command. Reading is allowed.",
+    description: "Your bot asks before it writes a file or runs a command. Reading is allowed.",
   },
   {
     value: "accept_edits",
@@ -17,7 +18,7 @@ export const APPROVAL_MODES: { value: ApprovalMode; label: string; description: 
   {
     value: "plan",
     label: "Plan only",
-    description: "Your agent looks around and writes a plan, but changes nothing.",
+    description: "Your bot looks around and writes a plan, but changes nothing.",
   },
 ];
 
@@ -65,14 +66,14 @@ function formatKB(bytes: number): string {
 }
 
 // One line for what a tidy-up did.
-export function tidyLine(r: { organized: number; expired: number; duplicates: number; superseded: number; note: string | null }): string {
+export function tidyLine(r: { organized: number; expired: number; duplicates: number; superseded: number; note: string | null }, tx = englishText): string {
   const parts = [
-    r.organized ? `${r.organized} filed into topic notes` : "",
-    r.expired ? `${r.expired} expired moved to the archive` : "",
-    r.duplicates ? `${r.duplicates} repeat${r.duplicates === 1 ? "" : "s"} removed` : "",
-    r.superseded ? `${r.superseded} contradicted note${r.superseded === 1 ? "" : "s"} struck through` : "",
+    r.organized ? tx("{count} filed into topic notes", { count: r.organized }) : "",
+    r.expired ? tx("{count} expired moved to the archive", { count: r.expired }) : "",
+    r.duplicates ? tx(r.duplicates === 1 ? "{count} repeat removed" : "{count} repeats removed", { count: r.duplicates }) : "",
+    r.superseded ? tx(r.superseded === 1 ? "{count} contradicted note struck through" : "{count} contradicted notes struck through", { count: r.superseded }) : "",
   ].filter(Boolean);
-  return (parts.length ? `Tidied: ${parts.join(", ")}.` : "Nothing to tidy.") + (r.note ? ` ${r.note}` : "");
+  return (parts.length ? tx("Tidied: {parts}.", { parts: parts.join(", ") }) : tx("Nothing to tidy.")) + (r.note ? ` ${r.note}` : "");
 }
 
 // The text of an agent file as saved to disk.
@@ -87,10 +88,10 @@ export function parseAgentFile(text: string): Record<string, unknown> {
   try {
     value = JSON.parse(text);
   } catch {
-    throw new Error("That file is not an agent file (it is not JSON).");
+    throw new Error("That file is not a bot file (it is not JSON).");
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("That file is not an agent file.");
+    throw new Error("That file is not a bot file.");
   }
   return value as Record<string, unknown>;
 }

@@ -1,6 +1,6 @@
 # Engines
 
-Open Duet runs a conversation's turns on an **engine**: the program or service
+Chief of Noumenon runs a conversation's turns on an **engine**: the program or service
 that writes the answer and, for some engines, runs tools. Every engine sits
 behind one adapter contract, so the thread runtime, approvals, events and the
 UI do not know which engine they are talking to.
@@ -21,8 +21,7 @@ UI do not know which engine they are talking to.
 
 Open **Settings → Engines** in the web UI or desktop app. **Check again**
 checks installation, login and endpoint readiness. An unavailable engine shows
-its reason without blocking the others. Settings offers Claude browser sign-in
-and Codex device-code sign-in. Antigravity has its own install
+its reason without blocking the others. Claude and Codex sign-in happen in their own terminal flows. Install Codex from OpenAI, run `codex login`, then press Refresh. Antigravity has its own install
 and Google sign-in controls below.
 
 For Claude and Codex, **Sign out** asks for confirmation before running the
@@ -33,7 +32,7 @@ sign-out is pending. Pending sign-in also blocks sign-out for the same account
 folder. The CLI must confirm that it is signed out; an environment API key can
 keep it connected and cause an unconfirmed result. No raw CLI output is shown.
 
-To switch accounts, sign out explicitly, then use the existing sign-in button.
+To switch accounts, sign out explicitly, then sign in again in the CLI terminal.
 There is one shared account per CLI, with no named-account selector. Existing
 provider sessions may need a new conversation after changing accounts. Real
 account switching, Windows and installed-app behavior have not been qualified.
@@ -67,7 +66,7 @@ expanded size against available free space before unpacking.
 Sign in with an eligible personal Google account. This connection does not use
 Gemini API keys or Enterprise authentication. Google's [authentication guide](https://www.antigravity.google/docs/install?tab=cli)
 describes the available account routes; [model availability](https://www.antigravity.google/docs/models/)
-depends on the account's plan. Open Dots discovers the account's models after
+depends on the account's plan. Chief of Noumenon discovers the account's models after
 sign-in. **Refresh models** reloads them; **Check again** reads the saved
 catalog without starting another OAuth flow. Select Antigravity and one of
 these models in the normal chat or agent picker. Unsupported model IDs fail
@@ -93,7 +92,7 @@ removed from the child environment. OAuth URLs stay in pending setup memory;
 native stderr is discarded and callback codes are excluded from request logs.
 
 Every new or resumed session must confirm `mode=default` before a prompt.
-Open Dots handles the resulting permission requests, including plan-mode
+Chief of Noumenon handles the resulting permission requests, including plan-mode
 denials and workspace-limited accept-edits. Native sessions resume through
 `session/resume`; Stop sends `session/cancel`. Images, agent computers and
 Enterprise sign-in are not enabled for this engine.
@@ -119,6 +118,9 @@ follows the agent's model only while they share a provider, otherwise it uses
 the engine default. Changing an agent's engine affects new conversations.
 
 ## The contract
+
+The capability table describes adapter interfaces; Codex protected turns require
+the installed CLI to pass the native sandbox preflight and profile checks described below.
 
 `backend/app/services/provider_adapter.py`. An adapter has:
 
@@ -152,10 +154,10 @@ defaults (no capabilities, any model, a probe derived from `status()`).
 
 |  | Claude | Codex | ACP agent | OpenAI-compatible (and OpenRouter) |
 |---|---|---|---|---|
-| tools | yes | yes | yes | no |
-| approvals | yes | yes | yes | no |
-| mcp | yes (team, memory and computer servers) | yes (team, memory and Docker computer servers) | read-only history search only | no |
-| images | yes (stream-json content blocks) | no | no | no |
+| tools | yes | yes | yes | structured function calls |
+| approvals | yes | yes | yes | shared durable gate |
+| mcp | yes (team, memory and computer servers) | yes (team, memory and Docker computer servers) | read-only history search only | team, memory, connected apps |
+| images | yes (stream-json content blocks) | no | no | image URLs, when supported by the model |
 | resume | `--resume` | `thread/resume` | `session/load`, or the transcript as text | stored history each turn |
 | computers | yes | yes (Docker computers) | no | no |
 
@@ -191,85 +193,159 @@ defaults (no capabilities, any model, a probe derived from `status()`).
   with a computer to such an engine is refused the same way, and a turn that
   still meets this combination fails with that code.
 
-## Claude web sign-in
+## Claude sign-in
 
-With Claude Code installed on the server, choose **Sign in to Claude** in
-Settings → Engines. Open the provider link, sign in with your own account, and
-paste the code shown by the provider page into Settings. The installed,
-unmodified CLI handles authentication. Open Duet passes the code once over its
-private input pipe; it does not save it. Success requires `claude auth status
---json` to report a signed-in account, and an existing working account is kept.
+Install Claude Code from Anthropic, run `claude` in a terminal, and sign in
+there. Then press **Refresh** in Settings. The app detects the signed-in CLI
+using its status command. It never reads or copies Claude credential files.
+API key configuration remains available.
 
-The initiating owner session alone can read, complete or cancel its flow.
-Browser writes require CSRF; chat-scoped devices cannot access this setup.
-The CLI output is bounded and private; only an HTTPS authorization URL on an
-explicitly allowed provider host is exposed. A five-minute expiry, cancellation
-and backend shutdown stop the child. App sign-ins share a lock in the CLI's
-credential folder, including a configured absolute `CLAUDE_CONFIG_DIR`.
-Sign-in state is process-local: keep Settings open, and use one worker or
-session affinity. Sign-out and account switching still require the server
-terminal. Real-account, Windows and packaged-app flows have not been qualified.
+## Claude workspace tool boundary
+
+Claude starts with `--tools ""`, `--strict-mcp-config`, `--restricted`,
+`--disable-slash-commands` and `--settings '{"disableAllHooks":true}'`.
+Local installed `claude --help` confirms the empty tool list disables all
+built-in tools, including WebFetch. The restricted mode ignores user/project
+settings. Unsupported flags fail launch; there is no unrestricted retry.
+
+The engine box retains the official CLI login folder for inference and refresh,
+but its working directory is an empty, read-only mount at the normal workspace
+path. It cannot load a model-written context symlink or project hook. A scoped
+`workspace` MCP mailbox offers read, write, edit, glob, grep and shell. The backend
+opens the same durable gate used by API engines for each actual invocation.
+This protects against forged mailbox requests; shim permission alone is not
+execution permission. Ask uses cards for workspace file operations and shell
+(subject to saved command rules). Reads are automatic in Accept edits and Plan;
+Accept edits permits scoped edits, and Plan denies mutation.
+Receipts retain plain workspace labels through the existing `api__` tool names.
+
+Operations execute in a second bubblewrap box with the real workspace, a
+synthetic empty home, no CLI login mounts or provider-key environment, and no
+operator-added runtime/login grants. No shell fallback is allowed for this
+bridge. Memory/history, selected skills, team tools and connected-app mailboxes
+remain supplied by the backend. Native CLI slash-command skills stay disabled.
+Computers keep their existing separate backend bridge and approval rules.
+
+The engine itself is trusted and still can read and refresh its login. Standard
+runtimes, workspace contents and approved tool results remain visible to tools;
+public network access can disclose anything readable. A compromised engine or
+host is outside this boundary. With Linux isolation disabled, this is not a
+credential-isolation claim. Legacy local-task callers do not acquire workspace
+tools merely by requesting native tools; use agent conversations.
+
+The real scripted-engine canary test is
+`tests/core/test_turn_sandbox.py::test_real_split_engine_and_workspace_canary`.
+It must pass on a namespace-enabled Linux host before release; mount argv tests
+are not a substitute. Provider compatibility with these flags also needs host
+qualification using the person's own installation.
 
 ## Codex
 
-With the Codex CLI installed on the server, choose **Sign in to Codex** in
-Settings → Engines. Open the ChatGPT device sign-in link and enter the code.
-Device-code login may need enabling in your ChatGPT security settings. Existing
-working CLI logins are kept. The app confirms success with `codex login status`;
-it never returns the CLI output or credentials. The account stays in the CLI's
-usual home (including a configured `CODEX_HOME`), available to server-side runs.
+Install Codex from OpenAI, run `codex login` in a terminal, then press Refresh.
+Detection uses the official CLI status command; the app does not read or display
+`auth.json` contents. There are no in-app device-code routes or callers. API key
+entry through API engines remains available. Sign-out still invokes the official
+CLI with the existing account-operation serialization.
 
-Only the admin browser/device session that starts a flow can read its code or
-cancel it. Codes are not broadcast as chat events. The process has a five-minute
-limit, a shorter deadline to produce its code, bounded output, and is stopped
-on Cancel or backend shutdown. Competing app sign-ins for the same credential
-home are refused, including across backend processes. A page reload loses the
-in-memory flow handle; wait for expiry before starting again. Browser setup
-requires requests to reach the backend process that started it when using
-multiple workers. This flow does not provide account switching or sign-out.
-Real-account, Windows and packaged-app sign-in are not qualified by the
-automated process and route tests.
+On Linux with turn sandbox protection enabled, the Codex process itself is
+trusted and holds its login. `codex app-server` runs outside our turn box.
+Its commands run in Codex's own sandbox with the login denied. Claude's split
+engine/workspace design is unchanged. This does not claim that Codex's native
+execution tools can be disabled: 0.166.0 ignores `features.unified_exec=false`.
 
-One `codex app-server` per turn: `initialize`, `thread/start` or
-`thread/resume` (Codex's thread id is kept in `provider_state`), `turn/start`,
-then notifications until `turn/completed`. Approval modes map onto Codex's own
-policy and sandbox, sent on every thread and turn call and checked against what
-Codex reports back (a mismatch fails the turn before it starts):
+Each app-server gets these separate `-c` overrides:
 
-| Mode | approvalPolicy | sandbox | What this app adds |
-|---|---|---|---|
-| ask | `untrusted` | `workspace-write` | every command/file-change request becomes a card |
-| accept_edits | `untrusted` | `workspace-write` | a file change wholly inside the workspace is accepted without a card |
-| plan | `never` | `read-only` | any request that still arrives is declined |
-| tools off | `never` | `read-only` | as plan |
+- `default_permissions="con"`
+- `permissions={con={filesystem={":root"="deny",":minimal"="read",<runtime paths>="read",":workspace_roots"={"."="write"}},network={enabled=true}}}`
+- `mcp_servers={}`, `web_search="disabled"`, `approvals_reviewer="user"`
+- `features.apps=false`, `features.plugins=false`, `features.remote_plugin=false`,
+  `features.plugin_discovery_prefetch=false`, `features.hooks=false`
+- `features.skip_host_skill_discovery=true`, `features.tool_call_mcp_elicitation=true`
+- `features.multi_agent=false`, `features.multi_agent_v2=false`, `features.shell_snapshot=false`
 
-Commands are put to the gate as `Bash` with the exact command Codex will run,
-so saved "always allow" rules and the safety floor apply. MCP tool approvals
-for servers in your own Codex config go through the gate; other requests
-(`item/tool/call`, user-input questions, extra permissions, other
-elicitations) are refused. Stop sends `turn/interrupt`, then the process group
-is killed. A missing Codex thread on resume marks the session `broken`.
+Runtime paths come from the turn sandbox's executable discovery: the resolved
+executable, symlink aliases, package and optional platform packages, interpreter
+and install prefix. System reads cover existing `/usr`, `/bin`, `/sbin`, `/lib`,
+`/lib64`, `/etc/ld.so.cache`, `/etc/ssl`, `/etc/localtime`, `/etc/passwd`,
+`/etc/group`, and `/etc/nsswitch.conf`. With network enabled, `/etc/hosts`,
+`/etc/resolv.conf` and its resolved target (including the exact systemd resolver
+file) are also readable. No whole home, CODEX_HOME, application data, connector
+data or computer state is granted. Unsafe overlaps refuse startup. Owner-added
+turn-box path grants are not imported.
 
-**Agent computers.** A Codex agent can have a Docker computer (not the native
-Mac desktop, which stays Claude-only). The turn mounts the computer's MCP server
-as the `computer` server for that thread only, asked about on every call (the
-card, saved rules and the one-use permit are the same as Claude's, and the tool
-is `mcp__computer__<tool>`). Codex's own tools are switched off so nothing can
-run on this machine: the thread config sets `features.shell_tool`,
-`features.unified_exec`, `features.view_image` to false and `web_search` to
-disabled, every turn is sent with `environments: []` (this needs the
-`experimentalApi` capability, requested only for computer turns), the sandbox is
-read-only, and your own `config.toml` MCP servers are disabled for the thread.
-If a command or file-change item still starts, the turn is stopped with
-`codex_confinement_failed` and nothing is approved. Checked against codex-cli
-0.164.0 with a real Docker computer: the command ran in the container and no
-file appeared on the host. An older Codex that rejects these fields fails the
-turn instead of running unconfined.
+Plan, tools-off and computer turns use `"."="read"`. When the optional turn
+HTTP egress gate is enabled, native command networking is disabled
+(`network={enabled=false}`), because the unboxed app-server cannot use that
+outer gate for its commands. App-owned backend bridges keep their existing
+network controls. Otherwise command networking is enabled; DNS resolver access
+is included, but connectivity still depends on the host.
 
-Known differences from Claude: Codex loads your own `~/.codex/config.toml`
-(including its MCP servers) and its read-only sandbox lets it read files
-anywhere on disk without asking; Claude's ask mode asks about reads outside
-the workspace.
+Before every engine turn start, the app checks the installed version and obtains
+a preflight result cached by executable identity/version, workspace identity,
+login location and exact overrides. On a cache miss it creates a private random
+canary in CODEX_HOME, runs `codex sandbox` with those same overrides, and requires
+both failed canary read and successful workspace read/write (failed write in
+read-only mode). The app removes its canary and probe files even on failure or
+cancellation. It never reads real credentials. Failure refuses the turn with a
+plain error and no unprotected retry. Status probing no longer rejects Codex
+because native-tool disable switches are ineffective.
+
+Locally inspected 0.166.0 help confirms `-c KEY=VALUE` overrides user config and
+uses TOML values, `codex sandbox -- <command>` selects the native sandbox, and
+`features list` advertises the extension switches above; a local run with these
+overrides confirmed all ten requested feature values. The generated
+experimental app-server JSON schema describes `permissions` as the named
+profile selector, mutually exclusive with the legacy sandbox fields. Protected
+RPC calls send exactly these permission-related fields:
+
+- `thread/start` and `thread/resume`: `cwd`, `permissions: "con"`,
+  `runtimeWorkspaceRoots: [<agent workspace>]`, `approvalPolicy: "untrusted"`,
+  `approvalsReviewer: "user"`. Resume also sends `threadId`.
+- `turn/start`: `threadId`, prompt `input`, `permissions: "con"`,
+  `runtimeWorkspaceRoots: [<agent workspace>]`, `approvalPolicy: "untrusted"`,
+  `approvalsReviewer: "user"`.
+
+Model, effort and developer instructions remain as applicable. Thread `config`
+repeats the extension flags and disabled web search, disables any inherited MCP
+names reported by `config/read`, and attaches only this app's turn servers.
+Neither `sandbox` nor `sandboxPolicy` is sent. Ordinary turns omit `environments`;
+computer turns retain `environments: []`. The thread response must confirm the
+`con` profile without inheritance, the pinned roots, untrusted approvals and the
+user reviewer before any prompt is sent. A fresh app-server per turn and explicit
+profile selection on start/resume/turn avoid depending on persisted first-prompt
+state. A subfolder workspace is probed as that exact working directory.
+
+User MCP servers, plugins, apps and hooks are disabled through startup overrides;
+the user's config is not edited. The app-owned MCP shims run beside the engine,
+not inside a nested turn box, and their launch descriptors contain no credentials.
+Backend mailbox handlers retain connected-app credentials and approval authority.
+The trusted engine can still access its own login; these shims are not an OS
+boundary against a compromised engine or malicious shim implementation.
+
+Native workspace patch requests follow the existing cards: ask requests a card,
+accept-edits permits workspace edits, and plan/tools-off refuse mutations. Paths
+outside the workspace, unknown paths, symlink escapes, rename destinations outside
+it and every grant-root request are refused without a card in every mode.
+Permission-expansion requests receive no grants. Command requests retain the
+existing gate and saved rules, but explicit extra permissions/network escalation
+are refused. Known-safe commands may run without cards under Codex's untrusted
+policy. Item-start events may precede approval; they are not violations. Successful
+unapproved patches or completion after denial stop and kill the engine. This is a
+regression detector and cannot undo an already executed operation.
+
+The boundary depends on the trusted CLI honoring its named profile for all native
+commands and requesting approval for patches. It does not protect the CLI's own
+login from the CLI, cover future tools that read internal engine state, constrain
+all engine-level reads, provide data-loss prevention, or isolate secrets placed in
+the workspace, prompt, engine environment or attachments. Neither a cached native
+sandbox probe nor protocol tests prove every app-server execution path. Dispatcher
+live proof must cover allowed and denied commands, safe commands without approval,
+patches, plan, second turns/resumes, subfolder starts, DNS and user extension
+exclusion. Record version and results in [PROVEN_APPS.md](PROVEN_APPS.md).
+
+Non-Linux and explicitly unprotected turns retain their legacy behavior; they do
+not provide this login-denial boundary. Do not disable protection to qualify a
+failed protected installation. No authenticated Codex turn was run for this job.
 
 ## ACP agent
 
@@ -284,7 +360,7 @@ gate; only an `allow_once` option approves (never `allow_always`), Deny picks
 
 ## OpenAI-compatible endpoint
 
-Chat only. `base_url`, optional default `model` and optional key are saved
+Structured function calling with streamed text. `base_url`, optional default `model` and optional key are saved
 encrypted (one `user_credential` row, `engine:openai_compat`). The key is sent
 only as `Authorization: Bearer` to that address, is kept for the same address
 only, and is never returned, logged or stored in events or the decision log;
@@ -308,16 +384,16 @@ differences:
   malformed key check reports unavailable without displaying its body.
 - Model ids use `vendor/model` with an optional variant such as `:free`.
   Refresh lists up to 600 models from `GET /models`, labels free models, and
-  puts free models supporting tools first (this engine remains chat only).
+  puts free models supporting tools first.
   A free-tier key with no chosen model uses the first available free model.
   Other keys require a chosen model; the app does not select a paid model.
 - Requests to openrouter.ai also carry OpenRouter's optional app-attribution
   headers, `HTTP-Referer: https://github.com/Anil-matcha/open-duet` and
-  `X-Title: Open Duet`. They tell OpenRouter that this account's traffic comes
-  from Open Duet (OpenRouter uses them for its public app rankings), and they
+  `X-Title: Chief of Noumenon`. They tell OpenRouter that this account's traffic comes
+  from Chief of Noumenon (OpenRouter uses them for its public app rankings), and they
   are sent only to openrouter.ai.
-- Chat only, like any OpenAI-compatible endpoint: no tools, images or
-  computers. HTTP 402 is a credit limit. A `free-models-per-day` refusal is a
+- Uses the same tools, approvals and image protocol as OpenAI-compatible endpoints;
+  agent computers remain unavailable. HTTP 402 is a credit limit. A `free-models-per-day` refusal is a
   usage limit; a general 429 is a rate limit. No reset time is guessed.
 
 Tested against a mock endpoint only; no turn has been run against the real
@@ -417,3 +493,56 @@ For ask and accept-edits modes, Gemini always uses `--approval-mode default`, Cu
 | OpenRouter | Mock HTTP authentication, catalog, streaming and fallback tests | Real account and credits/limit behavior |
 
 No real-account compatibility, Windows compatibility, optional Docker package build or approval bypass resistance is claimed by these checks. Real CLI runs must record version, redacted responses and permission behavior before changing this table or default-enabling OpenCode.
+
+
+## API engines doing work
+
+OpenAI-compatible and OpenRouter turns offer `read`, `write`, `edit`, `glob`,
+`grep` (literal text search), and `shell`. Function calls must arrive in structured
+`tool_calls` fields; text that resembles a call never executes. A turn has at most
+24 completion steps, at most 16 calls per response, and the existing turn time
+limit. Stop cancels HTTP, pending approvals and child process groups. Repeated
+identical calls, unknown tools and malformed arguments end the turn with an error.
+A tools-specific endpoint rejection retries once without tools and visibly labels
+chat-only mode. That endpoint/model stays chat-only in this backend process until
+restart. Broken structured calls also switch visibly to chat-only without executing that response. Malformed JSON arguments instead end the turn with an error.
+
+All local tool calls pass through the existing durable approval gate. Reads are
+automatic; Ask first holds edits and shell, Accept edits allows file changes,
+and Plan refuses changes and shell. Shell saved rules use the same safety floor,
+workspace scope, decision log, approval cards and Telegram answers as CLI turns.
+Tool results are size-bounded untrusted data and cannot supply approval.
+
+When available, file operations and shell run inside the existing turn sandbox.
+If unavailable, the trusted file worker uses relative directory descriptors,
+no-follow opens, regular-file checks and hard-link refusal. Shell stays refused
+unless the owner explicitly sets `API_UNSANDBOXED_SHELL=true`; that exception
+never bypasses enabled network isolation. File fallback requires POSIX directory
+handle operations; Windows currently refuses these operations rather than using
+an unsafe path fallback. No agent computer support is advertised.
+
+The same turn-scoped memory, team, curated connected-app and marketplace MCP
+launches are mounted. Their backend bridges still check grants, revocations and
+one-use approvals. Existing memory/recall and enabled skills are incorporated by
+the runtime. Text attachments enter the prompt; images use bounded data URLs.
+Image capability describes the protocol: an endpoint/model that lacks vision
+can refuse the request, and that refusal is shown rather than claiming it saw it.
+
+Automated proof uses scripted fake completion endpoints, the real runtime,
+durable approvals, local file workers and scoped MCP shims. Tests cover allow,
+deny, modes, traversal, symlinks, output injection, unsupported tools, malformed
+calls, repeated calls, step limits, Stop, timeout, memory search, image encoding
+and connected-app allow/deny against fake Composio. Sandbox wrapper tests do not
+substitute for the existing real Linux namespace enforcement tests. No live
+Ollama, LM Studio, OpenRouter, remote API, account or Telegram proof was performed
+for this increment.
+
+### Waiting for a person
+
+Turn-scoped file, app, memory and team mailboxes wait for their owning turn's
+reply or cancellation. They do not report a transport failure after two minutes.
+Claude's MCP tool, idle and background thresholds and Codex's per-server tool
+timeout are set above the approval and execution budgets. Durable approval
+expiry is unchanged. Claude, Codex and local/API engines pause their active-work
+clock while the person decides. Stopping a turn still cancels its tools; no
+retry gains an approval from the earlier request.

@@ -64,6 +64,7 @@ class ThreadResponse(BaseModel):
     agent_id: int | None = None
     # The computer this conversation's turns run their tools in (its agent's),
     # or null when they run on this machine.
+    origin: str = "app"
     kind: str = "chat"
     room_id: int | None = None
     job_id: int | None = None

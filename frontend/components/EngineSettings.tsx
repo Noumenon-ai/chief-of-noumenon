@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/lib/use-i18n";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, type Engine, type EngineConfigField } from "@/lib/api";
 import { ENDPOINT_TEMPLATES, engineConfig, engineDraft, engineGroups } from "@/lib/engines";
@@ -23,16 +24,12 @@ function initialExpandedEngines(engines: Engine[], preferredId: string | null): 
   const active = engines.find((engine) => engine.id === activeId) ?? engines[0];
   const expanded = new Set<string>();
   if (active) expanded.add(active.id);
-  // Keep the active engine and up to two setup choices open on first paint.
-  for (const engine of engines) {
-    if (expanded.size >= 3) break;
-    if (!engine.available) expanded.add(engine.id);
-  }
   return expanded;
 }
 
 
 export function EngineSettings({ onEnginesChanged }: { onEnginesChanged?: (engines: Engine[]) => void } = {}) {
+  const t = useT();
   const [desktop, setDesktop] = useState(false);
   const [engines, setEngines] = useState<Engine[] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({});
@@ -166,19 +163,19 @@ export function EngineSettings({ onEnginesChanged }: { onEnginesChanged?: (engin
     );
 
     return <div key={descriptor.name} data-setting-id={settingId} className="block min-w-0 text-xs text-muted">
-      <label className="block">{descriptor.label}{hasSecret ? " (saved; leave empty to keep)" : descriptor.required ? "" : " (optional)"}
+      <label className="block">{t(descriptor.label)}{hasSecret ? t(" (saved; leave empty to keep)") : descriptor.required ? "" : t(" (optional)")}
         {descriptor.name === "model" && engine.models.length > 0 ? <Select className="mt-1" value={drafts[engine.id]?.model ?? ""}
    onChange={(event) => void saveEngineField(engine, "model", event.target.value)}>
-          <option value="">{engine.id === "antigravity" ? "Account default" : "Engine default"}</option>{engine.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+          <option value="">{engine.id === "antigravity" ? t("Account default") : t("Engine default")}</option>{engine.models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
         </Select> : <Input className="mt-1" type={descriptor.kind === "secret" ? "password" : descriptor.kind === "url" ? "url" : "text"}
    required={descriptor.required && !hasSecret} value={drafts[engine.id]?.[descriptor.name] ?? ""}
    placeholder={descriptor.placeholder ?? undefined} autoComplete={descriptor.kind === "secret" ? "new-password" : "off"}
    onChange={(event) => updateDraft(descriptor.name, event.target.value)} />}
-        {descriptor.help && <span className="mt-1 block">{descriptor.help}</span>}
+        {descriptor.help && <span className="mt-1 block">{t(descriptor.help)}</span>}
       </label>
       {supportsEffort && currentModelObj?.supported_reasoning_efforts && (
         <div className="pt-2">
-          <span className="block text-xs font-medium text-muted mb-1">Reasoning effort</span>
+          <span className="block text-xs font-medium text-muted mb-1">{t("Reasoning effort")}</span>
           <div className="inline-flex rounded-lg bg-inset p-1 border border-line gap-1">
             {currentModelObj.supported_reasoning_efforts.map((eff) => {
               const currentEffort = drafts[engine.id]?.effort ?? currentModelObj.default_reasoning_effort;
@@ -190,7 +187,7 @@ export function EngineSettings({ onEnginesChanged }: { onEnginesChanged?: (engin
                   disabled={busy !== null}
                   onClick={() => void saveEngineField(engine, "effort", eff)}
                   className={cn(
-                    "px-3 py-1 text-xs rounded-md font-medium capitalize transition-all duration-150 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50",
+                    "min-h-11 px-3 py-1 text-xs rounded-md font-medium capitalize transition-all duration-150 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50",
                     isSelected
                       ? "bg-raised text-ink shadow-sm ring-1 ring-line/50 font-semibold"
                       : "text-muted hover:text-ink hover:bg-hover/50"
@@ -207,10 +204,10 @@ export function EngineSettings({ onEnginesChanged }: { onEnginesChanged?: (engin
   };
 
   return <section className="space-y-4 rounded-lg border border-line p-5">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">Engines</h3><p className="mt-1 text-xs text-muted">Connect an AI, then choose it for an agent or conversation.</p></div><Button disabled={busy !== null} onClick={() => { setBusy("refresh"); setRefresh((n) => n + 1); }}>{busy === "refresh" ? "Checking…" : "Check again"}</Button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="mt-1 text-xs text-muted">{t("Connect an AI, then choose it for a bot or conversation.")}</p></div><Button disabled={busy !== null} onClick={() => { setBusy("refresh"); setRefresh((n) => n + 1); }}>{busy === "refresh" ? t("Checking…") : t("Check again")}</Button></div>
     {error && <Banner tone="danger">{error}</Banner>}
     {!engines && !error && <SkeletonList rows={3} />}
-    {engineGroups(engines ?? []).map((group) => <div key={group.label} className="space-y-3"><h4 className="text-sm font-semibold">{group.label}</h4>{group.engines.map((engine) => {
+    {engineGroups(engines ?? []).map((group) => <details key={group.label} open={group.label === "Ready" ? true : undefined} className="space-y-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">{group.label === "Ready" ? t("Ready engines") : t("More engines")}</summary>{group.engines.map((engine) => {
       const fields = engine.config_fields ?? [];
       const settingAnchors = [
         engine.configurable && fields.some((item) => item.kind === "secret") ? "setting-engine-api-key" : null,
@@ -226,7 +223,7 @@ export function EngineSettings({ onEnginesChanged }: { onEnginesChanged?: (engin
           data-setting-expand-for={settingAnchors || undefined}
           className="flex w-full flex-wrap items-center gap-2 text-left"
           aria-expanded={expanded}
-          aria-label={`${expanded ? "Collapse" : "Expand"} ${engine.label} settings`}
+          aria-label={t("{action} {name} settings", { action: expanded ? t("Collapse") : t("Expand"), name: engine.label })}
           onClick={() => {
             userChangedExpansion.current = true;
             setExpandedEngines((current) => {
@@ -237,10 +234,10 @@ export function EngineSettings({ onEnginesChanged }: { onEnginesChanged?: (engin
             });
           }}
         >
-          <span className="font-medium">{engine.label}</span><span className={`rounded px-2 py-0.5 text-xs ${engine.available ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{engine.available ? "Ready" : "Needs setup"}</span>{engine.version && <span className="text-xs text-muted">{engine.version}</span>}
-          <span className="ml-auto text-xs text-muted">{expanded ? "Collapse" : "Expand"}</span>
+          <span className="font-medium">{engine.label}</span><span className={`rounded px-2 py-0.5 text-xs ${engine.available ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{engine.available ? t("Ready") : t("Needs setup")}</span>{engine.version && <span className="text-xs text-muted">{engine.version}</span>}
+          <span className="ml-auto text-xs text-muted">{expanded ? t("Collapse") : t("Expand")}</span>
         </button>
-        {!engine.available && <p className="mt-2 break-words text-xs text-muted">{engine.reason}</p>}
+        {!engine.available && <p className="mt-2 break-words text-xs text-muted">{engine.reason ? t(engine.reason) : ""}</p>}
         {expanded && <div className="mt-3 space-y-3">
         {engine.id === "claude" && engine.installed && <ClaudeEngineSetup signedIn={engine.signed_in} onChanged={() => setRefresh((n) => n + 1)} />}
         {engine.id === "codex" && engine.installed && <CodexEngineSetup signedIn={engine.signed_in} onChanged={() => setRefresh((n) => n + 1)} />}
@@ -248,27 +245,26 @@ export function EngineSettings({ onEnginesChanged }: { onEnginesChanged?: (engin
           setDrafts((previous) => { const next = { ...previous }; delete next.antigravity; return next; });
           setRefresh((n) => n + 1);
         }} />}
-        {desktop && (engine.id === "claude" || engine.id === "codex" || engine.id === "opencode") && <EngineInstall engine={engine.id} installed={engine.installed === true} onChanged={() => setRefresh(value => value + 1)} />}
-        {engine.setup && <div className="space-y-1 text-xs text-muted">
-          {engine.setup.install && <p>Install: <code className="break-all">{engine.setup.install}</code></p>}
-          {engine.setup.sign_in && <p>Sign in: <code className="break-all">{engine.setup.sign_in}</code></p>}
-          {engine.setup.notes?.map((note) => <p key={note}>{note}</p>)}
-          {engine.setup.docs_url && <a className="inline-block underline" href={engine.setup.docs_url} target="_blank" rel="noreferrer">Connection guide</a>}
-        </div>}
-        <p className="text-xs text-muted">{engine.models.length} model suggestions{engine.custom_models ? " · custom model IDs accepted" : ""}</p>
-        {engine.configurable && fields.length > 0 && <form id={formId} onSubmit={(event) => { event.preventDefault(); void save(engine); }}><fieldset disabled={busy !== null} className="space-y-3">
-          {fields.some((item) => item.name === "base_url") && <label className="block text-xs text-muted">Fill address from template<Select className="mt-1" value="" onChange={(event) => void saveEngineField(engine, "base_url", event.target.value)}><option value="">Choose a service…</option>{ENDPOINT_TEMPLATES.map((template) => <option key={template.label} value={template.url}>{template.label}</option>)}</Select></label>}
+        {!engine.available && desktop && (engine.id === "claude" || engine.id === "codex" || engine.id === "opencode") && <EngineInstall engine={engine.id} installed={engine.installed === true} onChanged={() => setRefresh(value => value + 1)} />}
+        {engine.setup && <details className="space-y-1 text-xs text-muted"><summary className="cursor-pointer min-h-11">{t("How to set up")}</summary>
+          {engine.setup.install && <p>{t("Install:")} <code className="break-all">{engine.setup.install}</code></p>}
+          {engine.setup.sign_in && <p>{t("Sign in:")} <code className="break-all">{engine.setup.sign_in}</code></p>}
+          {engine.setup.notes?.map((note) => <p key={note}>{t(note)}</p>)}
+          {engine.setup.docs_url && <a className="inline-block underline" href={engine.setup.docs_url} target="_blank" rel="noreferrer">{t("Connection guide")}</a>}
+        </details>}
+        {engine.configurable && fields.length > 0 && <details open={engine.available ? undefined : true}><summary className="cursor-pointer min-h-11 py-2 text-sm">{t("Connection settings")}</summary><form className="mt-3" id={formId} onSubmit={(event) => { event.preventDefault(); void save(engine); }}><fieldset disabled={busy !== null} className="space-y-3">
+          {fields.some((item) => item.name === "base_url") && <label className="block text-xs text-muted">{t("Fill address from template")}<Select className="mt-1" value="" onChange={(event) => void saveEngineField(engine, "base_url", event.target.value)}><option value="">{t("Choose a service…")}</option>{ENDPOINT_TEMPLATES.map((template) => <option key={template.label} value={template.url}>{template.label}</option>)}</Select></label>}
           <div className="grid gap-3 sm:grid-cols-2">{fields.filter((item) => !item.advanced).map((item) => field(engine, item))}</div>
-          {fields.some((item) => item.advanced) && <details><summary className="cursor-pointer text-sm">Advanced</summary><div className="mt-3 grid gap-3 sm:grid-cols-2">{fields.filter((item) => item.advanced).map((item) => field(engine, item))}</div></details>}
+          {fields.some((item) => item.advanced) && <details><summary className="cursor-pointer min-h-11 py-2 text-sm">{t("Advanced")}</summary><div className="mt-3 grid gap-3 sm:grid-cols-2">{fields.filter((item) => item.advanced).map((item) => field(engine, item))}</div></details>}
           <div className="flex flex-wrap items-center gap-2"><Applies when="next turn" /><SavedConfirmation visible={confirmation.saved.has(engine.id) && dirty} /></div>
-          <SaveBar dirty={dirty} saving={busy === engine.id} error={engineErrors[engine.id] || null} saved={confirmation.saved.has(engine.id)} saveLabel="Save engine" onSave={() => {
+          <SaveBar dirty={dirty} saving={busy === engine.id} error={engineErrors[engine.id] || null} saved={confirmation.saved.has(engine.id)} saveLabel={t("Save engine")} onSave={() => {
             const form = document.getElementById(formId);
             if (form instanceof HTMLFormElement) form.requestSubmit();
           }} onDiscard={() => { setDrafts((previous) => ({ ...previous, [engine.id]: engineDraft(engine) })); setEngineErrors((previous) => ({ ...previous, [engine.id]: "" })); confirmation.clearSaved(engine.id); }} />
-          {engine.config && engine.id !== "antigravity" && <Button type="button" onClick={() => void forget(engine)}>Forget settings</Button>}
-        </fieldset></form>}
+          {engine.config && engine.id !== "antigravity" && <Button type="button" onClick={() => void forget(engine)}>{t("Forget settings")}</Button>}
+        </fieldset></form></details>}
         </div>}
       </article>;
-    })}</div>)}
+    })}</details>)}
   </section>;
 }

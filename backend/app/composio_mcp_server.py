@@ -36,14 +36,15 @@ class Server:
         temporary.write_text(json.dumps({"name": name, "arguments": arguments}), encoding="utf-8")
         os.replace(temporary, path)
         response = self.mailbox / f"resp-{token}.json"
-        deadline = time.monotonic() + 120
-        while time.monotonic() < deadline:
+        # The owning turn removes this folder on stop. A person may take
+        # longer than a transport timeout to answer an approval.
+        while self.mailbox.is_dir():
             if response.exists():
                 result = json.loads(response.read_text(encoding="utf-8"))
                 response.unlink(missing_ok=True)
                 return result
             time.sleep(0.05)
-        return {"error": "The app did not answer in time. It may still have been read; check before repeating."}
+        return {"error": "The turn stopped before the app replied. Check its activity before retrying."}
 
     def handle(self, message):
         method, identifier = message.get("method"), message.get("id")
@@ -72,10 +73,15 @@ def main():
     parser.add_argument("--apps", default="")
     parser.add_argument("--exact-tools", default=None)
     parser.add_argument("--uninterrupted", action="store_true")
+    parser.add_argument("--connector", action="store_true")
     arguments = parser.parse_args()
     levels = dict(pair.split("=", 1) for pair in arguments.apps.split(",") if "=" in pair)
     server = Server(arguments.mailbox, levels, arguments.exact_tools.split(",") if arguments.exact_tools is not None else None,
                     uninterrupted=arguments.uninterrupted)
+    if arguments.connector:
+        from app.services.connector_policy import definitions
+        server.tools = definitions()
+        server.names = {tool["name"] for tool in server.tools}
     for line in sys.stdin:
         try:
             if len(line) > 100000:

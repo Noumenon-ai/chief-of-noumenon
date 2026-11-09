@@ -1,4 +1,4 @@
-// One real Open Duet window for the whole run: Electron started by e2e/app.js with a fresh
+// One real Chief of Noumenon window for the whole run: Electron started by e2e/app.js with a fresh
 // data folder, attached to over DevTools. The first-run setup is dismissed once.
 const { test: base, expect, chromium } = require("@playwright/test");
 const fs = require("node:fs");

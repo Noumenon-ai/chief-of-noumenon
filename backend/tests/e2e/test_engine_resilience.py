@@ -23,7 +23,8 @@ def program(path, body: str):
 
 
 def processes_running(marker: str) -> list[str]:
-    out = subprocess.run(["ps", "-axo", "pid=,command="], capture_output=True, text=True).stdout
+    # Linux ps otherwise clips long executable paths to the terminal width.
+    out = subprocess.run(["ps", "-ww", "-axo", "pid=,command="], capture_output=True, text=True).stdout
     return [line for line in out.splitlines() if marker in line and "ps -axo" not in line]
 
 
@@ -59,7 +60,7 @@ def test_a_hanging_and_a_crashing_engine_block_nothing(tmp_path):
             try:
                 wait_for(lambda: processes_running("hang-codex-od-test"), 10, what="the codex probe to start")
             except AssertionError as exc:
-                everything = subprocess.run(["ps", "-axo", "pid=,ppid=,command="], capture_output=True, text=True).stdout
+                everything = subprocess.run(["ps", "-ww", "-axo", "pid=,ppid=,command="], capture_output=True, text=True).stdout
                 raise AssertionError(
                     f"{exc}\nlisting finished: {'response' in listing} {listing.get('response') and listing['response'].status_code}"
                     f" after {listing.get('seconds')}s\nlisting body: {listing['response'].text if 'response' in listing else None}"

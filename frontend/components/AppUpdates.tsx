@@ -27,7 +27,7 @@ function summary(state: UpdateState) {
     case "downloaded": return `Version ${state.version} was saved to your Downloads folder${state.verified ? " and verified" : ""}.`;
     case "installing": return state.message ?? "The installer opened.";
     case "error": return state.message ?? "The update failed.";
-    default: return state.message ?? "Open Duet checks for new versions in the background.";
+    default: return state.message ?? "Chief of Noumenon checks for new versions in the background.";
   }
 }
 
@@ -158,7 +158,7 @@ function WebAppUpdates() {
         </div>
       ) : (
         <p role="status" className="text-sm text-muted">
-          {info.latest_version ? "Open Duet is up to date." : "Open Duet checks for new versions in the background."}
+          {info.latest_version ? "Chief of Noumenon is up to date." : "Chief of Noumenon checks for new versions in the background."}
         </p>
       )}
 

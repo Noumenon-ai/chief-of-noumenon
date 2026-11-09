@@ -38,6 +38,7 @@ def response(state: dict, *, execution_host: str, existing_agents: bool) -> dict
         "first_reply_at": state.get("first_reply_at"),
         "execution_host": execution_host,
         "existing_agents": existing_agents,
+        "auto_created": bool(state.get("auto_created")),
     }
 
 

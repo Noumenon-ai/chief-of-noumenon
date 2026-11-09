@@ -3,7 +3,7 @@ const { sameOrigin } = require("./origin");
 const SETTINGS_NAVIGATION_CHANNEL = "open-dots:navigate-settings";
 const SETTINGS_ROUTE = "/settings/";
 
-function createApplicationMenuTemplate({ platform, appName = "Open Dots", onOpenSettings = () => {} }) {
+function createApplicationMenuTemplate({ platform, appName = "Chief of Noumenon", onOpenSettings = () => {} }) {
   const isMac = platform === "darwin";
   const settings = {
     label: isMac ? "Settings..." : "Settings",

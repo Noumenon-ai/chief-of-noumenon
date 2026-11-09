@@ -134,11 +134,11 @@ const NEXT_STEP: Record<string, string> = {
   session_resume_failed: "Start a new session to continue this conversation.",
   no_session: "Start a new session to continue this conversation.",
   no_model: "Choose a model for this conversation, then send again.",
-  computer_unavailable: "Start the agent's computer from its Computer panel, then send again.",
-  engine_without_computers: "This engine can't use the agent's computer. Pick an engine that can, or remove the computer.",
+  computer_unavailable: "Start the bot's computer from its Computer panel, then send again.",
+  engine_without_computers: "This engine can't use the bot's computer. Pick an engine that can, or remove the computer.",
   length: "The answer hit the engine's length limit. Ask for a shorter answer or continue in a new message.",
   runner_error: "Something went wrong starting the engine. Send again; the backend log has details.",
-  engine_limited: "Wait for the limit to reset, switch this conversation's agent to another engine, or give the agent a fallback engine in the Agents panel.",
+  engine_limited: "Wait for the limit to reset, switch this conversation's bot to another engine, or give the bot a fallback engine in the Bots panel.",
 };
 
 export function failureNextStep(errorCode: string): string | null {
@@ -170,10 +170,10 @@ export function interruptedText(reason: string, replay: string): string {
     return `${when} before the engine received this message, so nothing ran. It was not sent again: send it again when you are ready.`;
   }
   if (replay === "after_accept") {
-    return `${when} while the agent was working. It may already have run tools or changed files, so this message was not resumed or sent again. Check what it did before sending it again.`;
+    return `${when} while the bot was working. It may already have run tools or changed files, so this message was not resumed or sent again. Check what it did before sending it again.`;
   }
   if (replay === "unknown") {
     return `${when} just after the engine received this message. It may have started working, so this message was not resumed or sent again. Check before sending it again.`;
   }
-  return `${when} while the agent was working. This message was not resumed or sent again.`;
+  return `${when} while the bot was working. This message was not resumed or sent again.`;
 }

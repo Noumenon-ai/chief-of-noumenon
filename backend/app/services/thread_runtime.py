@@ -38,8 +38,7 @@ from app.services.memory_capture import MemoryCapture, Turn as MemoryTurn
 from app.services import thread_store as store
 from app.services import local_claude_runner
 from app.services.workspaces import require_workspace
-from app.services.codex_login import CodexLogin
-from app.services.claude_login import ClaudeLogin
+from app.services.engine_logout import LogoutOperation
 from app.services import engine_config
 from app.services.engine_registry import (
     EngineRegistry,
@@ -199,6 +198,7 @@ class ActiveRun:
     # The conversation already had turns before this one.
     continues: bool = False
     screen_granted: bool = False
+    handoff_waiting: bool = False
     # The person's typed message, and whether a finished turn may be read for
     # facts worth keeping (memory_capture.py): a 1:1 chat the person started.
     prompt_text: str = ""
@@ -243,6 +243,15 @@ class TurnRecorder:
         if self._lost:
             return False
         run = self._run
+        if type == 'tool.completed' and isinstance(data.get('output'), str):
+            output, truncated = store.cap_tool_output(data['output'])
+            data = {**data, 'output': output, 'truncated': bool(data.get('truncated')) or truncated}
+        if type == "tool.started":
+            from app.services.chat_card_schema import TOOLS
+            card_tool = next((name for name in TOOLS if name in str(data.get("name", "")) or name in str(data.get("summary", ""))), None)
+            if card_tool:
+                from app.computers.native import durable_input
+                data = {**data, "input": durable_input("mcp__team__" + card_tool, data.get("input", {})), "summary": "Chat suggestion"}
         async with self._runtime.session() as db:
             event = await store.append_turn_event(db, run.turn_id, run.owner_token, type, data)
         if event is None:
@@ -279,16 +288,18 @@ class ThreadApprovalGate:
         # What each open approval was about, for the decision log.
         self._info: dict[str, tuple[str, str | None, str | None]] = {}
         self._uninterrupted_requests: set[str] = set()
+        self._connector_denials: dict[str, str] = {}
+        self._handoffs: set[str] = set()
 
     @property
     def waiting(self) -> bool:
         """An approval is open: the turn waits on a person, not on the engine
         (the approval has its own timeout)."""
-        return bool(self._deadlines)
+        return bool(self._deadlines) or getattr(self._run, "handoff_waiting", False)
 
-    def _log(self, event: str, approval_id: str, **more) -> None:
+    async def _log(self, event: str, approval_id: str, **more) -> None:
         tool, kind, summary = self._info.get(approval_id, (None, None, None))
-        decision_log.record(
+        await asyncio.to_thread(decision_log.record,
             event,
             thread_id=self._run.thread_id,
             turn_id=self._run.turn_id,
@@ -322,7 +333,70 @@ class ThreadApprovalGate:
         run, runtime = self._run, self._runtime
         run.accepted = True
         from app.computers.native import durable_input
+        from app.services import pdf_contract
+        pdf_name = tool.removeprefix("mcp__team__") if tool.startswith("mcp__team__") else ""
+        fresh_pdf = pdf_name in pdf_contract.FRESH
+        if pdf_name in pdf_contract.NAMES:
+            summary = pdf_contract.summary(pdf_name, input)
+        connector_call = tool in ("mcp__composio__apps_search", "mcp__composio__apps_run")
+        connector_auto = None
+        connector_snapshot = None
+        connector_denial = None
+        if connector_call and run.ctx.connector_bridge is not None:
+            connector_auto, connector_snapshot, summary, connector_denial = await run.ctx.connector_bridge.evaluate(tool.removeprefix("mcp__composio__"), input)
+        unknown_retry = False
+        if not connector_call and tool.startswith("mcp__composio__"):
+            from app.services.composio_bridge import is_action
+            from app.services import action_outcomes
+            name = tool.removeprefix("mcp__composio__")
+            if is_action(name, input):
+                previous_attempt = await action_outcomes.previous_attempt(runtime, {"legacy_tool": name, "arguments": input})
+                routine = getattr(run, "routine_grants", None) is not None or getattr(run, "uninterrupted_access", False)
+                unknown_retry = previous_attempt.get("outcome") == "unknown" and (not routine or previous_attempt.get("turn_id") != run.turn_id)
+                if unknown_retry:
+                    summary = "Retry after UNKNOWN outcome; this may duplicate the action. " + (summary or name)
+        handoff = tool == "mcp__computer__request_handoff"
+        handoff_valid = (handoff and run.ctx.computer is not None
+                         and run.ctx.computer.provider == "docker" and run.ctx.computer.kind == "desktop"
+                         and set(input) == {"reason"} and isinstance(input.get("reason"), str)
+                         and input["reason"].strip() and len(input["reason"]) <= 300
+                         and not run.ctx.draft_only and not run.ctx.media_review_only
+                         and not getattr(run, "handoff_waiting", False))
+        if handoff_valid:
+            run.handoff_waiting = True
+            from app.services.agent_memory import redact_secrets
+            kind, summary = "handoff", redact_secrets(input["reason"])[0]
+        if tool == "mcp__composio__app_run_action":
+            # Only a reviewed read can skip the card, and only after its first approved run (composio_actions.py).
+            from app.services import composio_actions
+            async with runtime.session() as db:
+                run.ctx.composio_first_use_hit = await composio_actions.first_use_hit(db, runtime.owner_id, run.agent_id, input)
+        connector_call = tool in ("mcp__composio__apps_search", "mcp__composio__apps_run")
+        if connector_call and run.ctx.connector_bridge is not None:
+            auto = connector_auto
+        else:
+            auto = tool_policy.automatic(tool, run.ctx.approval_mode or approval_modes.DEFAULT_MODE, run, input)
+        if not connector_call and not fresh_pdf and (auto is None or auto[0] != "denied"):
+            from app.services import routine_uninterrupted
+            routine_auto = await routine_uninterrupted.automatic(runtime, run, tool, input)
+            if routine_auto is not None:
+                auto = routine_auto
+            elif auto is None and getattr(run, "uninterrupted_access", False):
+                auto = ("denied", "routine_tool_not_granted")
+        if unknown_retry and (auto is None or auto[0] != "denied"):
+            auto = None
+        if handoff:
+            auto = None if handoff_valid else ("denied", "invalid_handoff")
+        elif getattr(run, "handoff_waiting", False):
+            auto = ("denied", "handoff_waiting")
         stored_input = durable_input(tool, input)
+        if tool.startswith("mcp__team__"):
+            from app.services.chat_card_schema import TOOLS
+            if tool.removeprefix("mcp__team__") in TOOLS:
+                summary = "Chat suggestion"
+        if connector_call and connector_auto is not None and connector_auto[0] == "denied":
+            from app.services.connector_service import safe
+            stored_input = safe(stored_input)
         if tool.startswith("mcp__computer__native_"):
             summary = tool.removeprefix("mcp__computer__native_").replace("_", " ") + " on this Mac"
         async with runtime.session() as db:
@@ -337,44 +411,59 @@ class ThreadApprovalGate:
                     summary=summary,
                     kind=kind,
                     owner_token=run.owner_token,
+                    automatic_source=auto[1] if auto else None,
+                    automatic=auto[0] if auto and (auto[1] == "shell_outside_workspace" or (auto[0] == "allowed" and (auto[1].endswith("_read") or auto[1] in ("chat_suggestion", "composio_search")))) else None,
                 )
             except store.TurnNotRunning:
+                if handoff_valid:
+                    run.handoff_waiting = False
                 run.recorder.lose()
                 return None
         future = asyncio.get_running_loop().create_future()
         runtime._waiters[approval.id] = future
         self._by_request[request_id] = approval.id
+        if connector_call and run.ctx.connector_bridge is not None:
+            run.ctx.connector_bridge.bind_approval(approval.id, tool.removeprefix("mcp__composio__"), input, connector_snapshot)
+            if connector_denial:
+                self._connector_denials[approval.id] = connector_denial
+        if auto == ("denied", "shell_outside_workspace"):
+            from app.services.shell_paths import REASON
+            self._connector_denials[approval.id] = REASON
         timeout = run.approval_timeout
         if timeout is None:
             timeout = app_settings.get("LOCAL_APPROVAL_TIMEOUT_SECONDS", live=True)
         self._deadlines[approval.id] = asyncio.get_running_loop().time() + timeout
         self._info[approval.id] = (tool, kind, summary)
-        if tool == "mcp__composio__app_run_action":
-            # Only a reviewed read can skip the card, and only after its first approved run (composio_actions.py).
-            from app.services import composio_actions
+        if handoff_valid:
+            self._handoffs.add(approval.id)
+            self._deadlines[approval.id] = asyncio.get_running_loop().time() + 600
+            from app.db.models import Notification
             async with runtime.session() as db:
-                run.ctx.composio_first_use_hit = await composio_actions.first_use_hit(db, runtime.owner_id, run.agent_id, input)
-        auto = tool_policy.automatic(tool, run.ctx.approval_mode or approval_modes.DEFAULT_MODE, run, input)
-        if auto is None or auto[0] != "denied":
-            from app.services import routine_uninterrupted
-            routine_auto = await routine_uninterrupted.automatic(runtime, run, tool, input)
-            if routine_auto is not None:
-                auto = routine_auto
-            elif auto is None and getattr(run, "uninterrupted_access", False):
-                auto = ("denied", "routine_tool_not_granted")
+                db.add(Notification(owner_id=runtime.owner_id, kind="needs_input", title="Computer needs your input",
+                                    body=summary, thread_id=run.thread_id))
+                await db.commit()
+            await run.recorder.emit("computer.handoff", {"status": "waiting", "computer_id": run.ctx.computer.computer_id,
+                                                         "approval_id": approval.id, "reason": summary})
         if auto is not None:
             status, source = auto
             if source == "routine_uninterrupted_grant":
                 self._uninterrupted_requests.add(request_id)
-            async with runtime.session() as db:
-                won = await store.decide_approval(db, approval.id, status, by={"by": source})
+            # Auto-allowed reads have no transient question; other automatic
+            # decisions retain their existing visible refusal/action receipt.
+            if approval.status == 'pending':
+                async with runtime.session() as db:
+                    won = await store.decide_approval(db, approval.id, status, by={'by': source})
+            else:
+                won = approval.status == status
             if won:
                 future.set_result(status)
-                self._log("auto_allowed" if status == "allowed" else "denied", approval.id, source=source)
+                await self._log("auto_allowed" if status == "allowed" else "denied", approval.id, source=source)
+                if connector_call and status == "denied" and approval.id in self._connector_denials:
+                    await run.recorder.emit("assistant.message", {"text": self._connector_denials[approval.id]})
             runtime.hub.notify(run.thread_id)
             return ApprovalHandle(approval_id=approval.id, request_id=request_id, tool=tool)
         # A change to a connected app (mcp__composio__) is only ever allowed on its own card, never by a saved rule.
-        rule = None if tool.startswith(("mcp__team__", "mcp__composio__", "mcp__community__")) or tool in SCREEN_INPUT else await self._saved_rule(tool, input)
+        rule = None if handoff or tool.startswith(("mcp__team__", "mcp__composio__", "mcp__community__")) or tool in SCREEN_INPUT else await self._saved_rule(tool, input)
         held = None
         if rule is not None:
             # A command on the safety floor, or one that could not be read, is
@@ -392,11 +481,11 @@ class ThreadApprovalGate:
                 )
             if won:
                 future.set_result("allowed")
-                self._log(
+                await self._log(
                     "auto_allowed", approval.id, source="saved_rule", rule=approval_allowlist.rule_label(rule)
                 )
         else:
-            self._log("shown", approval.id, rule=f"safety_floor:{held}" if held else None)
+            await self._log("shown", approval.id, rule=f"safety_floor:{held}" if held else None)
         runtime.hub.notify(run.thread_id)
         return ApprovalHandle(approval_id=approval.id, request_id=request_id, tool=tool)
 
@@ -407,6 +496,7 @@ class ThreadApprovalGate:
         # A cancel that landed before this wait dropped the deadline: finish at once.
         deadline = self._deadlines.get(handle.approval_id, loop.time())
         status: str | None = None
+        release_clock = run.ctx.hold_clock() if run.ctx.hold_clock else lambda: None
         try:
             while status is None:
                 remaining = deadline - loop.time()
@@ -428,12 +518,36 @@ class ThreadApprovalGate:
                     expired = await store.expire_approval(db, handle.approval_id)
                 status = "expired" if expired else await self._status(handle.approval_id)
         finally:
+            release_clock()
             runtime._waiters.pop(handle.approval_id, None)
             self._by_request.pop(handle.request_id, None)
             self._deadlines.pop(handle.approval_id, None)
 
+        if handle.approval_id in self._handoffs:
+            self._handoffs.discard(handle.approval_id)
+            if run.ctx.computer is not None and status == "allowed":
+                computer_id = run.ctx.computer.computer_id
+                # Web viewer and Telegram engine can live in separate processes.
+                if not await runtime.computers.handback(computer_id):
+                    async with runtime.session() as db:
+                        await store.deny_undelivered_allow(db, handle.approval_id, run.owner_token,
+                                                        source="computer_control_still_held")
+                    run.handoff_waiting = False
+                    message = "The live view has not released control. The hand-off did not resume; close the live view and try again."
+                    await run.recorder.emit("assistant.message", {"text": message})
+                    self._info.pop(handle.approval_id, None)
+                    return Decision(DENY, message)
+            run.handoff_waiting = False
+            await run.recorder.emit("computer.handoff", {"status": "completed" if status == "allowed" else status or "expired"})
+            if status != "allowed":
+                message = ("The hand-off timed out after 10 minutes. The person did not confirm completion; nothing was resumed."
+                           if status == "expired" else "The person cancelled the hand-off. Do not continue the login or confirmation.")
+                await run.recorder.emit("assistant.message", {"text": message})
+                await self._log(status or "cancelled", handle.approval_id)
+                self._info.pop(handle.approval_id, None)
+                return Decision(EXPIRED if status == "expired" else DENY, message)
         if status in ("expired", "cancelled"):
-            self._log(status, handle.approval_id, source="timeout" if status == "expired" else "provider")
+            await self._log(status, handle.approval_id, source="timeout" if status == "expired" else "provider")
         uninterrupted_allowed = handle.request_id in self._uninterrupted_requests
         self._uninterrupted_requests.discard(handle.request_id)
         if status == "allowed" and uninterrupted_allowed:
@@ -450,7 +564,7 @@ class ThreadApprovalGate:
                     run.recorder.lose()
                     self._info.pop(handle.approval_id, None)
                     return Decision(LOST)
-                self._log("denied", handle.approval_id, source=source)
+                await self._log("denied", handle.approval_id, source=source)
                 self._info.pop(handle.approval_id, None)
                 runtime.hub.notify(run.thread_id)
                 return Decision(DENY)
@@ -468,7 +582,8 @@ class ThreadApprovalGate:
                 run.screen_granted = True
             return Decision(ALLOW)
         if status == "denied":
-            return Decision(DENY)
+            message = self._connector_denials.pop(handle.approval_id, None)
+            return Decision(DENY, message)
         if status == "expired":
             return Decision(EXPIRED)
         return Decision(CANCELLED)
@@ -495,8 +610,8 @@ class ThreadApprovalGate:
 class ThreadRuntime:
     hub: ThreadHub = default_hub
     adapters: dict[str, ProviderAdapter] = field(default_factory=default_adapters)
-    codex_login: CodexLogin = field(default_factory=CodexLogin)
-    claude_login: ClaudeLogin = field(default_factory=ClaudeLogin)
+    codex_account: LogoutOperation = field(default_factory=LogoutOperation)
+    claude_account: LogoutOperation = field(default_factory=LogoutOperation)
     # Account changes and turn admission reserve before their first await.
     _account_changing: bool = False
     _starting_turns: int = 0
@@ -609,6 +724,7 @@ class ThreadRuntime:
         model: str | None = None,
         title: str | None = None,
         agent_id: int | None = None,
+        origin: str = "app",
         kind: str = "chat",
         job_id: int | None = None,
         room_id: int | None = None,
@@ -653,7 +769,7 @@ class ThreadRuntime:
             session_state="new" if session_id is not None else "none",
             workspace_path=str(workspace.resolve()),
             agent_id=agent.id if agent is not None else None,
-            kind=kind, job_id=job_id, room_id=room_id,
+            origin=origin, kind=kind, job_id=job_id, room_id=room_id,
             effort=effort,
         )
         if destination_db is not None:
@@ -705,6 +821,7 @@ class ThreadRuntime:
         routine_run_id: int | None = None,
         configuration_allowed: bool = True,
         internal: bool = False,
+        card_answer: tuple[str, str] | None = None,
     ) -> store.Turn:
         """Start a turn and run it in the background. Raises ThreadNotFound,
         UnknownProvider, SessionBroken, ProviderUnavailable, ThreadBusy (a
@@ -734,10 +851,13 @@ class ThreadRuntime:
             raise UnknownProvider(thread.provider)
         if thread.session_state == "broken":
             raise SessionBroken(thread_id)
-        attached = attachments.resolve_for_turn(thread_id, attachment_ids or [])
+        prompt_text, removed_credentials = await asyncio.to_thread(agent_memory.redact_secrets, prompt_text)
+        if removed_credentials:
+            prompt_text += "\n[A credential was removed. Warn the person to rotate it and use the Apps page; do not save credentials in notes.]"
+        attached = await asyncio.to_thread(attachments.resolve_for_turn, thread_id, attachment_ids or [])
         # Skills the person chose for this message; SkillError (422) when one
         # is unknown or off. They add background to this message only.
-        chosen_skills = agent_skills.resolve(thread.agent_id, skills or [])
+        chosen_skills = await asyncio.to_thread(agent_skills.resolve, thread.agent_id, skills or [])
         if any(a.kind == "image" for a, _ in attached) and not capabilities_of(adapter).images:
             raise ImagesUnsupported(getattr(adapter, "label", None) or thread.provider)
         if not thread.workspace_path:
@@ -757,6 +877,8 @@ class ThreadRuntime:
         # leaves the thread with its own provider and model only.
         agent = None
         if thread.agent_id is not None:
+            from app.services.starter_team import upgrade
+            await upgrade(self)
             async with self.session() as db:
                 agent = await agent_store.get_agent(db, thread.agent_id)
 
@@ -781,7 +903,7 @@ class ThreadRuntime:
             # Restore those records as background before returning to the
             # original engine, including after a backend restart.
             async with self.session() as db:
-                handoff = _fallback_handoff(await store.list_all_events(db, thread_id))
+                handoff = await asyncio.to_thread(_fallback_handoff, await store.list_all_events(db, thread_id, max_events=2000))
 
         async with self.session() as db:
             turn = await store.start_turn(
@@ -791,6 +913,7 @@ class ThreadRuntime:
                 owner_instance=self.instance_id,
                 attachments=[a.public() for a, _ in attached] or None,
                 origin=team_origin,
+                card_answer=card_answer,
             )
         if chosen_skills:
             async with self.session() as db:
@@ -804,11 +927,11 @@ class ThreadRuntime:
 
         async def history() -> list[dict]:
             async with self.session() as db:
-                items = store.history_items(await store.list_all_events(db, thread_id))
+                items = await asyncio.to_thread(store.history_items, await store.list_all_events(db, thread_id, max_events=2000))
             # An engine that replays the transcript gets it folded once it
             # outgrows the engine's budget (context_compaction.py).
-            plan = context_compaction.plan(
-                items,
+            plan = await asyncio.to_thread(
+                context_compaction.plan, items,
                 current_turn_id=turn.id,
                 budget_tokens=context_compaction.budget_for(
                     self.adapters[run.engine_id], run.ctx.engine_config
@@ -846,17 +969,19 @@ class ThreadRuntime:
                 await run.recorder.emit("context.compacted", plan.record)
             return plan.items
 
-        explicit_memory = memory_explicit.prepare(agent, thread, turn, internal=internal)
+        from app.services.starter_team import RESOURCEFULNESS, FILE_GUIDANCE
+        explicit_memory = await asyncio.to_thread(memory_explicit.prepare, agent, thread, turn, internal=internal)
         ctx = TurnContext(
             thread_id=thread_id,
             turn_id=turn.id,
-            prompt=handoff + agent_skills.prompt_block(chosen_skills) + memory_recall.with_recall(recall, attachments.prompt_with_text_files(prompt_text, attached)),
+            prompt=handoff + agent_skills.prompt_block(chosen_skills) + memory_recall.with_recall(recall, await asyncio.to_thread(attachments.prompt_with_text_files, prompt_text, attached)),
             images=[
                 {"path": str(path), "mime": a.mime, "name": a.name}
                 for a, path in attached
                 if a.kind == "image"
             ],
             workspace=Path(thread.workspace_path) if thread.workspace_path else None,
+            agent_id=agent.id if agent is not None else None,
             # A model chosen for this conversation wins over its agent's. An
             # agent's model is for the agent's engine: a conversation on another
             # engine (the agent changed engine since) uses that engine's default.
@@ -870,8 +995,9 @@ class ThreadRuntime:
             # The agent's instructions, then its notes (MEMORY.md) when on.
             instructions=_with_brief(
                 "\n\n".join(filter(None, (
-                    agent_memory.turn_instructions(agent) if agent is not None else None,
+                    await asyncio.to_thread(agent_memory.turn_instructions, agent) if agent is not None else None,
                     explicit_memory,
+                    RESOURCEFULNESS if agent is not None else None, FILE_GUIDANCE if agent is not None else None,
                 ))) or None, brief,
             ),
             approval_mode=approval_mode
@@ -879,6 +1005,10 @@ class ThreadRuntime:
             else (agent.approval_mode if agent is not None else None),
             engine_config=config,
         )
+        ctx.chat_cards_allowed = agent is not None and team_origin == "person" and not draft_only and app_settings.get("LOCAL_TOOLS_ENABLED")
+        if ctx.chat_cards_allowed:
+            from app.services.chat_card_schema import NOTE
+            ctx.instructions = (ctx.instructions or "") + "\n" + NOTE
         ctx.draft_only = draft_only
         ctx.media_review_only = any(a.kind == "audio" for a, _ in attached)
         if draft_only:
@@ -906,7 +1036,7 @@ class ThreadRuntime:
                 and not internal
             ),
         )
-        if not draft_only and agent is not None and agent.team_id is not None and app_settings.get("TEAM_ENABLED") and capabilities_of(adapter).mcp:
+        if not draft_only and agent is not None and agent.team_id is not None and app_settings.get("TEAM_ENABLED") and (capabilities_of(adapter).mcp or capabilities_of(adapter).local_connected_apps):
             from app.db.models import Team
             async with self.session() as db:
                 team = await db.get(Team, agent.team_id)
@@ -918,7 +1048,8 @@ class ThreadRuntime:
                 async with self.session() as db:
                     intro = await team_prompt.build(db, team=team, agent=agent, owner_id=self.owner_id)
                 note = "" if internal else await self.team_jobs.outstanding_note(thread_id)
-                ctx.prompt = intro + '\n\n' + note + ctx.prompt
+                if capabilities_of(adapter).mcp:
+                    ctx.prompt = intro + '\n\n' + note + ctx.prompt
         if thread.job_id is not None and not internal:
             await self.team_jobs.on_person_message(thread, turn, prompt_text)
         run.routine_run_id = routine_run_id
@@ -1177,6 +1308,8 @@ class ThreadRuntime:
         memory_bridge = None
         composio_bridge = None
         community_bridge = None
+        computer_bridge = None
+        workspace_bridge = None
         try:
             try:
                 # An agent with a computer runs its tools there or not at all:
@@ -1191,6 +1324,11 @@ class ThreadRuntime:
                     run.agent_id, run.turn_id, str(run.ctx.workspace) if run.ctx.workspace else None
                 )
                 run.ctx.computer = binding
+                if binding is not None and binding.provider == "docker":
+                    from app.computers.bridge import ComputerBridge
+                    computer_bridge = ComputerBridge(self, run, binding)
+                    binding.launch = computer_bridge.launch
+                    computer_bridge.start()
                 from app.services import routine_uninterrupted
                 await routine_uninterrupted.load(self, run)
                 if binding is not None and run.ctx.approval_mode != "plan":
@@ -1198,8 +1336,8 @@ class ThreadRuntime:
                     binding.routine_uninterrupted = authorized == ("allowed", "routine_uninterrupted_grant")
                 if not getattr(run.ctx, "draft_only", False) and binding is None and run.agent_id is not None and capabilities_of(adapter).computers:
                     binding = run.ctx.browser = await self.computers.attach_browser(run.agent_id, run.turn_id)
-                if run.ctx.team is not None:
-                    team_bridge = TeamBridge(self, run)
+                if run.ctx.team is not None or (getattr(run.ctx, "chat_cards_allowed", False) and (capabilities_of(adapter).mcp or capabilities_of(adapter).local_connected_apps)):
+                    team_bridge = TeamBridge(self, run, pdf_only=run.ctx.team is not None and not capabilities_of(adapter).mcp, cards_only=run.ctx.team is None)
                     run.ctx.team_launch = team_bridge.launch
                     team_bridge.start()
                 if run.agent_id is not None and run.log_memory:
@@ -1211,7 +1349,24 @@ class ThreadRuntime:
                     memory_bridge = MemoryBridge(self, run)
                     run.ctx.memory_launch = memory_bridge.launch
                     memory_bridge.start()
-                composio_apps = await self._composio_apps(run, adapter)
+                from app.services import connector_service
+                from app.services.connector_bridge import ConnectorBridge
+                connector_grants = {}
+                if run.agent_id is not None and (capabilities_of(adapter).connected_apps or capabilities_of(adapter).local_connected_apps) and not run.ctx.draft_only and not run.ctx.media_review_only:
+                    async with self.session() as db:
+                        connector_grants = await connector_service.grants(db, self.owner_id, run.agent_id)
+                # Fail closed without filesystem and loopback network isolation.
+                from app.core.config import settings as connector_settings
+                if connector_grants and connector_settings.TURN_SANDBOX_ENABLED and connector_settings.TURN_SANDBOX_NETWORK_ENABLED:
+                    composio_bridge = ConnectorBridge(self, run, connector_grants)
+                    run.ctx.connector_bridge = composio_bridge
+                    run.ctx.composio_launch = composio_bridge.launch
+                    run.ctx.composio_apps = {}
+                    run.ctx.composio_exact_tools = ["apps_search", "apps_run"]
+                    composio_bridge.start()
+                if connector_grants and composio_bridge is None:
+                    run.ctx.instructions = (run.ctx.instructions or "") + "\nConnected apps are unavailable because the isolated turn sandbox is disabled. Tell the person to check Apps and server sandbox settings; do not ask for credentials."
+                composio_apps = {} if connector_grants else await self._composio_apps(run, adapter)
                 if composio_apps:
                     composio_bridge = ComposioBridge(self, run, composio_apps,
                                                       account_scopes=getattr(run.ctx, "composio_account_scopes", {}))
@@ -1226,6 +1381,13 @@ class ThreadRuntime:
                     run.ctx.community_prompt_note = community_bridge.prompt_note
                     run.ctx.community_bridge = community_bridge
                     community_bridge.start()
+                if (adapter.key == 'claude' and run.ctx.computer is None and run.agent_id is not None
+                        and app_settings.get('LOCAL_TOOLS_ENABLED') and not run.ctx.draft_only
+                        and not run.ctx.media_review_only):
+                    from app.services.workspace_bridge import WorkspaceBridge
+                    workspace_bridge = WorkspaceBridge(self, run)
+                    run.ctx.workspace_launch = workspace_bridge.launch
+                    workspace_bridge.start()
                 # Watched from here: starting a computer can take a while, and
                 # is not the engine doing nothing.
                 run.touch()
@@ -1241,7 +1403,7 @@ class ThreadRuntime:
                 outcome = TurnOutcome(
                     "failed",
                     error="This agent has a computer, and this engine cannot run its tools in one. "
-                    "Switch the agent to Claude, or remove its computer.",
+                    "Switch the agent to Claude or Codex, or remove its computer.",
                     error_code="engine_without_computers",
                 )
             except computer_service.ComputerUnavailable as exc:
@@ -1264,6 +1426,10 @@ class ThreadRuntime:
                 await composio_bridge.close()
             if community_bridge is not None:
                 await community_bridge.close()
+            if workspace_bridge is not None:
+                await workspace_bridge.close()
+            if computer_bridge is not None:
+                await computer_bridge.close()
             await self.computers.release_turn(binding, run.turn_id)
         if run.stop_requested and outcome.status != "succeeded":
             # Killed on request. A turn that finished on its own just before the
@@ -1395,6 +1561,7 @@ class ThreadRuntime:
             turn_id=old.turn_id,
             prompt=old.prompt,
             workspace=old.workspace,
+            agent_id=old.agent_id,
             model=fallback_model,
             effort=old.effort,
             provider_session_id=fallback.new_session_id(),
@@ -1406,12 +1573,18 @@ class ThreadRuntime:
             computer=old.computer,
             browser=old.browser,
             team=old.team, team_launch=old.team_launch, memory_launch=old.memory_launch,
+            composio_launch=old.composio_launch, composio_apps=old.composio_apps,
+            connector_bridge=old.connector_bridge,
+            workspace_launch=old.workspace_launch,
+            composio_exact_tools=old.composio_exact_tools,
+            routine_uninterrupted=old.routine_uninterrupted,
             community_launch=old.community_launch, community_tools=list(old.community_tools),
             community_prompt_note=old.community_prompt_note,
             community_bridge=old.community_bridge,
             engine_config=config,
             draft_only=old.draft_only,
             media_review_only=old.media_review_only,
+            chat_cards_allowed=old.chat_cards_allowed,
             images=list(old.images),
         )
         if old.aborted:
@@ -1576,6 +1749,10 @@ class ThreadRuntime:
             raise ValueError("decision must be 'allow' or 'deny'")
         status = "allowed" if decision == ALLOW else "denied"
         async with self.session() as db:
+            candidate = await store.get_approval(db, approval_id)
+            thread = await store.get_thread(db, candidate.thread_id) if candidate else None
+            if thread is None or thread.owner_id != self.owner_id:
+                return False
             won = await store.decide_approval(db, approval_id, status)
             approval = await store.get_approval(db, approval_id)
         if won:
@@ -1583,7 +1760,7 @@ class ThreadRuntime:
             if future is not None and not future.done():
                 future.set_result(status)
             if approval is not None:
-                decision_log.record(
+                await asyncio.to_thread(decision_log.record,
                     status,
                     thread_id=approval.thread_id,
                     turn_id=approval.turn_id,
@@ -1661,8 +1838,8 @@ class ThreadRuntime:
         """This process is stopping. Kill its provider processes and interrupt
         its own turns at once, instead of leaving them for the lease to expire."""
         self._closing = True
-        await self.codex_login.close()
-        await self.claude_login.close()
+        await self.codex_account.close()
+        await self.claude_account.close()
         self.capture.close()
         await self.team_jobs.close()
         runs = self._runs.all_values()

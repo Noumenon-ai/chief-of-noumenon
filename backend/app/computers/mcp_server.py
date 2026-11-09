@@ -30,7 +30,7 @@ from app.computers import browser, docker_cli, grants, screen
 PROTOCOL_VERSION = "2025-06-18"
 LAST_COMMAND_FILE = "last-command.json"
 NOT_APPROVED = (
-    "This call was not approved in open-dots, so it was not run. "
+    "This call was not approved in Chief of Noumenon, so it was not run. "
     "Ask again; every computer call needs an approval."
 )
 
@@ -88,6 +88,13 @@ TOOLS = [
 _TOOL_NAMES = {tool["name"] for tool in TOOLS}
 
 
+HANDOFF_TOOL = {
+    "name": "request_handoff",
+    "description": "Pause for the person to sign in, solve a CAPTCHA or QR, use a passkey, or confirm a payment. Never ask for a password in chat. Continue returns only that the person finished.",
+    "inputSchema": _schema({"reason": {"type": "string", "minLength": 1, "maxLength": 300}}, ["reason"]),
+}
+
+
 class Server:
     def __init__(self, container: str, user: str, grants_dir: Path, state_dir: Path, docker: str | None, kind: str = "shell", turn_id: str = "", max_actions: int = 300, browser_enabled: bool = False, provider: str = "docker", computer_id: int | None = None, api_origin: str = "", capability: str = "") -> None:
         self.container = docker_cli.check_name(container)
@@ -133,7 +140,7 @@ class Server:
 
     # -- tools -------------------------------------------------------------------------
 
-    def call(self, name: object, arguments: object) -> dict:
+    def call(self, name: object, arguments: object, *, _approved: bool = False) -> dict:
         if not isinstance(name, str) or (name not in _TOOL_NAMES and not (self.kind == "desktop" and name in screen.DEFINITIONS) and not (self.browser_enabled and name in browser.DEFINITIONS)):
             return _text("Unknown computer tool.", error=True)
         if not isinstance(arguments, dict):
@@ -143,7 +150,7 @@ class Server:
             return _text(problem, error=True)
         # The local bridge consumes cloud-tool permits after checking the
         # turn capability; the child cannot consume one on behalf of itself.
-        if self.provider != "boat" and not grants.consume(self.grants_dir, name, arguments):
+        if not _approved and self.provider != "boat" and not grants.consume(self.grants_dir, name, arguments):
             return _text(NOT_APPROVED, error=True)
         if name not in ("read_file", "list_files") and screen.held(self.state_dir):
             self.screen.needs_observation = True

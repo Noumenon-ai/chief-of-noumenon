@@ -11,6 +11,7 @@ $FAKE_DOCKER_STATE/mode may hold `down` (the daemon is not running) or `hang`
 """
 
 import json
+import hashlib
 import os
 import pathlib
 import subprocess
@@ -114,7 +115,7 @@ elif command == "run":
         fail(f"Unable to find image '{image}' locally", 125)
     if name in state["containers"]:
         fail(f'docker: Error response from daemon: Conflict. The container name "/{name}" is already in use.', 125)
-    cid = format(abs(hash(name + str(time.time()))), "x").rjust(64, "0")[:64]
+    cid = hashlib.sha256((name + str(time.time())).encode()).hexdigest()
     state["containers"][name] = {
         "inspect": {
             "Id": cid,

@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.auth.middleware import principal_of
 from app.core import app_settings
 from app.db.session import get_db
 from app.schemas.local import (
@@ -16,6 +17,7 @@ from app.schemas.local import (
 )
 from app.schemas.task import TaskResponse
 from app.services import local_claude_runner, task_execution_service
+from app.services import voice
 from app.services.local_approval_broker import ApprovalNotFound
 from app.services.local_approval_broker import broker as approval_broker
 from app.services.local_access_policy import (
@@ -42,13 +44,17 @@ async def local_status(
 ):
     """Tells the UI whether to offer local execution. Never runs the CLI for a
     caller the policy refuses."""
+    voice_settings = {
+        "languages": voice.allowed_languages(), "default": "auto",
+        "browser_speech": settings.VOICE_BROWSER_SPEECH,
+    } if voice.can_record(principal_of(request.scope)) else None
     if not settings.LOCAL_EXECUTION_ENABLED:
-        return LocalStatusResponse(enabled=False, available=False)
+        return LocalStatusResponse(enabled=False, available=False, voice=voice_settings)
 
     try:
         policy.authorize(request)
     except LocalAccessDenied as exc:
-        return LocalStatusResponse(enabled=True, available=False, reason=exc.reason)
+        return LocalStatusResponse(enabled=True, available=False, reason=exc.reason, voice=voice_settings)
 
     cli = await local_claude_runner.get_status()
     ready = cli.installed and cli.signed_in is True
@@ -58,6 +64,7 @@ async def local_status(
         reason=None if ready else cli.error,
         cli_version=cli.version,
         tools_enabled=app_settings.get("LOCAL_TOOLS_ENABLED"),
+        voice=voice_settings,
     )
 
 
@@ -172,3 +179,10 @@ async def stream_local_task_events(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/sandbox", dependencies=[Depends(require_local_access)])
+async def sandbox_status():
+    import asyncio
+    from app.core import turn_sandbox
+    return await asyncio.to_thread(turn_sandbox.status)

@@ -51,7 +51,7 @@ function newestRelease(releases) {
 
 // The installer built for this platform by `npm run package` (see package.json artifactName).
 function pickAsset(release, platform, arch) {
-  const wanted = platform === "darwin" && arch === "arm64" ? /^Open-Duet-.+-arm64\.dmg$/ : platform === "win32" && arch === "x64" ? /^Open-Duet-Setup-.+\.exe$/ : null;
+  const wanted = platform === "darwin" && arch === "arm64" ? /^Chief-of-Noumenon-.+-arm64\.dmg$/ : platform === "win32" && arch === "x64" ? /^Chief-of-Noumenon-Setup-.+\.exe$/ : null;
   if (!wanted) return null;
   return (release.assets ?? []).find((asset) => ASSET_NAME.test(asset?.name ?? "") && wanted.test(asset.name) && typeof asset.browser_download_url === "string") ?? null;
 }
@@ -175,7 +175,7 @@ function createUpdater({ currentVersion, platform, arch, fetchImpl = fetch, cach
     try {
       const failure = await openFile(state.file);
       if (failure) throw new Error(failure);
-      set({ status: "installing", message: platform === "darwin" ? "The installer opened. Drag Open Duet to Applications, then reopen the app." : "The installer opened. Follow its steps; Open Duet will need to be closed." });
+      set({ status: "installing", message: platform === "darwin" ? "The installer opened. Drag Chief of Noumenon to Applications, then reopen the app." : "The installer opened. Follow its steps; Chief of Noumenon will need to be closed." });
     } catch (error) {
       set({ status: "error", message: describeError(error) });
     } finally {

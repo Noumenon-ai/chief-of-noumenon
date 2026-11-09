@@ -7,8 +7,8 @@ import sys
 import pytest
 
 from app.services import engine_logout
-from app.services.claude_login import ClaudeLogin
-from app.services.codex_login import CodexLogin, LoginError
+from app.services.engine_logout import LogoutOperation
+from app.services.engine_logout import LoginError
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable fixture")
 
@@ -42,7 +42,7 @@ sys.exit(0 if signed_in else 1)
 ''')
     script.chmod(0o700)
     (tmp_path / "account").write_text("synthetic-account")
-    manager = CodexLogin() if engine == "codex" else ClaudeLogin()
+    manager = LogoutOperation()
     yield manager, engine, script, tmp_path
     await manager.close()
 
@@ -77,7 +77,7 @@ async def test_shutdown_reaps_signout_and_serializes_account_home(account):
             await asyncio.sleep(.01)
     with pytest.raises(LoginError):
         await engine_logout.logout(manager, engine, script)
-    other = CodexLogin() if engine == "codex" else ClaudeLogin()
+    other = LogoutOperation()
     with pytest.raises(LoginError):
         await engine_logout.logout(other, engine, script)
     pid = int((home / "pid").read_text())

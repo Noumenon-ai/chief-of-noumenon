@@ -1,5 +1,6 @@
 "use client";
 
+import { relativeReceipt } from "@/lib/control-room";
 import { Select } from "@/components/ui/Select";
 
 import { useEffect, useState } from "react";
@@ -117,7 +118,7 @@ export function DecisionLog({ threadId = null }: { threadId?: number | null }) {
         <ul className="divide-y divide-line rounded-md border border-line">
           {items.map((entry) => (
             <li key={entry.id} className="px-3 py-2">
-              <p className="break-words text-xs">{decisionText(entry)}</p>
+              <p className="break-words text-xs">{relativeReceipt(decisionText(entry))}</p>
               <p className="mt-0.5 text-xs text-muted">
                 <span className="rounded bg-inset px-1.5 py-0.5">{decisionEventLabel(entry.event)}</span>{" "}
                 {new Date(entry.at).toLocaleString()}

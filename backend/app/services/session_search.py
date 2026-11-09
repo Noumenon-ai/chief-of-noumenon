@@ -23,6 +23,7 @@ PostgreSQL). `since` and `until` take a span back from now ("24h", "3d",
 for `since` and its last instant for `until`.
 """
 
+import asyncio
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -142,7 +143,7 @@ async def search(
             db, owner_id, agent_id, current_thread_id, terms, since, until, limit
         )
     if scope in ("all", "memory") and memory and terms:
-        result.memory = memory_hits(agent_id, terms, since, until, limit)
+        result.memory = await asyncio.to_thread(memory_hits, agent_id, terms, since, until, limit)
     return result
 
 
@@ -227,7 +228,7 @@ async def read(db, *, owner_id: str, agent_id: int, thread_id: int, seq: int) ->
         room = await db.get(Room, thread.room_id)
         room_names = {thread.room_id: room.name} if room else {}
     where, private = _where(thread, rooms, room_names)
-    text, _ = agent_memory.redact_secrets(text)
+    text, _ = await asyncio.to_thread(agent_memory.redact_secrets, text[:READ_MAX_CHARS + 16000])
     return {
         "thread_id": thread_id, "seq": seq, "at": event.created_at, "where": where, "private": private,
         "speaker": "the person" if event.type == "turn.started" else "you",

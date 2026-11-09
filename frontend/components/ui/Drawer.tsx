@@ -21,13 +21,16 @@ export function Drawer({
   className?: string;
 }) {
   const opener = useRef<HTMLElement | null>(null);
+  const content = useRef<HTMLDivElement | null>(null);
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="fixed inset-0 z-40 animate-fade-in bg-scrim" />
         <RadixDialog.Content
+          ref={content}
+          tabIndex={-1}
           aria-describedby={undefined}
-          onOpenAutoFocus={() => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }}
+          onOpenAutoFocus={(event) => { event.preventDefault(); opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; content.current?.focus(); }}
           onCloseAutoFocus={(event) => { event.preventDefault(); opener.current?.focus(); }}
           className={cn(
             "fixed inset-y-0 left-0 z-50 flex w-[min(20rem,88vw)] flex-col border-r border-line bg-surface pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-xl animate-drawer-in",

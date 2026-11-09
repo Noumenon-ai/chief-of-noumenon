@@ -37,7 +37,7 @@ test("curated counts come from the catalog and a generic action is never called 
   assert.match(agentActionsText(app("x", { agent_actions: "curated", curated_tools: [tool("a", "read")] })), /1 read tool\./);
   assert.match(agentActionsText(slack), /with your approval on every call/);
   assert.doesNotMatch(agentActionsText(slack), /read/i);
-  assert.match(agentActionsText(app("composio", { agent_actions: "unavailable" })), /Not available to agents/);
+  assert.match(agentActionsText(app("composio", { agent_actions: "unavailable" })), /Not available to bots/);
   assert.match(agentActionsText(accountOnlyCard("zoho", appLabel)), /checked with Composio/);
 });
 

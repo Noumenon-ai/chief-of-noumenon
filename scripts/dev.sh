@@ -92,9 +92,8 @@ fi
 if [ "$RUN_BOT" -eq 1 ] && [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
   RUN_BOT=0
   BOT_SKIP_REASON="TELEGRAM_BOT_TOKEN is not set"
-elif [ "$RUN_BOT" -eq 1 ] && [ -z "${BOAT_API_KEY:-}" ]; then
-  RUN_BOT=0
-  BOT_SKIP_REASON="BOAT_API_KEY is not set"
+elif [ "$RUN_BOT" -eq 1 ] && [ -z "${TELEGRAM_OWNER_ID:-}" ]; then
+  missing+=("TELEGRAM_OWNER_ID (positive owner ID required with TELEGRAM_BOT_TOKEN)")
 fi
 
 if [ "${#missing[@]}" -gt 0 ]; then
@@ -169,6 +168,17 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+export CONNECTOR_DATA_DIR="${CONNECTOR_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/chief-of-noumenon/connector}"
+export TURN_SANDBOX_ENABLED="${TURN_SANDBOX_ENABLED:-true}"
+export TURN_SANDBOX_NETWORK_ENABLED="${TURN_SANDBOX_NETWORK_ENABLED:-true}"
+if [ ! -x "$BACKEND_DIR/../connector/server/.venv/bin/python" ]; then
+  uv venv "$BACKEND_DIR/../connector/server/.venv"
+  uv pip sync --python "$BACKEND_DIR/../connector/server/.venv/bin/python" "$BACKEND_DIR/../connector/server/requirements.lock"
+fi
+echo "==> Starting local connector on http://127.0.0.1:8100"
+(cd "$BACKEND_DIR/../connector/server" && CONNECTOR_DEV=1 exec .venv/bin/python -m app.serve) &
+pids+=("$!")
 
 echo "==> Starting FastAPI app on http://127.0.0.1:8000"
 uv run fastapi dev app/main.py --host 127.0.0.1 --port 8000 &

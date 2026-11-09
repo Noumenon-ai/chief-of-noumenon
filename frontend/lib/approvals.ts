@@ -8,6 +8,8 @@ export const DECISION_EVENTS: { value: DecisionEvent; label: string }[] = [
   { value: "auto_allowed", label: "Allowed by a saved rule" },
   { value: "expired", label: "Expired" },
   { value: "cancelled", label: "Cancelled" },
+  { value: "app_call", label: "App call" },
+  { value: "app_result", label: "App result" },
   { value: "undone", label: "Always-allow removed" },
 ];
 
@@ -19,6 +21,10 @@ export function decisionEventLabel(event: string): string {
 export function decisionText(entry: DecisionEntry): string {
   const what = entry.summary || entry.tool || "a tool call";
   switch (entry.event) {
+    case "app_call":
+      return `Connected app call: ${what}`;
+    case "app_result":
+      return `Connected app result: ${what}`;
     case "shown":
       return entry.rule?.startsWith("safety_floor:")
         ? `Asked about ${what} (a saved rule matched, but the safety floor holds it for you)`
@@ -28,11 +34,12 @@ export function decisionText(entry: DecisionEntry): string {
     case "denied":
       return entry.source === "plan_mode" ? `${what} was refused: plan only changes nothing` : `You denied ${what}`;
     case "auto_allowed":
+      if (entry.source === "connector_read") return `${what} ran without asking: read-only connected app`;
       if (entry.source === "screen_turn_grant") return `${what} ran with your screen permission for this turn`;
       if (entry.source === "computer_screen_read") return `${what} ran without asking: reading the computer screen`;
-      if (entry.source === "computer_browser_read") return `${what} ran without asking: reading the agent's browser`;
-      if (entry.source === "computer_read") return `${what} ran without asking: reading inside the agent's computer`;
-      if (entry.source === "accept_edits") return `${what} ran without asking: edits are accepted for this agent`;
+      if (entry.source === "computer_browser_read") return `${what} ran without asking: reading the bot's browser`;
+      if (entry.source === "computer_read") return `${what} ran without asking: reading inside the bot's computer`;
+      if (entry.source === "accept_edits") return `${what} ran without asking: edits are accepted for this bot`;
       return `${what} ran without asking: a saved rule allowed it`;
     case "expired":
       return `Nobody answered about ${what} in time, so it did not run`;
@@ -57,7 +64,7 @@ export function ruleMatchLabel(rule: Pick<ApprovalRule, "match">): string {
 }
 
 export function ruleScopeLabel(rule: Pick<ApprovalRule, "workspace">): string {
-  return rule.workspace ? `In ${rule.workspace}` : "In every folder";
+  return rule.workspace ? `In ${rule.workspace.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) || "/"}` : "In every folder";
 }
 
 // The card offers "Always allow this command" only where the backend can save
@@ -65,7 +72,7 @@ export function ruleScopeLabel(rule: Pick<ApprovalRule, "workspace">): string {
 export function canAlwaysAllow(tool: string, input: Record<string, unknown>): boolean {
   const command = input.command;
   // A computer's exec tool is a shell command too; its rules match the same way.
-  return (tool === "Bash" || tool === "mcp__computer__exec") && typeof command === "string" && command.trim() !== "";
+  return (tool === "Bash" || tool === "mcp__computer__exec" || tool === "api__shell") && typeof command === "string" && command.trim() !== "";
 }
 
 export function csvFileName(threadId: number | null | undefined, now: Date = new Date()): string {

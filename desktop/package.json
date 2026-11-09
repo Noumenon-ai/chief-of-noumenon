@@ -2,7 +2,7 @@
   "name": "open-dots-desktop",
   "version": "0.8.1",
   "private": true,
-  "description": "Open Duet desktop app: an Electron window around the local backend. Runs from a source checkout or installed.",
+  "description": "Chief of Noumenon desktop app: an Electron window around the local backend. Runs from a source checkout or installed.",
   "main": "main.js",
   "engines": {
     "node": ">=22"
@@ -24,14 +24,14 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
-    "electron": "^43.0.0",
+    "electron": "^45.2.1",
     "electron-builder": "^26.15.3"
   },
-  "author": "Open Duet",
+  "author": "Open Duet authors and Chief of Noumenon contributors",
   "build": {
     "appId": "app.opendots.desktop",
-    "productName": "Open Duet",
-    "executableName": "Open Duet",
+    "productName": "Chief of Noumenon",
+    "executableName": "Chief of Noumenon",
     "directories": {
       "output": "release"
     },
@@ -63,7 +63,7 @@
           ]
         }
       ],
-      "artifactName": "Open-Duet-Setup-${version}.${ext}"
+      "artifactName": "Chief-of-Noumenon-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -83,7 +83,7 @@
       ],
       "category": "public.app-category.productivity",
       "identity": null,
-      "artifactName": "Open-Duet-${version}-arm64.${ext}"
+      "artifactName": "Chief-of-Noumenon-${version}-arm64.${ext}"
     }
   }
 }

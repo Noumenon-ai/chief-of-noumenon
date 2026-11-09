@@ -1,6 +1,8 @@
 "use client";
+import { useT as useUiText } from "@/lib/use-i18n";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { ErrorState, LoadingState } from "@/components/chat/PanelState";
 import { SettingsCard } from "./SettingsCard";
 import { Switch } from "@/components/ui/Checkbox";
 import { Button } from "@/components/ui/Button";
@@ -37,6 +39,10 @@ function subscribeToPermission(callback: () => void): () => void {
 }
 
 export function NotificationsSettings() {
+  const tx = useUiText();
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [loadTick, setLoadTick] = useState(0);
   const [prefs, setPrefs] = useState<NotificationPreferences>(defaultPrefs);
   const browserPermission = useSyncExternalStore(
     subscribeToPermission,
@@ -44,25 +50,35 @@ export function NotificationsSettings() {
     () => "default" as NotificationPermission,
   );
   const [testSent, setTestSent] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const confirmation = useSavedConfirmation();
 
   useEffect(() => {
     let alive = true;
     api.getNotificationPreferences().then((loaded) => {
-      if (alive) setPrefs(loaded);
-    }).catch(() => {});
+      if (alive) { setPrefs(loaded); setLoaded(true); setLoadError(false); }
+    }).catch(() => { if (alive) setLoadError(true); });
     return () => { alive = false; };
-  }, []);
+  }, [loadTick]);
 
-  const saveOption = (key: keyof NotificationPreferences, value: boolean) => {
+  const saveOption = async (key: keyof NotificationPreferences, value: boolean) => {
+    if (saving) return;
+    const previous = prefs;
     const updated = { ...prefs, [key]: value };
-    setPrefs(updated);
-    confirmation.showSaved(key);
-    void api.updateNotificationPreferences(updated).catch(() => {});
+    setPrefs(updated); setSaving(true); setSaveError("");
+    try {
+      await api.updateNotificationPreferences(updated);
+      confirmation.showSaved(key);
+    } catch {
+      setPrefs(previous);
+      setSaveError("Could not save notification settings. Your previous choices are still in use. Try again.");
+    } finally { setSaving(false); }
   };
 
   const handleRequestPermission = async () => {
     await requestNotificationPermission();
+    window.dispatchEvent(new Event("focus"));
   };
 
   const handleTestNotification = () => {
@@ -70,8 +86,8 @@ export function NotificationsSettings() {
       playNotificationSound();
     }
     const success = showNotificationAlert({
-      title: "Open Duet Notification",
-      body: "Desktop notifications are working! You will be alerted when agents need you or routines fail.",
+      title: "Chief of Noumenon Notification",
+      body: "Desktop notifications are working! You will be alerted when bots need you or routines fail.",
       silent: !prefs.sound_enabled,
     });
     if (success) {
@@ -80,36 +96,40 @@ export function NotificationsSettings() {
     }
   };
 
-  const isDesktop = isDesktopApp();
+  const browserReady = useSyncExternalStore(subscribeToPermission, () => true, () => false);
+  const isDesktop = browserReady && isDesktopApp();
 
+  if (loadError) return <ErrorState message={tx("Could not load notification settings.")} onRetry={() => { setLoadError(false); setLoadTick(value => value + 1); }} />;
+  if (!loaded) return <LoadingState rows={3} />;
   return (
     <div className="space-y-6" data-setting-root data-setting-container tabIndex={-1}>
+      {saveError && <p role="alert" className="text-sm text-danger">{saveError}</p>}
       <div id="setting-notifications-desktop" data-setting-id="setting-notifications-desktop" data-setting-container tabIndex={-1}>
         <SettingsCard
-          title="Desktop notifications"
-          description="Receive native operating system alerts when agents need your input or background tasks encounter issues."
+          title={tx("Desktop notifications")}
+          description={tx("Receive native operating system alerts when bots need your input or background tasks encounter issues.")}
           action={
             <Button size="sm" variant="secondary" onClick={handleTestNotification}>
-              {testSent ? "Test sent!" : "Send test alert"}
+              {testSent ? tx("Test sent!") : tx("Send test alert")}
             </Button>
           }
         >
           <div className="space-y-3">
             <Switch
-              label="Enable desktop notifications"
-              description="Show OS notifications when Open Duet is running in the background."
+              label={tx("Enable desktop notifications")}
+              description={tx("Show OS notifications when Chief of Noumenon is running in the background.")}
+              disabled={saving}
               checked={prefs.desktop_enabled}
               onChange={(e) => saveOption("desktop_enabled", e.target.checked)}
             />
 
-            {!isDesktop && canRequestBrowserPermission() && browserPermission !== "granted" && (
+            {browserReady && !isDesktop && canRequestBrowserPermission() && browserPermission !== "granted" && (
               <div className="flex items-center justify-between rounded-field border border-line bg-surface p-3 text-xs">
                 <span className="text-muted">
-                  Browser notification permission is currently <strong>{browserPermission}</strong>.
+                  {tx("Browser notification permission is currently")}{" "}<strong>{browserPermission}</strong>.
                 </span>
                 <Button size="sm" onClick={handleRequestPermission}>
-                  Allow notifications
-                </Button>
+                  {tx("Allow notifications")}</Button>
               </div>
             )}
 
@@ -123,30 +143,30 @@ export function NotificationsSettings() {
 
       <div id="setting-notifications-categories" data-setting-id="setting-notifications-categories" data-setting-container tabIndex={-1}>
         <SettingsCard
-          title="What notifies you"
-          description="Choose which categories of agent events should trigger desktop alerts."
+          title={tx("What notifies you")}
+          description={tx("Choose which categories of bot events should trigger desktop alerts.")}
         >
           <div className="space-y-4">
             <Switch
-              label="Agent input & approvals"
-              description="Notify when an agent asks a question, requests tool approval, or needs human guidance."
-              disabled={!prefs.desktop_enabled}
+              label={tx("Bot input & approvals")}
+              description={tx("Notify when a bot asks a question, requests tool approval, or needs human guidance.")}
+              disabled={saving || !prefs.desktop_enabled}
               checked={prefs.notify_needs_you}
               onChange={(e) => saveOption("notify_needs_you", e.target.checked)}
             />
 
             <Switch
-              label="Failures & errors"
-              description="Notify when a background routine or delegated task fails or encounters an unhandled error."
-              disabled={!prefs.desktop_enabled}
+              label={tx("Failures & errors")}
+              description={tx("Notify when a background routine or delegated task fails or encounters an unhandled error.")}
+              disabled={saving || !prefs.desktop_enabled}
               checked={prefs.notify_failures}
               onChange={(e) => saveOption("notify_failures", e.target.checked)}
             />
 
             <Switch
-              label="Task deadlines & reminders"
-              description="Notify when a scheduled task reaches its reminder deadline."
-              disabled={!prefs.desktop_enabled}
+              label={tx("Task deadlines & reminders")}
+              description={tx("Notify when a scheduled task reaches its reminder deadline.")}
+              disabled={saving || !prefs.desktop_enabled}
               checked={prefs.notify_task_due}
               onChange={(e) => saveOption("notify_task_due", e.target.checked)}
             />
@@ -167,14 +187,14 @@ export function NotificationsSettings() {
 
       <div id="setting-notifications-sound" data-setting-id="setting-notifications-sound" data-setting-container tabIndex={-1}>
         <SettingsCard
-          title="Alert sound"
-          description="Control audio alerts accompanying desktop notifications."
+          title={tx("Alert sound")}
+          description={tx("Control audio alerts accompanying desktop notifications.")}
         >
           <div className="space-y-3">
             <Switch
-              label="Notification chime"
-              description="Play a subtle chime sound when a desktop notification arrives."
-              disabled={!prefs.desktop_enabled}
+              label={tx("Notification chime")}
+              description={tx("Play a subtle chime sound when a desktop notification arrives.")}
+              disabled={saving || !prefs.desktop_enabled}
               checked={prefs.sound_enabled}
               onChange={(e) => saveOption("sound_enabled", e.target.checked)}
             />

@@ -123,17 +123,17 @@ class ComposioBridge:
             if path.stat().st_size > MAX_REQUEST_BYTES:
                 result = {"error": "The request is too large.", "code": "too_large"}
             else:
-                request = json.loads(path.read_text(encoding="utf-8"))
+                request = await asyncio.to_thread(lambda: json.loads(path.read_text(encoding="utf-8")))
                 name, args = request["name"], request["arguments"]
                 if not isinstance(name, str) or not isinstance(args, dict):
                     raise ValueError("invalid")
                 result = await self.execute(name, args)
         except Exception:  # noqa: BLE001
-            logger.exception("a connected-app call failed", turn_id=self.run.turn_id)
+            logger.warning("a connected-app call failed", turn_id=self.run.turn_id)
             result = {"error": "The call could not be completed.", "code": "composio_error"}
         response = self.folder / path.name.replace("req-", "resp-").replace(".working", ".json")
         tmp = response.with_suffix(".tmp")
-        tmp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+        await asyncio.to_thread(lambda: tmp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8"))
         os.replace(tmp, response)
         path.unlink(missing_ok=True)
 
@@ -331,6 +331,49 @@ class ComposioBridge:
         return result
 
     async def execute(self, name: str, args: dict) -> dict:
+        from app.services import action_outcomes, connector_service, decision_log
+        from app.db.models import Approval
+        from sqlalchemy import select
+        write = is_action(name, args)
+        if not write:
+            return await self._execute_with_receipt(name, args)
+        identity = {"legacy_tool": name, "arguments": args}
+        async with connector_service.dispatch_lock(self.runtime.owner_id, action_outcomes.section(identity)):
+            async with self.runtime.session() as db:
+                approvals = list(await db.scalars(select(Approval).where(Approval.turn_id == self.run.turn_id,
+                    Approval.tool == PREFIX + name, Approval.status == "allowed", Approval.consumed_at.is_(None))))
+                approval = next((a for a in approvals if a.input == args), None)
+            previous_attempt = await action_outcomes.previous_attempt(self.runtime, identity)
+            previous = previous_attempt.get("outcome")
+            routine = getattr(self.run, "routine_grants", None) is not None or getattr(self.run, "uninterrupted_access", False)
+            # Routine writes already have a durable at-most-once reservation:
+            # repeats are refused there, including after cancellation/restart.
+            if (not routine or previous_attempt.get("turn_id") != self.run.turn_id) and approval is not None and previous == "unknown" and not action_outcomes.fresh_retry(approval, previous_attempt):
+                # Spend a previously displayed card that did not disclose this
+                # uncertainty. It cannot authorize a later dispatch.
+                from app.team.bridge import consume_allowed_approval
+                async with self.runtime.session() as db:
+                    await consume_allowed_approval(db, self.run.turn_id, self.run.owner_token, PREFIX + name, args)
+                return {**action_outcomes.result("unknown"), "code": "outcome_unknown"}
+            if approval is not None:
+                await action_outcomes.save(self.runtime, identity, "unknown", self.run.turn_id)
+            try:
+                result = await self._execute_with_receipt(name, args)
+            except Exception:
+                result = {"code": "outcome_unknown", "error": "Provider result unavailable."}
+            outcome = "unknown" if result.get("code") == "outcome_unknown" else "failed" if result.get("error") else "done"
+            result = {**action_outcomes.result(outcome), **result}
+            if result.get("code") not in {"already_attempted", "not_approved", "not_allowed", "bad_arguments", "stopped"}:
+                await action_outcomes.save(self.runtime, identity, outcome, self.run.turn_id)
+            elif approval is not None:
+                await action_outcomes.save(self.runtime, identity, previous or "failed", previous_attempt.get("turn_id"))
+            decision_log.record("app_result", thread_id=self.run.thread_id, turn_id=self.run.turn_id,
+                                tool=PREFIX + name, summary=outcome)
+            if approval is not None:
+                await self.run.recorder.emit("app.action_result", {"approval_id": approval.id, "outcome": outcome, "message": action_outcomes.MESSAGES[outcome]})
+            return result
+
+    async def _execute_with_receipt(self, name: str, args: dict) -> dict:
         result = await self._execute_checked(name, args)
         # Provider results already have reservation receipts. Keep pre-dispatch
         # refusals too, without retaining untrusted input arguments.
@@ -495,3 +538,8 @@ class ComposioBridge:
         receipt.result = (result if write else {"coverage_complete": not bool(result.get("truncated") or result.get("next_page_token"))}) if not result.get("error") else None
         await db.commit()
         return result
+
+
+def is_action(name, args):
+    tool = composio_tools.BY_NAME.get(name)
+    return bool(tool and tool.kind == "write") or (name == composio_generic.RUN and args.get("action") not in composio_generic.REVIEWED_READS)

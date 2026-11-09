@@ -82,7 +82,7 @@ export function GoogleEngineSetup({ engine, onChanged }: { engine: Engine; onCha
     )}
     {running && operation.authorization_url && <div className="space-y-2">
       <Button type="button"  disabled={busy} onClick={() => void act(async () => {
-        if (!window.openDots?.openGoogleSignIn) throw new Error("Open this setup in the Open Duet desktop app to continue.");
+        if (!window.openDots?.openGoogleSignIn) throw new Error("Open this setup in the Chief of Noumenon desktop app to continue.");
         await window.openDots.openGoogleSignIn(operation.authorization_url!);
       })}>Continue to Google sign-in</Button>
       <details><summary className="cursor-pointer text-xs">Signing in from another computer?</summary>

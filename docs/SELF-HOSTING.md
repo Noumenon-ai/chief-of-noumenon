@@ -1,6 +1,9 @@
+> Chief of Noumenon is built from this fork's source. Upstream registry images
+> and release-history examples below are not releases of this fork.
+
 # Self-hosting on a server (one owner)
 
-Run Open Duet on a Linux machine you rent or own, so your agents and routines keep working with your laptop closed, and reach it from a browser or a phone over HTTPS. One person owns the server: you sign in with a passphrase and pair other devices with one-time codes. It is not a multi-user or hosted service (see [AUTH.md](AUTH.md) "Limits").
+Run Chief of Noumenon on a Linux machine you rent or own, so your agents and routines keep working with your laptop closed, and reach it from a browser or a phone over HTTPS. One person owns the server: you sign in with a passphrase and pair other devices with one-time codes. It is not a multi-user or hosted service (see [AUTH.md](AUTH.md) "Limits").
 
 There are two ways to run it. Both use the same server, the same settings and the same commands.
 
@@ -13,10 +16,35 @@ There are two ways to run it. Both use the same server, the same settings and th
 
 > **Status: experimental.** What was run, and what was not, is listed in [What has been checked](#what-has-been-checked). Read it before you rely on this for anything that matters.
 
+## Recommended local installer
+
+From this checkout run `bash scripts/install.sh`, then the printed `start.sh`
+command. Install Node.js 22+, npm, Python, uv and bubblewrap first. The installer
+builds static pages with `NEXT_PUBLIC_API_BASE_URL=/api/v1`; `app.server` serves
+them and the API together on `http://127.0.0.1:8000`. No separate Next.js server
+is required. `FRONTEND_ORIGINS` includes that origin and `http://localhost:8000`.
+Remote deployments need matching public origin/proxy configuration.
+
+The installer starts neither services nor sign-in. It creates private keys and
+configuration outside the checkout and preserves them on reruns. The local
+browser can set the first owner passphrase; remote first setup requires the
+server CLI. First run offers an existing CLI, API key, or local model.
+
+`bash scripts/verify-clean-install.sh` builds a disposable Ubuntu 24.04 container
+from tracked checkout files and runs installation, browser/API checks and key
+preservation checks. It needs network and Docker. It was NOT_RUN in the offline
+job environment; the dispatcher must run it with the new source files tracked.
+It passes no host credentials or volumes into the container.
+
+**Release blocker:** Codex turns are refused with Linux isolation enabled.
+Claude's new split boundary requires host namespace qualification. See
+[ENGINES.md](ENGINES.md) and [SECURITY.md](SECURITY.md). Do not disable isolation
+to bypass this release gate.
+
 ## Before you start
 
 - A Linux server with `sudo`, a domain name whose address points at it, and ports 80 and 443 open.
-- At least one connected engine: Claude Code, Codex, Gemini CLI, Cursor, OpenRouter, a custom ACP command or an OpenAI-compatible endpoint. CLI engines must be installed and signed in **on the server**, as the same account that runs Open Duet: see [ENGINES.md](ENGINES.md) and [Engines](#engines). Agents run there, with that account's files.
+- At least one connected engine: Claude Code, Codex, Gemini CLI, Cursor, OpenRouter, a custom ACP command or an OpenAI-compatible endpoint. CLI engines must be installed and signed in **on the server**, as the same account that runs Chief of Noumenon: see [ENGINES.md](ENGINES.md) and [Engines](#engines). Agents run there, with that account's files.
 - Two secrets you must keep: your **passphrase**, and the **encryption key** (`TOKEN_ENCRYPTION_KEYS`). The key encrypts the credentials the server stores. Back it up somewhere else: without it those credentials cannot be read, and a backup archive does not contain it.
 
 Agents only run when the settings say `LOCAL_EXECUTION_ENABLED=true` (both routes below set it). Tools (file edits and commands) stay off until you also set `LOCAL_TOOLS_ENABLED=true`; every command still asks for your approval.
@@ -29,8 +57,9 @@ Needs Docker with the Compose plugin. The app listens only on the host's loopbac
 
    <!-- verify:docker -->
    ```sh
-   git clone https://github.com/Anil-matcha/open-duet
-   cd open-duet
+   git clone https://github.com/Noumenon-ai/chief-of-noumenon
+   cd chief-of-noumenon
+   cd /path/to/chief-of-noumenon
    touch open-dots.env && chmod 600 open-dots.env
    docker compose build
    ```
@@ -79,7 +108,7 @@ Data lives in the Docker volume `open-dots_data` (the container's `/data`). Upda
 
 The **Server image** workflow builds and tests a Linux **amd64** image when a
 version tag is pushed. It publishes the exact tested image to
-`ghcr.io/anil-matcha/open-duet` with version (`vX.Y.Z`) and full source
+the upstream-only image `ghcr.io/anil-matcha/open-duet` with version (`vX.Y.Z`) and full source
 (`sha-<commit>`) tags. Manual branch runs only build and test by default;
 publishing manually requires selecting a version tag and checking **publish**.
 There is no moving `latest` tag. An existing desktop release does not imply a
@@ -137,7 +166,7 @@ Install [Node.js 22](https://nodejs.org) and [uv](https://docs.astral.sh/uv/) fi
 
    <!-- verify:skip -->
    ```sh
-   sudo -u opendots git clone https://github.com/Anil-matcha/open-duet /opt/open-dots
+   sudo -u opendots git clone https://github.com/Noumenon-ai/chief-of-noumenon /opt/open-dots
    ```
 
 2. **Build the web pages and install the backend** (as `opendots`: `sudo -iu opendots`; repeat after each update)
@@ -254,7 +283,7 @@ and enter its code. The operation expires after five minutes and can be
 cancelled. **Sign in to Claude** opens a link from the installed Claude CLI;
 after signing in on Claude's page, paste its authorization code into Settings.
 The code goes once to the CLI over its private input pipe and is never saved
-by Open Duet. An existing working account is preserved. Both flows expire after
+by Chief of Noumenon. An existing working account is preserved. Both flows expire after
 five minutes, can be cancelled, and end when the backend shuts down. Their
 handles are process-local: keep this Settings page open, and use one worker or
 session affinity. **Sign out** requires confirmation and uses the installed
@@ -267,7 +296,7 @@ existing provider sessions may require a new conversation. Named accounts are
 not supported.
 Real-account, Windows and packaged sign-in remain unqualified. Other CLI
 browser sign-ins still run from a terminal as the account
-running Open Duet; API keys are another option on headless servers. OpenRouter
+running Chief of Noumenon; API keys are another option on headless servers. OpenRouter
 and OpenAI-compatible endpoints need no CLI. See [ENGINES.md](ENGINES.md) for
 the device flow's account, restart and worker limitations.
 
@@ -383,50 +412,71 @@ Each line says what was run. "Not run" means exactly that: do not assume it work
 
 See [ROADMAP.md](ROADMAP.md) for what is next.
 
-## Optional Linux turn sandbox (preview)
+## Linux turn sandbox
 
 `TURN_SANDBOX_ENABLED=true` requests filesystem and process isolation for local
 Claude, Codex and ACP **turns** on a Linux server. Install `bubblewrap` through
 your host's package manager and allow unprivileged user namespaces according to
 your host policy. Leave it disabled on desktop; enabling it on an unsupported
 platform refuses turn launch. Status/sign-in probes keep their existing
-behavior. The feature defaults off. An enabled turn that cannot create its box
+behavior. The feature defaults on for Linux servers, and off elsewhere. Set `TURN_SANDBOX_ENABLED=false` explicitly to opt out. Settings and chat report availability; an unavailable default blocks launch instead of claiming protection. An enabled turn that cannot create its box
 fails; it never retries outside the box.
 
 The box starts with an empty filesystem and exposes read-only system runtimes,
 a small set of resolver/CA files, the backend's `app` package and Python
 virtual environment. It gives the turn its own PID/IPC/UTS namespaces, a fresh
 `/proc`, private `/tmp` and `/run`, a restricted device tree, no capabilities,
-and parent-death cleanup. The workspace, that turn's team/memory mailboxes,
-and named engine account folder (`CODEX_HOME`/`~/.codex` or
-`CLAUDE_CONFIG_DIR`/`~/.claude`) are writable. Attached image files are mounted
+and parent-death cleanup. The empty root and parent directories are read-only.
+The workspace (read-only in plan or with tools off), that turn's team/memory mailboxes,
+are scoped mounts. Claude keeps its named account folder only in the engine
+box; that engine sees an empty workspace. Its workspace tools use a second
+box without login mounts, engine home or owner-added path grants. Codex turns
+are blocked until complete native-tool isolation is proven. Attached image files are mounted
 read-only. The shared legacy workspace and its enclosing folders are refused; use an
 agent's own workspace. When an agent uses an external workspace, its private
 agent folder stays hidden; the backend still answers that agent's memory tools
 through the mounted mailbox.
 
-Custom runtime installations outside standard system paths need explicit
-comma-separated `TURN_SANDBOX_READONLY_PATHS` entries. For managed Python,
-grant the real base runtime directory reported by
-`python -c 'import pathlib, sys; print(pathlib.Path(sys.base_prefix).resolve())'`.
-The network bridge resolves its interpreter symlink before entering the box;
-it does not automatically grant the runtime or its parent directory.
+Engine installations outside system paths are discovered automatically, without
+running the engine during discovery. Every executable symlink is preserved and
+its target mounted read-only; an individual launcher never grants its whole bin
+folder or home. Scripts add their shebang interpreter, its installation prefix
+(for example an nvm version), and the nearest folder containing `package.json`.
+Installed optional npm dependencies are included for platform-specific binaries.
+Native executables add conventional sibling runtime folders (`lib`/`lib64`
+beside `bin`, or `vendor`/`<executable>.libs` beside the binary) when present.
+The turn's PATH is used to locate shebang programs, including `/usr/bin/env`
+and `env -S`; the same PATH is retained inside the box. The backend Python
+interpreter, virtual environment and base runtime are also granted automatically.
+This does not expose every unrelated program on PATH or inspect shell wrapper
+bodies. Nonstandard dependencies can still be added through comma-separated
+`TURN_SANDBOX_READONLY_PATHS`. Unsafe required paths stop launch with instructions
+to use a dedicated engine/interpreter installation; discovery never grants the
+whole home, filesystem root, database, application data parent or agent root.
 Additional account files
 (such as Claude's `~/.claude.json`) and ACP account directories can be granted
 with `TURN_SANDBOX_WRITABLE_PATHS`. Grant the narrowest path: a whole HOME,
 filesystem root or application data parent is rejected. These are trusted owner
-settings; everything explicitly granted is visible to the turn. Bind paths are
-canonicalized before use, so aliases through symlinks need the real path in the
-engine's configuration too. Computer-provider sockets and native host control
+settings; everything explicitly granted is visible to the turn. Bind paths are canonicalized and checked before use. Writable grants overlapping a plan-mode workspace are refused. Computer-provider sockets and native host control
 are not qualified with this preview; do not broaden mounts to grant Docker or
 host sockets.
 
 From `backend`, run `python -m app.core.turn_sandbox` with the server's normal
 configuration to check availability. Each enabled turn also runs the check. It
 verifies that a host canary is absent and the PID namespace differs from the
-backend; errors stop launch. It reports network access as **unrestricted**.
-The optional Linux test in `tests/core/test_turn_sandbox.py` additionally checks
-workspace writes; it is skipped on hosts without Linux/bubblewrap.
+backend; errors stop launch. With network isolation off it reports network access
+as **unrestricted**. Only after that check and wrapping the same process, Codex's
+inner sandbox is disabled, avoiding nested bubblewrap namespace failures. Its
+approval policy is unchanged (`untrusted` still asks). Claude's optional inner
+Bash sandbox is similarly disabled for that boxed launch only. When the outer
+box is off, engine sandbox settings are unchanged. When it is unavailable, no
+engine starts. ACP vendor sandbox settings are preserved because ACP provides
+no common way to delegate sandboxing. See [engine policies](ENGINES.md).
+
+The real Linux tests in `tests/core/test_turn_sandbox.py` additionally exercise
+workspace writes and symlinked native/Node-style installs in ordinary and plan
+turns, including a hidden fake-home canary and forbidden writes outside the
+workspace. They require Linux/bubblewrap; the Node cases also require Node.
 
 Backend CI has a separate **Linux sandbox enforcement** job on Ubuntu 22.04
 that installs bubblewrap and requires both real Linux tests to pass without
@@ -447,8 +497,8 @@ qualify provider sign-in/resume, approvals, stop/timeouts or orphan cleanup.
 
 Stage C alone still allows loopback, the server API and metadata over the
 shared network. The separate stage D preview below restricts turn networking.
-Credential brokering and syscall filtering remain open; provider account
-credentials granted to either box remain readable. Do not claim
+Syscall filtering and other engines' credential isolation remain open.
+The trusted Claude engine process retains login access; its tool box does not. Do not claim
 isolation for hostile unattended integrations until C and D pass a real Linux
 host qualification, including engine sign-in/resume, approvals, stop/timeouts
 and orphan cleanup. The preview has automated mount/refusal coverage; no real
@@ -478,3 +528,22 @@ policy tests cover mixed DNS answers, numeric-address pinning and HTTP/TLS
 transport. Actual namespace enforcement and engine proxy compatibility,
 sign-in/resume, approval delivery, stop/timeouts and orphan cleanup still need
 qualification on real Linux. Keep the preview off until that host is qualified.
+
+### Git and package tools inside a turn
+
+System Git, Python and Node installed under `/usr` are readable. The workspace
+is writable, and `/tmp` is private. Git can resolve the current user through
+read-only `/etc/passwd` and `/etc/group`. Set repository-local `user.name` and
+`user.email`, or grant a specific `.gitconfig` file read-only. Do not mount the
+whole home or an SSH directory just to run Git.
+
+For npm/pip/uv caches, create dedicated cache folders under the agent workspace
+and configure the tools to use them (for example `npm --cache ./npm-cache`,
+`PIP_CACHE_DIR=$PWD/pip-cache`, `UV_CACHE_DIR=$PWD/uv-cache`). To share an owner
+cache deliberately, grant only that existing folder through
+`TURN_SANDBOX_WRITABLE_PATHS`. nvm and user-installed Claude/Codex runtime paths
+are discovered automatically as described above. Claude Code
+may also need its specific `.claude.json` configuration file writable; create
+it through Claude's terminal flow and grant that file explicitly. Symlinked
+executables can keep their normal launcher path in engine settings. These grants apply to the engine box, not the Claude workspace tool box.
+Other adapters do not have the same split; see the release limitations.

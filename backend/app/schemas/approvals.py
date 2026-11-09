@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-DecisionEvent = Literal["shown", "allowed", "denied", "auto_allowed", "expired", "cancelled", "undone"]
+DecisionEvent = Literal["shown", "allowed", "denied", "auto_allowed", "expired", "cancelled", "undone", "app_call", "app_result"]
 
 
 class DecisionEntry(BaseModel):

@@ -1,4 +1,5 @@
 "use client";
+import { useT as useUiText } from "@/lib/use-i18n";
 
 import { Select } from "@/components/ui/Select";
 
@@ -157,6 +158,7 @@ function ScheduleFields({ value, onChange, onPreviewResult }: {
   onChange: (next: ScheduleDraft) => void;
   onPreviewResult: (key: string, valid: boolean) => void;
 }) {
+  const tx = useUiText();
   const [previewResult, setPreviewResult] = useState<{
     key: string;
     preview: SchedulePreview | null;
@@ -189,9 +191,9 @@ function ScheduleFields({ value, onChange, onPreviewResult }: {
 
   return (
     <fieldset className="space-y-2 rounded-md border border-line p-3">
-      <legend className="px-1 text-xs font-medium text-muted">Schedule</legend>
-      <Select aria-label="Schedule kind" value={value.kind} onChange={(e) => set({ kind: e.target.value as ScheduleDraft["kind"] })} className={input}>
-        {SCHEDULE_KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}
+      <legend className="px-1 text-xs font-medium text-muted">{tx("Schedule")}</legend>
+      <Select aria-label={tx("Schedule kind")} value={value.kind} onChange={(e) => set({ kind: e.target.value as ScheduleDraft["kind"] })} className={input}>
+        {SCHEDULE_KINDS.map((kind) => <option key={kind.value} value={kind.value}>{tx(kind.label)}</option>)}
       </Select>
       {value.kind === "weekdays" && (
         <div className="flex flex-wrap items-center gap-1">
@@ -204,30 +206,27 @@ function ScheduleFields({ value, onChange, onPreviewResult }: {
               </button>
             );
           })}
-          <input aria-label="Time" type="time" value={value.time} onChange={(e) => set({ time: e.target.value })} className="ml-2 rounded-md border border-line bg-transparent px-2 py-1 text-sm" />
+          <input aria-label={tx("Time")} type="time" value={value.time} onChange={(e) => set({ time: e.target.value })} className="ml-2 rounded-md border border-line bg-transparent px-2 py-1 text-sm" />
         </div>
       )}
       {value.kind === "interval" && (
-        <label className="flex items-center gap-2 text-sm">Every
-          <input aria-label="Minutes between runs" type="number" min={5} max={10080} value={value.everyMinutes} onChange={(e) => set({ everyMinutes: e.target.value })} className="w-24 rounded-md border border-line bg-transparent px-2 py-1" />
-          minutes
-        </label>
+        <label className="flex items-center gap-2 text-sm">{tx("Every")}<input aria-label={tx("Minutes between runs")} type="number" min={5} max={10080} value={value.everyMinutes} onChange={(e) => set({ everyMinutes: e.target.value })} className="w-24 rounded-md border border-line bg-transparent px-2 py-1" />
+          {tx("minutes")}</label>
       )}
       {value.kind === "cron" && (
-        <input aria-label="Cron expression" value={value.expression} onChange={(e) => set({ expression: e.target.value })} placeholder="minute hour day month weekday, e.g. 0 9 * * 1-5" spellCheck={false} className={`${input} font-mono`} />
+        <input aria-label={tx("Cron expression")} value={value.expression} onChange={(e) => set({ expression: e.target.value })} placeholder={tx("minute hour day month weekday, e.g. 0 9 * * 1-5")} spellCheck={false} className={`${input} font-mono`} />
       )}
       {value.kind === "once" && (
-        <input aria-label="Date and time" type="datetime-local" value={value.at} onChange={(e) => set({ at: e.target.value })} className={input} />
+        <input aria-label={tx("Date and time")} type="datetime-local" value={value.at} onChange={(e) => set({ at: e.target.value })} className={input} />
       )}
       {value.kind !== "manual" && value.kind !== "interval" && (
-        <label className="block text-xs text-muted">Time zone
-          <input aria-label="Time zone" value={value.timezone} onChange={(e) => set({ timezone: e.target.value })} placeholder="Europe/Berlin" spellCheck={false} className={input} />
+        <label className="block text-xs text-muted">{tx("Time zone")}<input aria-label={tx("Time zone")} value={value.timezone} onChange={(e) => set({ timezone: e.target.value })} placeholder={"Europe/Berlin"} spellCheck={false} className={input} />
         </label>
       )}
       {currentPreview?.problem ? (
         <p role="alert" className="text-xs text-danger">{currentPreview.problem}</p>
       ) : currentPreview?.preview ? (
-        <div className="text-xs text-muted" aria-label="Schedule preview">
+        <div className="text-xs text-muted" aria-label={tx("Schedule preview")}>
           <p className="font-medium">{currentPreview.preview.summary}</p>
           {currentPreview.preview.next_dates.length > 0 && (
             <ul className="mt-1 list-inside list-disc">
@@ -236,13 +235,14 @@ function ScheduleFields({ value, onChange, onPreviewResult }: {
           )}
         </div>
       ) : (
-        <p role="status" className="text-xs text-muted">Checking schedule…</p>
+        <p role="status" className="text-xs text-muted">{tx("Checking schedule…")}</p>
       )}
     </fieldset>
   );
 }
 
 function RunHistory({ routine, onClose, onOpen }: { routine: Routine; onClose: () => void; onOpen: () => void }) {
+  const tx = useUiText();
   const [runs, setRuns] = useState<RoutineRun[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
@@ -255,10 +255,10 @@ function RunHistory({ routine, onClose, onOpen }: { routine: Routine; onClose: (
   }, [routine.id]);
   return (
     <div className="space-y-3">
-      <button onClick={onClose} className={button}>← Back</button>
-      <h3 className="text-sm font-semibold">Runs of {routine.name}</h3>
+      <button onClick={onClose} className={button}>{tx("← Back")}</button>
+      <h3 className="text-sm font-semibold">{tx("Runs of")}{" "}{routine.name}</h3>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      {runs === null ? <p className="text-sm text-muted">Loading…</p> : runs.length === 0 ? <p className="text-sm text-muted">No runs yet.</p> : (
+      {runs === null ? <p className="text-sm text-muted">{tx("Loading…")}</p> : runs.length === 0 ? <p className="text-sm text-muted">{tx("No runs yet.")}</p> : (
         <ul className="space-y-2">
           {runs.map((run) => (
             <li key={run.id} className="rounded-md border border-line p-2 text-sm">
@@ -266,17 +266,17 @@ function RunHistory({ routine, onClose, onOpen }: { routine: Routine; onClose: (
                 <State state={run.state} />
                 <span className="text-xs text-muted">{triggerLabel(run.trigger)}{run.attempt > 1 ? ` (attempt ${run.attempt})` : ""} · {formatWhen(run.scheduled_for ?? run.created_at, routine.timezone)}</span>
                 {run.thread_id !== null && (
-                  <Link href={`/chat?thread=${run.thread_id}`} onClick={onOpen} className="ml-auto text-xs underline">Open conversation</Link>
+                  <Link href={`/chat?thread=${run.thread_id}`} onClick={onOpen} className="ml-auto text-xs underline">{tx("Open conversation")}</Link>
                 )}
                 <button type="button" className="ml-auto text-xs underline" aria-expanded={selectedRunId === run.id} onClick={() => setSelectedRunId(selectedRunId === run.id ? null : run.id)}>
-                  {selectedRunId === run.id ? "Hide app actions" : "App actions"}
+                  {selectedRunId === run.id ? tx("Hide app actions") : tx("App actions")}
                 </button>
               </div>
-              {run.outcome === "no_change" && <p className="mt-1 text-xs text-muted">No changes · checks retained in history</p>}
+              {run.outcome === "no_change" && <p className="mt-1 text-xs text-muted">{tx("No changes · checks retained in history")}</p>}
               {(run.error || run.result) && (
                 <p className={`mt-1 line-clamp-3 whitespace-pre-wrap text-xs ${run.error ? "text-danger" : "text-muted"}`}>{run.error || run.result}</p>
               )}
-              {run.error && run.result && <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs text-muted">Partial report: {run.result}</p>}
+              {run.error && run.result && <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs text-muted">{tx("Partial report:")}{" "}{run.result}</p>}
               {selectedRunId === run.id && <RunAppActions routineId={routine.id} runId={run.id} />}
             </li>
           ))}
@@ -287,6 +287,7 @@ function RunHistory({ routine, onClose, onOpen }: { routine: Routine; onClose: (
 }
 
 function RunAppActions({ routineId, runId }: { routineId: number; runId: number }) {
+  const tx = useUiText();
   const t = useRoutineT();
   const [actions, setActions] = useState<RoutineAppAction[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -299,10 +300,10 @@ function RunAppActions({ routineId, runId }: { routineId: number; runId: number 
   }, [routineId, runId]);
   return <div className="mt-2 space-y-2 border-t border-line pt-2">
     <p className="text-xs text-muted">{t("knowledgeRoutines.appActionsUndoWarning")}</p>
-    {error ? <p role="alert" className="text-xs text-danger">{error}</p> : actions === null ? <p role="status" className="text-xs text-muted">Loading app actions…</p> : actions.length === 0 ? <p className="text-xs text-muted">No recorded app actions.</p> : (
+    {error ? <p role="alert" className="text-xs text-danger">{error}</p> : actions === null ? <p role="status" className="text-xs text-muted">{tx("Loading app actions…")}</p> : actions.length === 0 ? <p className="text-xs text-muted">{tx("No recorded app actions.")}</p> : (
       <ul className="space-y-1">{actions.map((action) => <li key={action.id} className="rounded border border-line p-2 text-xs">
         <p className="font-medium">{action.tool} · {action.status}</p>
-        <p className="text-muted">Connected account: {action.account_id}{action.code ? ` · ${action.code}` : ""}</p>
+        <p className="text-muted">{tx("Connected account:")}{" "}{action.account_id}{action.code ? ` · ${action.code}` : ""}</p>
         {action.result && <pre className="mt-1 whitespace-pre-wrap break-words">{JSON.stringify(action.result, null, 2)}</pre>}
       </li>)}</ul>
     )}
@@ -310,6 +311,7 @@ function RunAppActions({ routineId, runId }: { routineId: number; runId: number 
 }
 
 export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: Agent[]; onClose: () => void; routineId?: number | null }) {
+  const tx = useUiText();
   const t = useRoutineT();
   const [routines, setRoutines] = useState<Routine[] | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<ComposioAccount[] | null>(null);
@@ -335,7 +337,7 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
 
   useEffect(() => {
     load();
-    api.listComposioAccounts().then(setConnectedAccounts).catch(() => setConnectedAccounts([]));
+    api.getComposioStatus().then(status => status.configured ? api.listComposioAccounts() : []).then(setConnectedAccounts).catch(() => setConnectedAccounts([]));
     const timer = setInterval(load, REFRESH_MS);
     return () => clearInterval(timer);
   }, [load]);
@@ -381,8 +383,8 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
     }
   };
 
-  const agentName = (id: number) => agents.find((agent) => agent.id === id)?.name ?? `Agent ${id}`;
-  const heading = draft ? (draft.id === null ? "New routine" : "Edit routine") : "Routines";
+  const agentName = (id: number) => agents.find((agent) => agent.id === id)?.name ?? `Bot ${id}`;
+  const heading = draft ? (draft.id === null ? tx("New routine") : tx("Edit routine")) : tx("Routines");
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }} title={heading} size="wide">
@@ -392,16 +394,13 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
             <RunHistory routine={history} onClose={() => setHistory(null)} onOpen={onClose} />
           ) : draft ? (
             <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-              <label className="block text-xs text-muted">Name
-                <input aria-label="Routine name" required maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className={input} />
+              <label className="block text-xs text-muted">{tx("Name")}<input aria-label={tx("Routine name")} required maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className={input} />
               </label>
-              <label className="block text-xs text-muted">Agent
-                <Select aria-label="Agent" value={draft.agentId ?? ""} onChange={(e) => setDraft({ ...draft, agentId: Number(e.target.value) })} className={input}>
+              <label className="block text-xs text-muted">{tx("Bot")}<Select aria-label={tx("Bot")} value={draft.agentId ?? ""} onChange={(e) => setDraft({ ...draft, agentId: Number(e.target.value) })} className={input}>
                   {live.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
                 </Select>
               </label>
-              <label className="block text-xs text-muted">What it should do
-                <textarea aria-label="Prompt" required rows={4} value={draft.prompt} onChange={(e) => setDraft({ ...draft, prompt: e.target.value })} className={input} />
+              <label className="block text-xs text-muted">{tx("What it should do")}<textarea aria-label={tx("Prompt")} required rows={4} value={draft.prompt} onChange={(e) => setDraft({ ...draft, prompt: e.target.value })} className={input} />
               </label>
               <ScheduleFields
                 value={draft.schedule}
@@ -416,7 +415,7 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
                   <h3 id="routine-app-access-title" className="text-sm font-medium">{t("knowledgeRoutines.connectedAppAccess")}</h3>
                   <p className="mt-1 text-xs text-muted">{t("knowledgeRoutines.connectedAppAccessHelp")}</p>
                 </div>
-                {connectedAccounts === null ? <p role="status" className="text-xs text-muted">Loading connected accounts…</p> : ROUTINE_READ_TOOLS.map((group) => {
+                {connectedAccounts === null ? <p role="status" className="text-xs text-muted">{tx("Loading connected accounts…")}</p> : ROUTINE_READ_TOOLS.map((group) => {
                   const agent = agents.find((item) => item.id === draft.agentId);
                   const hasReadScope = agent?.connector_scopes?.[group.app] === "read" || agent?.connector_scopes?.[group.app] === "write";
                   const allowedIds = agent?.connector_account_scopes?.[group.app] ?? [];
@@ -430,15 +429,15 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
                     <legend className="text-xs font-medium">{group.label}</legend>
                     <label className="block text-xs text-muted">{t("knowledgeRoutines.connectedAccount")}
                       <Select aria-label={`${group.label} ${t("knowledgeRoutines.connectedAccount")}`} value={selectedAccount} disabled={available.length === 0 || !draft.connectedAppGrants.some((grant) => allTools.some(([tool]) => tool === grant.tool))} onChange={(event) => setRoutineGrantAccount(group.app, event.target.value)} className={input}>
-                        {available.length === 0 ? <option value="">No account allowed for this agent</option> : available.map((account) => <option key={account.id} value={account.id}>{account.alias ?? account.id}</option>)}
-                        {current && !available.some((account) => account.id === current.account_id) && <option value={current.account_id}>Unavailable account ({current.account_id})</option>}
+                        {available.length === 0 ? <option value="">{tx("No account allowed for this bot")}</option> : available.map((account) => <option key={account.id} value={account.id}>{account.alias ?? account.id}</option>)}
+                        {current && !available.some((account) => account.id === current.account_id) && <option value={current.account_id}>{tx("Unavailable account (")}{" "}{current.account_id})</option>}
                       </Select>
                     </label>
                     <div className="grid gap-1 sm:grid-cols-2">{group.tools.map(([tool, label]) => {
                       const grant = draft.connectedAppGrants.find((item) => item.tool === tool);
                       return <label key={tool} className="flex items-start gap-2 text-xs">
                         <input type="checkbox" checked={Boolean(grant)} disabled={!grant && !available.some((account) => account.id === selectedAccount)} onChange={() => toggleRoutineGrant(tool, grant?.account_id ?? selectedAccount)} />
-                        <span>{label}{grant && grant.account_id !== selectedAccount ? <span className="text-warning"> · account unavailable</span> : null}</span>
+                        <span>{label}{grant && grant.account_id !== selectedAccount ? <span className="text-warning"> {tx("· account unavailable")}</span> : null}</span>
                       </label>;
                     })}</div>
                     {group.writes.length > 0 && <div className="space-y-2 border-t border-line pt-2">
@@ -449,7 +448,7 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
                         const hasWriteScope = agent?.connector_scopes?.[group.app] === "write";
                         return <label key={tool} className="flex items-start gap-2 text-xs">
                           <input type="checkbox" checked={Boolean(grant)} disabled={!grant && (!hasWriteScope || !available.some((account) => account.id === selectedAccount))} onChange={() => toggleRoutineGrant(tool, grant?.account_id ?? selectedAccount)} />
-                          <span>{label}{grant && grant.account_id !== selectedAccount ? <span className="text-warning"> · account unavailable</span> : null}{!hasWriteScope && !grant ? <span className="text-muted"> · allow write access for this agent first</span> : null}</span>
+                          <span>{label}{grant && grant.account_id !== selectedAccount ? <span className="text-warning"> {tx("· account unavailable")}</span> : null}{!hasWriteScope && !grant ? <span className="text-muted"> {tx("· allow write access for this bot first")}</span> : null}</span>
                         </label>;
                       })}
                     </div>}
@@ -471,17 +470,16 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
                 </label>
               </section>
               <details className="rounded-md border border-line p-3 text-xs">
-                <summary className="cursor-pointer font-medium text-muted">Limits and approvals</summary>
+                <summary className="cursor-pointer font-medium text-muted">{tx("Limits and approvals")}</summary>
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  <label>Run limit (minutes)<input type="number" min={1} max={240} value={draft.runLimit} onChange={(e) => setDraft({ ...draft, runLimit: e.target.value })} className={input} /></label>
-                  <label>Approval wait (minutes)<input type="number" min={1} max={1440} value={draft.approvalWait} onChange={(e) => setDraft({ ...draft, approvalWait: e.target.value })} className={input} /></label>
-                  <label>May start late by (minutes)<input type="number" min={0} max={1440} value={draft.catchUp} onChange={(e) => setDraft({ ...draft, catchUp: e.target.value })} className={input} /></label>
+                  <label>{tx("Run limit (minutes)")}<input type="number" min={1} max={240} value={draft.runLimit} onChange={(e) => setDraft({ ...draft, runLimit: e.target.value })} className={input} /></label>
+                  <label>{tx("Approval wait (minutes)")}<input type="number" min={1} max={1440} value={draft.approvalWait} onChange={(e) => setDraft({ ...draft, approvalWait: e.target.value })} className={input} /></label>
+                  <label>{tx("May start late by (minutes)")}<input type="number" min={0} max={1440} value={draft.catchUp} onChange={(e) => setDraft({ ...draft, catchUp: e.target.value })} className={input} /></label>
                   <label className="col-span-2 flex items-start gap-2"><input type="checkbox" checked={draft.quietReporting} onChange={(e) => setDraft({ ...draft, quietReporting: e.target.checked })} /><span>{t("knowledgeRoutines.quietScheduledChecks")}<span className="block text-xs text-muted">{t("knowledgeRoutines.quietScheduledHelp")}</span></span></label>
-                  <label>Retries after a failure<input type="number" min={0} max={3} value={draft.retryLimit} onChange={(e) => setDraft({ ...draft, retryLimit: e.target.value })} className={input} /></label>
-                  <label>Retry after (minutes)<input type="number" min={1} max={1440} value={draft.retryDelay} onChange={(e) => setDraft({ ...draft, retryDelay: e.target.value })} className={input} /></label>
-                  <label>Approval mode
-                    <Select value={draft.approvalMode} onChange={(e) => setDraft({ ...draft, approvalMode: e.target.value as ApprovalMode })} className={input}>
-                      {APPROVAL_MODES.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
+                  <label>{tx("Retries after a failure")}<input type="number" min={0} max={3} value={draft.retryLimit} onChange={(e) => setDraft({ ...draft, retryLimit: e.target.value })} className={input} /></label>
+                  <label>{tx("Retry after (minutes)")}<input type="number" min={1} max={1440} value={draft.retryDelay} onChange={(e) => setDraft({ ...draft, retryDelay: e.target.value })} className={input} /></label>
+                  <label>{tx("Approval mode")}<Select value={draft.approvalMode} onChange={(e) => setDraft({ ...draft, approvalMode: e.target.value as ApprovalMode })} className={input}>
+                      {APPROVAL_MODES.map((mode) => <option key={mode.value} value={mode.value}>{tx(mode.label)}</option>)}
                     </Select>
                   </label>
                 </div>
@@ -490,22 +488,20 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
                 </p>
               </details>
               <div className="flex gap-2">
-                <button type="submit" disabled={busy || draft.agentId === null || !canSaveSchedulePreview(draft.schedule, validPreviewKey)} className="cursor-pointer rounded-md px-3 py-1.5 text-sm disabled:opacity-50 bg-accent text-accent-fg hover:opacity-90">{busy ? "Saving…" : "Save"}</button>
-                <button type="button" onClick={() => { setValidPreviewKey(null); setDraft(null); }} className="rounded-md border border-line px-3 py-1.5 text-sm">Cancel</button>
+                <button type="submit" disabled={busy || draft.agentId === null || !canSaveSchedulePreview(draft.schedule, validPreviewKey)} className="cursor-pointer rounded-md px-3 py-1.5 text-sm disabled:opacity-50 bg-accent text-accent-fg hover:opacity-90">{busy ? tx("Saving…") : tx("Save")}</button>
+                <button type="button" onClick={() => { setValidPreviewKey(null); setDraft(null); }} className="rounded-md border border-line px-3 py-1.5 text-sm">{tx("Cancel")}</button>
               </div>
             </form>
           ) : (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <p className="min-w-0 flex-1 text-xs text-muted">
-                  A routine runs a prompt as a new conversation of one of your agents, on a schedule, by webhook, or when you press Run now.
-                  The backend must be running for it to run.
-                </p>
-                <button disabled={live.length === 0} onClick={() => { setValidPreviewKey(null); setDraft(newDraft(live)); }} className={button}>New routine</button>
+                  {tx("A routine runs a prompt as a new conversation of one of your bots, on a schedule, by webhook, or when you press Run now. The backend must be running for it to run.")}</p>
+                <button disabled={live.length === 0} onClick={() => { setValidPreviewKey(null); setDraft(newDraft(live)); }} className={button}>{tx("New routine")}</button>
               </div>
-              {live.length === 0 && <p className="text-sm text-muted">Create an agent first: every routine runs as one.</p>}
-              {routines === null ? <p className="text-sm text-muted">Loading…</p> : routines.length === 0 ? (
-                <p className="text-sm text-muted">No routines yet.</p>
+              {live.length === 0 && <p className="text-sm text-muted">{tx("Create a bot first: every routine runs as one.")}</p>}
+              {routines === null ? <p className="text-sm text-muted">{tx("Loading…")}</p> : routines.length === 0 ? (
+                <p className="text-sm text-muted">{tx("No routines yet.")}</p>
               ) : (
                 <ul className="space-y-2">
                   {routines.map((routine) => {
@@ -515,17 +511,17 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
                         <div className="flex flex-wrap items-baseline gap-2">
                           <p className="truncate text-sm font-medium">{routine.name}</p>
                           <span className="text-xs text-muted">{agentName(routine.agent_id)}</span>
-                          {routine.paused && <span className="rounded bg-hover px-1.5 text-xs">paused</span>}
-                          {routine.webhook_enabled && <span className="rounded bg-hover px-1.5 text-xs">webhook</span>}
+                          {routine.paused && <span className="rounded bg-hover px-1.5 text-xs">{tx("paused")}</span>}
+                          {routine.webhook_enabled && <span className="rounded bg-hover px-1.5 text-xs">{tx("webhook")}</span>}
                         </div>
                         <p className="text-xs text-muted">{routine.schedule_kind === "manual" ? routine.summary : `${routine.summary} · ${nextRunText(routine)}`}</p>
                         {routine.paused_reason && <p className="text-xs text-warning">{routine.paused_reason}</p>}
                         {routine.latest_run && (
                           <p className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                            <span className="text-muted">Latest:</span>
+                            <span className="text-muted">{tx("Latest:")}</span>
                             <State state={routine.latest_run.state} />
                             <span className="text-muted">{formatWhen(routine.latest_run.scheduled_for ?? routine.latest_run.created_at, routine.timezone)}</span>
-                            {routine.latest_run.thread_id !== null && <Link href={`/chat?thread=${routine.latest_run.thread_id}`} onClick={onClose} className="underline">Open conversation</Link>}
+                            {routine.latest_run.thread_id !== null && <Link href={`/chat?thread=${routine.latest_run.thread_id}`} onClick={onClose} className="underline">{tx("Open conversation")}</Link>}
                           </p>
                         )}
                         {secret?.routineId === routine.id && (
@@ -534,26 +530,26 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
                             <p>{t("knowledgeRoutines.url")} <code className="break-all">{secret.url}</code></p>
                             <p>{t("knowledgeRoutines.secret")} <code className="break-all">{secret.secret}</code></p>
                             <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-raised/60 p-1">{curlExample(secret.url, secret.secret)}</pre>
-                            <button className={button} onClick={() => setSecret(null)}>I have copied it</button>
+                            <button className={button} onClick={() => setSecret(null)}>{tx("I have copied it")}</button>
                           </div>
                         )}
                         <div className="mt-2 flex flex-wrap gap-1">
-                          <button disabled={busy || active} title={active ? "A run is in progress" : undefined} onClick={() => void act(() => api.runRoutineNow(routine.id), "Could not start the routine.")} className={button}>Run now</button>
-                          <button disabled={busy} onClick={() => void act(() => (routine.paused ? api.resumeRoutine(routine.id) : api.pauseRoutine(routine.id)), "Could not change the routine.")} className={button}>{routine.paused ? "Resume" : "Pause"}</button>
-                          <button disabled={busy} onClick={() => { setValidPreviewKey(null); setDraft(draftOf(routine)); }} className={button}>Edit</button>
-                          <button disabled={busy} onClick={() => setHistory(routine)} className={button}>History</button>
+                          <button disabled={busy || active} title={active ? tx("A run is in progress") : undefined} onClick={() => void act(() => api.runRoutineNow(routine.id), "Could not start the routine.")} className={button}>{tx("Run now")}</button>
+                          <button disabled={busy} onClick={() => void act(() => (routine.paused ? api.resumeRoutine(routine.id) : api.pauseRoutine(routine.id)), "Could not change the routine.")} className={button}>{routine.paused ? tx("Resume") : tx("Pause")}</button>
+                          <button disabled={busy} onClick={() => { setValidPreviewKey(null); setDraft(draftOf(routine)); }} className={button}>{tx("Edit")}</button>
+                          <button disabled={busy} onClick={() => setHistory(routine)} className={button}>{tx("History")}</button>
                           <button disabled={busy} onClick={() => void act(async () => {
                             const result = await api.enableRoutineWebhook(routine.id);
                             setSecret({ routineId: routine.id, secret: result.secret, url: webhookUrl(result.path) });
-                          }, "Could not set up the webhook.")} className={button}>{routine.webhook_enabled ? "New webhook secret" : "Add webhook"}</button>
-                          {routine.webhook_enabled && <button disabled={busy} onClick={() => void act(() => api.disableRoutineWebhook(routine.id), "Could not turn off the webhook.")} className={button}>Remove webhook</button>}
+                          }, "Could not set up the webhook.")} className={button}>{routine.webhook_enabled ? tx("New webhook secret") : tx("Add webhook")}</button>
+                          {routine.webhook_enabled && <button disabled={busy} onClick={() => void act(() => api.disableRoutineWebhook(routine.id), "Could not turn off the webhook.")} className={button}>{tx("Remove webhook")}</button>}
                           {confirmDelete === routine.id ? (
                             <>
-                              <button disabled={busy} onClick={() => void act(() => api.deleteRoutine(routine.id), "Could not delete the routine.").then(() => setConfirmDelete(null))} className={`${button} text-danger`}>Delete it and its history</button>
-                              <button disabled={busy} onClick={() => setConfirmDelete(null)} className={button}>Keep</button>
+                              <button disabled={busy} onClick={() => void act(() => api.deleteRoutine(routine.id), "Could not delete the routine.").then(() => setConfirmDelete(null))} className={`${button} text-danger`}>{tx("Delete it and its history")}</button>
+                              <button disabled={busy} onClick={() => setConfirmDelete(null)} className={button}>{tx("Keep")}</button>
                             </>
                           ) : (
-                            <button disabled={busy} onClick={() => setConfirmDelete(routine.id)} className={`${button} text-danger`}>Delete</button>
+                            <button disabled={busy} onClick={() => setConfirmDelete(routine.id)} className={`${button} text-danger`}>{tx("Delete")}</button>
                           )}
                         </div>
                       </li>

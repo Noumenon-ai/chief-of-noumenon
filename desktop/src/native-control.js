@@ -148,7 +148,7 @@ class NativeControl {
   }
   status(agent) {
     const permitted = this.platform === "darwin" && this.permissions(false);
-    return { supported: this.platform === "darwin" && this.available, enabled: this.enabled.has(agent), held: this.held, busy: !!this.owner, ready: permitted && !!this.driver && !this.driver.closed, reason: this.reason || (this.enabled.has(agent) && !permitted ? "Grant Accessibility and Screen Recording to Open Duet in System Settings, then retry." : null) };
+    return { supported: this.platform === "darwin" && this.available, enabled: this.enabled.has(agent), held: this.held, busy: !!this.owner, ready: permitted && !!this.driver && !this.driver.closed, reason: this.reason || (this.enabled.has(agent) && !permitted ? "Grant Accessibility and Screen Recording to Chief of Noumenon in System Settings, then retry." : null) };
   }
   async configure(agent, enabled) {
     if (!Number.isSafeInteger(agent) || agent < 1 || typeof enabled !== "boolean" || this.platform !== "darwin" || !this.available) fail();
@@ -175,7 +175,7 @@ class NativeControl {
       const sdk = await this.loadSdk(pathToFileURL(path.join(this.root, "sdk.mjs")).href);
       if (this.closing || this.held || generation !== this.generation) fail();
       if (prompt) sdk.requestPermissions();
-      if (!this.permissions(false)) { await this.stop(); throw new Error("Grant Accessibility and Screen Recording to Open Duet in System Settings, then retry."); }
+      if (!this.permissions(false)) { await this.stop(); throw new Error("Grant Accessibility and Screen Recording to Chief of Noumenon in System Settings, then retry."); }
       if (this.driver && !this.driver.closed) return;
       if (this.host) await this.stop();
       const hostGeneration = this.generation;

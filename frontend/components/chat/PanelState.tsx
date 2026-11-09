@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/lib/use-i18n";
 import type { ReactNode } from "react";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
@@ -13,8 +14,9 @@ export function LoadingState({ rows = 3, className }: { rows?: number; className
 
 // Plain-language failure with a way to try again.
 export function ErrorState({ message, onRetry, className }: { message: string; onRetry?: () => void; className?: string }) {
+  const t = useT();
   return (
-    <Banner tone="danger" className={className} action={onRetry ? <Button size="sm" onClick={onRetry}>Try again</Button> : undefined}>
+    <Banner tone="danger" className={className} action={onRetry ? <Button size="sm" onClick={onRetry}>{t("auth.tryAgain")}</Button> : undefined}>
       {message}
     </Banner>
   );

@@ -31,6 +31,31 @@ def automatic(tool, mode, team, arguments):
     if team is None:
         return 'denied', 'no_team'
     name = tool.removeprefix('mcp__team__')
+    from app.services import pdf_contract, chat_cards
+    if name in chat_cards.TOOLS:
+        if team.origin != 'person':
+            return 'denied', 'outside_origin'
+        try:
+            chat_cards.validate(name, arguments)
+        except Exception:
+            return 'denied', 'invalid_chat_card'
+        return 'allowed', 'chat_suggestion'
+    if name in pdf_contract.NAMES:
+        try:
+            pdf_contract.validate(name, arguments)
+        except Exception:
+            return 'denied', 'invalid_pdf_arguments'
+        if name in pdf_contract.READS:
+            return 'allowed', 'pdf_read'
+        if mode == 'plan':
+            return 'denied', 'plan_mode'
+        if name in pdf_contract.FRESH:
+            return None
+        return ('allowed', 'accept_edits') if mode == 'accept_edits' else None
+    if name in ('find_contact', 'check_post_draft'):
+        return 'allowed', 'team_read'
+    if name in ('create_reminder', 'list_reminders', 'cancel_reminder'):
+        return ('allowed', 'personal_reminder') if team.origin == 'person' else ('denied', 'outside_origin')
     if name == 'refresh_today':
         if not team.is_lead:
             return 'denied', 'lead_only'

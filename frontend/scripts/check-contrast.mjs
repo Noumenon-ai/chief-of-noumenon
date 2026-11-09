@@ -53,6 +53,10 @@ const PAIRS = [
   ["accent-fg", "danger", 4.5],
   // The keyboard focus ring is a UI component, held to 3:1 against what it sits on.
   ...["bg-app", "bg-surface", "bg-raised", "bg-hover"].map((bg) => ["focus", bg, 3]),
+  ["signal", "signal-bg", 4.5],
+  ["signal-fg", "signal", 4.5],
+  ["ink", "signal-bg", 4.5],
+  ["ink-muted", "signal-bg", 4.5],
   ["ink", "bubble-user", 4.5],
   ["ink", "code-bg", 4.5],
 ];
@@ -67,9 +71,19 @@ export function check() {
       if (got < min) failures.push(`${name}: ${fg} ${set[fg]} on ${bg} ${set[bg]} is ${got.toFixed(2)}:1, needs ${min}:1`);
     }
   }
-  for (let i = 1; i <= 10; i++) {
-    const got = ratio("#ffffff", shared[`identity-${i}`]);
-    if (got < 4.5) failures.push(`identity-${i} ${shared[`identity-${i}`]} with white text is ${got.toFixed(2)}:1, needs 4.5:1`);
+  for (const [theme, set] of Object.entries(themes)) {
+    for (let i = 1; i <= 10; i++) {
+      const color = set[`identity-${i}`] ?? shared[`identity-${i}`];
+      const got = ratio("#ffffff", color);
+      if (got < 4.5) failures.push(`${theme} identity-${i} ${color} with white text is ${got.toFixed(2)}:1, needs 4.5:1`);
+      // Channels tint their actual surface with the bot colour. Check small copy too.
+      for (const amount of [0.05, 0.1]) {
+        const mixed = "#" + [1, 3, 5].map(offset => Math.round(parseInt(color.slice(offset, offset + 2), 16) * amount + parseInt(set["bg-surface"].slice(offset, offset + 2), 16) * (1 - amount)).toString(16).padStart(2, "0")).join("");
+        for (const ink of ["ink", "ink-muted", "ink-faint"]) {
+          if (ratio(set[ink], mixed) < 4.5) failures.push(`${theme} ${ink} on identity-${i} tint fails 4.5:1`);
+        }
+      }
+    }
   }
   return failures;
 }

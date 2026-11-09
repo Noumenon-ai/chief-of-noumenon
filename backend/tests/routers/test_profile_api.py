@@ -63,3 +63,18 @@ async def test_usage_annual(api):
     assert "models" in data
     assert "providers" in data
     assert "teammates" in data
+
+async def test_profile_never_reads_host_identity(api, tmp_path, monkeypatch):
+    from app.services import user_profile
+    import subprocess
+    monkeypatch.setattr(user_profile, 'profile_file_path', lambda: tmp_path / 'profile.json')
+    monkeypatch.setenv('USER', 'host-private-identity')
+    def forbidden(*args, **kwargs):
+        pytest.fail('Profile must never read git identity')
+    monkeypatch.setattr(subprocess, 'check_output', forbidden)
+    result = await api.get('/api/v1/profile')
+    assert result.status_code == 200
+    assert result.json()['name'] == 'You'
+    assert result.json()['email'] is None
+    await api.put('/api/v1/profile', json={'name': 'My chosen name'})
+    assert (await api.get('/api/v1/profile')).json()['name'] == 'My chosen name'

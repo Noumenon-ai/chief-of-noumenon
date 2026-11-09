@@ -27,44 +27,6 @@ def profile_file_path() -> Path:
     return Path.home() / ".open-dots" / FILE_NAME
 
 
-def detect_system_identity() -> tuple[str | None, str | None]:
-    """Detect local developer identity from git config or system environment.
-    Never hardcoded: purely reads local git config or OS environment."""
-    name: str | None = None
-    email: str | None = None
-
-    # 1. Try local git configuration
-    try:
-        import subprocess
-        git_name = subprocess.check_output(
-            ["git", "config", "user.name"], text=True, stderr=subprocess.DEVNULL
-        ).strip()
-        if git_name:
-            name = git_name
-    except Exception:
-        pass
-
-    try:
-        import subprocess
-        git_email = subprocess.check_output(
-            ["git", "config", "user.email"], text=True, stderr=subprocess.DEVNULL
-        ).strip()
-        if git_email and "@" in git_email:
-            email = git_email
-    except Exception:
-        pass
-
-    # 2. If email exists but no name, derive name from email prefix
-    if email and not name:
-        name = email.split("@")[0]
-
-    # 3. Fallback to OS user
-    if not name:
-        name = os.environ.get("USERNAME") or os.environ.get("USER")
-
-    return name, email
-
-
 def read_profile() -> dict[str, Any]:
     path = profile_file_path()
     try:
@@ -84,9 +46,7 @@ def read_profile() -> dict[str, Any]:
     except (FileNotFoundError, OSError, ValueError, json.JSONDecodeError):
         pass
 
-    # Fallback to auto-detected local identity
-    detected_name, _ = detect_system_identity()
-    return {"name": detected_name, "avatar_url": None, "bio": None, "updated_at": None}
+    return {"name": "You", "avatar_url": None, "bio": None, "updated_at": None}
 
 
 def write_profile(

@@ -111,7 +111,7 @@ test('upkeep, settings and About me calls hit the right routes', async () => {
 test('the helper model is described as leaving the provider, and as never used when switched off', () => {
   const helper = { engine: 'claude', label: 'Claude', model: 'haiku', source: 'settings', usable: true };
   const base = { engine: 'codex', helper_model: null, engine_can_call: false };
-  assert.match(helperModelLine({ ...base, helper }), /helper model \(Claude, haiku\) writes it.*not to this agent's provider/);
+  assert.match(helperModelLine({ ...base, helper }), /helper model \(Claude, haiku\) writes it.*not to this bot's provider/);
   assert.match(helperModelLine({ ...base, helper }, false), /never uses the helper model/);
   assert.match(helperModelLine({ ...base, helper: { ...helper, usable: false } }), /not usable/);
   assert.match(helperModelLine({ ...base, helper: null }), /only expired notes and repeats/);

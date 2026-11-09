@@ -9,6 +9,7 @@ never ~/.open-dots/open-dots.db, so the tests cannot touch a real database.
     DATABASE_BACKEND=sqlite uv run pytest           # SQLite, temporary file
 """
 
+import os
 import tempfile
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -18,6 +19,12 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+
+# Lifespan tests must never download a voice model. Individual warmup tests
+# explicitly enable it with a fake loader. Inheriting subprocesses use the env
+# gate; tests/e2e/backend.py also disables it in its isolated environment.
+os.environ["VOICE_PRELOAD"] = "false"
+settings.VOICE_PRELOAD = False
 
 BACKEND_DIR = Path(__file__).parents[1]
 
@@ -124,3 +131,15 @@ def fake_engine_environment(monkeypatch):
     """The fake engine CLIs read their scratch folders from FAKE_* variables;
     engines only get listed names (app/core/engine_env.py)."""
     monkeypatch.setenv("OPEN_DOTS_ENGINE_ENV", "FAKE_*")
+
+
+@pytest.fixture(autouse=True)
+def fake_engine_sandbox(monkeypatch):
+    """Process doubles use scratch programs; sandbox tests explicitly enable isolation."""
+    monkeypatch.setattr(settings, "TURN_SANDBOX_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
+def isolated_workspace_root(monkeypatch, tmp_path):
+    """Unconfigured thread tests must never create the operator's real workspace."""
+    monkeypatch.setattr(settings, "LOCAL_WORKSPACE_ROOT", str(tmp_path / "workspaces"))

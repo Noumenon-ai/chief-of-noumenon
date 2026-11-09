@@ -342,7 +342,7 @@ def run(args: list[str], *, timeout: float, input_bytes: bytes | None = None,
     the CLI process is killed and `timed_out` is set."""
     executable = docker or docker_executable()
     if not executable:
-        raise DockerMissing("Docker is not installed (no docker command was found).")
+        raise DockerMissing("Docker is not installed (no docker command was found). Install Docker Engine or Docker Desktop, start it, and retry.")
     kwargs: dict = {}
     if sys.platform == "win32":
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)

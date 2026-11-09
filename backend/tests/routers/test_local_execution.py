@@ -70,6 +70,7 @@ async def test_disabled_flag_refuses_everything(db_session, user_id, monkeypatch
     assert status.json() == {
         "enabled": False, "available": False, "reason": None, "cli_version": None,
         "tools_enabled": False,
+        "voice": None,
     }
 
 
@@ -111,6 +112,7 @@ async def test_status_reports_ready_cli(db_session, ready_cli):
     assert status.json() == {
         "enabled": True, "available": True, "reason": None, "cli_version": "9.9.9",
         "tools_enabled": False,
+        "voice": None,
     }
 
 

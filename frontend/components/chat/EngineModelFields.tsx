@@ -153,7 +153,7 @@ export function EngineModelFields({
           </>
         )}
         <span className="mt-1 block">
-          Leave the model unset to use {defaultLabel ? "the agent's default" : "the engine's default"}.
+          Leave the model unset to use {defaultLabel ? "the bot's default" : "the engine's default"}.
           {engine?.custom_models ? " Choose a suggestion or enter a model ID." : ""}
         </span>
       </label>
@@ -190,13 +190,7 @@ export function EngineModelFields({
         </div>
       )}
 
-      {engine && (
-        <p className="text-xs text-muted">
-          {engine.capabilities.tools ? "Tool calls supported" : "Chat only; no tool calls"}
-          {engine.capabilities.computers ? " · agent computers supported" : ""}
-          {engine.capabilities.resume ? " · resumable sessions" : ""}
-        </p>
-      )}
+
     </div>
   );
 }

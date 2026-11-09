@@ -65,6 +65,9 @@ async def deliver(texts: list[str]) -> int:
     """Send the texts of committed notifications (`telegram_text`) to
     ROUTINE_TELEGRAM_CHAT_ID, when it and the bot token are set. Returns how
     many were sent."""
+    # The owner poller delivers the durable feed, with retry and no duplicate sender.
+    if settings.TELEGRAM_OWNER_ID:
+        return 0
     chat = settings.ROUTINE_TELEGRAM_CHAT_ID.strip()
     if not chat or not settings.TELEGRAM_BOT_TOKEN or not texts:
         return 0
@@ -87,16 +90,14 @@ async def list_feed(
     if unread_only:
         query = query.where(Notification.read_at.is_(None))
     query = query.order_by(Notification.created_at.desc(), Notification.id.desc()).limit(limit)
-    return list((await db.execute(query)).scalars().all())
+    from app.services.quiet_notifications import visible
+    return await visible(db, owner_id, list((await db.execute(query)).scalars().all()))
 
 
 async def unread_count(db: AsyncSession, owner_id: str) -> int:
-    result = await db.execute(
-        select(func.count())
-        .select_from(Notification)
-        .where(Notification.owner_id == owner_id, Notification.read_at.is_(None))
-    )
-    return int(result.scalar_one())
+    from app.services.quiet_notifications import visible
+    rows = list(await db.scalars(select(Notification).where(Notification.owner_id == owner_id, Notification.read_at.is_(None))))
+    return len(await visible(db, owner_id, rows))
 
 
 async def mark_read(db: AsyncSession, owner_id: str, notification_id: int) -> bool:

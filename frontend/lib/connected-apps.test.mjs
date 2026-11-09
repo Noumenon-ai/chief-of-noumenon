@@ -106,7 +106,7 @@ test("account grants are exact IDs, can be toggled, and only survive for enabled
   assert.deepEqual(withAccount({ gmail: ["ca_a"] }, "gmail", "ca_a", false), {});
   assert.deepEqual(accountScopesToSend({ gmail: ["ca_b", "ca_a", "ca_a"], slack: ["ca_s"] },
     { gmail: "read", slack: "off" }, "claude"), { gmail: ["ca_a", "ca_b"] });
-  assert.deepEqual(accountScopesToSend({ gmail: ["ca_a"] }, { gmail: "read" }, "openai_compat"), {});
+  assert.deepEqual(accountScopesToSend({ gmail: ["ca_a"] }, { gmail: "read" }, "openai_compat"), { gmail: ["ca_a"] });
   assert.deepEqual(accountScopesToSend({ gmail: ["", "x".repeat(301)] }, { gmail: "read" }, "claude"), {});
 });
 
@@ -116,13 +116,13 @@ test("saving sends known levels for engines that support apps", () => {
   assert.deepEqual(scopesToSend({ github: "write", gmail: "read" }, "codex"), { github: "write", gmail: "read" });
   assert.equal(scopesToSend({}, "claude"), null);
   assert.equal(scopesToSend(null, "claude"), null);
-  assert.equal(scopesToSend({ github: "write" }, "openai_compat"), null);
+  assert.deepEqual(scopesToSend({ github: "write" }, "openai_compat"), { github: "write" });
   assert.deepEqual(scopesToSend({ github: "write", gmail: "read", slack: "write" }, "claude"), { github: "write", gmail: "read", slack: "write" });
   assert.deepEqual(scopesToSend({ googlecalendar: "write", notion: "read" }, "codex"), { googlecalendar: "write", notion: "read" });
   assert.equal(scopesToSend({ "Bad Name": "read", "../x": "read", "": "read", ["a".repeat(65)]: "read" }, "claude"), null);
   assert.equal(scopesToSend({ github: "admin" }, "claude"), null);
   assert.equal(supportsConnectedApps("codex"), true);
-  assert.equal(supportsConnectedApps("openai_compat"), false);
+  assert.equal(supportsConnectedApps("openai_compat"), true);
   assert.ok(AGENT_APPS.every((app) => app.slug && app.label && app.read && (app.write === null || typeof app.write === 'string')));
 });
 

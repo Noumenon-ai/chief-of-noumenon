@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useT } from "@/lib/use-i18n";
 import { usePathname } from "next/navigation";
 import { Component, Fragment, useCallback, useEffect, useRef, type ErrorInfo, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
@@ -75,6 +76,7 @@ class SettingsErrorBoundary extends Component<
 // The frame every Settings page shares: a list of the pages beside (above, on a
 // phone) the page that is open.
 export function SettingsShell({ children }: { children: ReactNode }) {
+  const t = useT();
   const pathname = usePathname() ?? "";
   const active = activeSettingsPage(pathname);
   const pendingFocus = useRef<(() => void) | null>(null);
@@ -152,21 +154,21 @@ export function SettingsShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh">
       <header className="flex h-12 items-center gap-4 border-b border-line px-4">
-        <Link href="/chat/" className="text-sm text-muted hover:underline">
-          ← Chat
+        <Link href="/chat/" className="inline-flex min-h-11 items-center text-sm text-muted hover:underline">
+          {t("settings.backChat")}
         </Link>
-        <h1 className="text-sm font-semibold">Settings</h1>
+        <h1 className="text-sm font-semibold">{t("palette.settings")}</h1>
       </header>
       <div className="mx-auto max-w-4xl px-5 pt-4">
         <SettingsSearch />
       </div>
       <div className="mx-auto flex max-w-4xl flex-col gap-6 px-5 py-8 md:flex-row">
-        <nav aria-label="Settings" className="md:w-52 md:shrink-0">
-          <ul className="flex gap-1 overflow-x-auto md:flex-col">
+        <nav aria-label={t("palette.settings")} className={cn("md:w-52 md:shrink-0", active.id === "general" && "hidden md:block")}>
+          <ul className="flex flex-wrap gap-1 md:flex-col">
             {SETTINGS_NAV_GROUPS.map((group) => (
-              <Fragment key={group.label}>
+              <Fragment key={t(`settings.group.${group.label}`)}>
                 <li aria-hidden="true" className="hidden shrink-0 px-3 pt-3 text-xs font-semibold uppercase tracking-wide text-muted first:pt-0 md:block">
-                  {group.label}
+                  {t(`settings.group.${group.label}`)}
                 </li>
                 {group.items.map((item) => (
                   <li key={item.href} className="shrink-0">
@@ -178,7 +180,7 @@ export function SettingsShell({ children }: { children: ReactNode }) {
                         item.pageId === active.id ? "bg-hover font-medium text-ink" : "text-muted"
                       )}
                     >
-                      {item.label}
+                      {t(`settings.nav.${item.pageId ?? "apps"}`)}
                     </Link>
                   </li>
                 ))}
@@ -188,8 +190,8 @@ export function SettingsShell({ children }: { children: ReactNode }) {
         </nav>
         <main className="min-w-0 flex-1 space-y-6">
           <div>
-            <h2 className="text-heading font-semibold">{active.label}</h2>
-            <p className="mt-1.5 text-body text-muted">{active.summary}</p>
+            <h2 className="text-heading font-semibold">{t(`settings.nav.${active.id}`)}</h2>
+            <p className="mt-1.5 text-body text-muted">{t(`settings.summary.${active.id}`)}</p>
           </div>
           <SettingsErrorBoundary key={active.href}>{children}</SettingsErrorBoundary>
         </main>

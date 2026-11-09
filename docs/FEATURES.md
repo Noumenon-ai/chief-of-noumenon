@@ -1,6 +1,6 @@
 # Features
 
-Open Duet is a workspace for named AI agents, durable conversations, teams,
+Chief of Noumenon is a workspace for named AI agents, durable conversations, teams,
 and recurring work. This page describes the repository's current source;
 features added after a desktop release tag may not be in that installer. See
 the [README](../README.md) for install options and the [roadmap](ROADMAP.md)
@@ -79,6 +79,10 @@ platform and release qualification limits.
   `v0.2.0`. The `v0.3.0` Windows app includes an assisted, checksum-verified
   updater; it does not install an update automatically. The release-to-release
   update path has not been verified end to end.
-- **Optional legacy path.** The original Boat sandbox tasks and Telegram bot
+- **Optional legacy path.** The original Boat sandbox tasks
   remain separate from the local agent workspace. Neither is needed for local
   chat or routines.
+
+The website is the main app; [phone setup](PHONE.md) provides private HTTPS and
+home-screen installation. [Telegram](TELEGRAM.md) provides optional alerts and
+approval buttons. Browser voice recording uses the shared local transcription.

@@ -1,0 +1,13 @@
+{
+  "product": "Chief of Noumenon",
+  "audience": "An owner running a personal team of bots",
+  "universe": "Control Room: conversations, approvals and bot computers",
+  "palette_value": "dark",
+  "palette_topology": "themeable",
+  "typography_class": "humanist-sans",
+  "composition": "conversational",
+  "imagery": "product-ui",
+  "motion": "minimal",
+  "signature": "Violet-grey bot channels and computers frame the conversation; amber marks requests waiting for the owner.",
+  "rationale": "The conversation is the central workspace, with real bot channels on one side and the current computer on the other. Compact receipts keep completed work quiet while waiting cards name the decision and expose its inputs. IBM Plex Sans Hebrew and IBM Plex Mono are self-hosted for bilingual work without external requests. Starter-team and day-planning controls extend the existing rail and Settings components with the same tokens and responsive behavior. Contact aliases and saved post drafts extend Settings with existing cards, fields and status messages; uncertain action receipts use explicit text without a success mark. The fourth audit preserves this identity while translating remaining editors and keeping automatic reads out of waiting cards. The microphone language selector preserves the existing composer, native labels, logical direction and 44 px touch targets."
+}

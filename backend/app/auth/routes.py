@@ -209,7 +209,7 @@ async def get_session(
 class PairingCodeBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     label: str = Field(default="", max_length=200)
-    scope: Literal["admin", "chat", "files"] = "admin"
+    scope: Literal["admin", "chat", "files", "assistant"] = "admin"
 
 
 class PairingCodeResponse(BaseModel):

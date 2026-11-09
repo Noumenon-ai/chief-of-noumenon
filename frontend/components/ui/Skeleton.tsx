@@ -1,8 +1,8 @@
 import { cn } from "@/lib/cn";
 
-// A placeholder block that pulses while content loads. Decorative: pair with a status line for screen readers.
+// A placeholder block shown only while content loads. Decorative: pair with a status line for screen readers.
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden="true" className={cn("animate-pulse rounded-field bg-hover/70", className)} />;
+  return <div aria-hidden="true" className={cn("rounded-field bg-hover/70", className)} />;
 }
 
 // N stacked rows, the usual stand-in for a list that is loading.

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { ApiError, isSignedOutError, request, setSignedOutHandler } from "@/lib/api";
@@ -57,6 +58,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
           setAccount(localAccount);
           if (!localAccount.signed_in) { setReady(true); return; }
         }
+        if (status.signed_in === false && !status.desktop && !status.setup_allowed) {
+          const next = `${window.location.pathname}${window.location.search}`;
+          router.replace(`/login/?next=${encodeURIComponent(next)}`);
+          return;
+        }
         const current = await auth.session();
         let storage: Storage | null = null;
         try { storage = window.localStorage; } catch { /* storage blocked */ }
@@ -64,8 +70,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
         if (!cancelled) setSession({ ...current, user_id: userId });
         if (current.scopes.includes("admin") && !isSetupPage(pathname) && !continueWithoutSetup) {
           try {
-            const progress = await onboarding.get();
-            if (progress.status === "pending") { router.replace("/onboarding/"); return; }
+            const progress = await onboarding.detect();
+            if (progress.status === "pending" || (progress.auto_created && progress.ready_choices?.length)) { router.replace("/onboarding/"); return; }
           } catch (err) {
             if (!(err instanceof ApiError && [403, 404].includes(err.status))) throw err;
           }
@@ -102,5 +108,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
   if (!ready) return <div className="flex justify-center p-10 text-sm text-muted"><Spinner label={t("auth.loading")} /></div>;
   if (account && !account.signed_in) return <DesktopAccountLogin status={account} onSignedIn={() => { setReady(false); setRetry(value => value + 1); }} />;
-  return <SessionContext.Provider value={{ session, setUserId }}>{children}</SessionContext.Provider>;
+  const computerOnly = session && !session.scopes.includes("admin") && /^\/(settings|apps|marketplace|onboarding|tasks)(\/|$)/.test(pathname ?? "");
+  return <SessionContext.Provider value={{ session, setUserId }}>{computerOnly
+    ? <main className="mx-auto max-w-md space-y-4 p-6"><h1 className="text-title font-semibold">{t("computer.only")}</h1><Link className="inline-flex min-h-11 items-center underline" href="/chat/">{t("computer.chat")}</Link></main>
+    : children}</SessionContext.Provider>;
 }

@@ -33,7 +33,7 @@ from app.core import tenant_paths
 
 logger = get_logger(__name__)
 
-EVENTS = ("shown", "allowed", "denied", "auto_allowed", "expired", "cancelled", "undone")
+EVENTS = ("shown", "allowed", "denied", "auto_allowed", "expired", "cancelled", "undone", "app_call", "app_result")
 FILE_PREFIX = "decisions-"
 FILE_SUFFIX = ".ndjson"
 MAX_SUMMARY_CHARS = 300
@@ -55,7 +55,8 @@ _SECRET_PATTERNS = (
     re.compile(r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}"),
     re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/\-]{12,}=*"),
     re.compile(
-        r"(?i)([A-Za-z0-9_.\-]*(?:key|token|secret|passw(?:or)?d|credential|auth)[A-Za-z0-9_.\-]*"
+        # Bounded on purpose: unbounded repeats here took tens of seconds on long encoded text.
+        r"(?i)([A-Za-z0-9_.\-]{0,128}(?:key|token|secret|passw(?:or)?d|credential|auth)[A-Za-z0-9_.\-]{0,128}"
         r"\s*[=:]\s*)(?:\"[^\"]*\"|'[^']*'|\S+)"
     ),
     re.compile(r"\b[A-Za-z0-9+/_\-]{40,}={0,2}"),
@@ -130,9 +131,9 @@ def record(
             "approval_id": approval_id,
             "tool": tool,
             "kind": kind,
-            "summary": redact(summary)[:MAX_SUMMARY_CHARS] if summary else None,
+            "summary": "Contact lookup" if tool == "mcp__team__find_contact" else "Post draft review" if tool == "mcp__team__check_post_draft" else "Connected app" if tool == "mcp__composio__apps_run" and event != "app_result" else "Personal reminder" if tool in ("mcp__team__create_reminder", "mcp__team__list_reminders", "mcp__team__cancel_reminder") else (redact(summary[:24000])[:MAX_SUMMARY_CHARS] if summary else None),
             "source": source,
-            "rule": redact(rule)[:MAX_SUMMARY_CHARS] if rule else None,
+            "rule": redact(rule[:24000])[:MAX_SUMMARY_CHARS] if rule else None,
             "remembered": remembered or None,
             "mode": mode,
         }
@@ -257,7 +258,7 @@ def _csv_cell(value) -> str:
         return ""
     if value is True:
         return "yes"
-    text = redact(str(value)).replace("\r", " ").replace("\n", " ")
+    text = redact(str(value)[:24000])[:12000].replace("\r", " ").replace("\n", " ")
     if text[:1] in ("=", "+", "-", "@", "\t"):
         text = "'" + text
     return text

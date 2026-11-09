@@ -5,6 +5,7 @@ import type { NextConfig } from "next";
 const basePath = process.env.OD_BASE_PATH ?? "";
 
 const nextConfig: NextConfig = {
+  ...(process.env.OD_DIST_DIR ? { distDir: process.env.OD_DIST_DIR } : {}),
   ...(basePath ? { basePath } : {}),
   // Lets the page's own code build addresses for window.location (lib/paths.ts).
   env: { NEXT_PUBLIC_BASE_PATH: basePath },

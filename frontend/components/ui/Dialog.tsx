@@ -22,6 +22,7 @@ export function Dialog({
   flush = false,
   children,
   footer,
+  focusFirstField = false,
   onEscapeKeyDown,
 }: {
   open: boolean;
@@ -33,6 +34,7 @@ export function Dialog({
   flush?: boolean;
   children: ReactNode;
   footer?: ReactNode;
+  focusFirstField?: boolean;
   onEscapeKeyDown?: EscapeKeyHandler;
 }) {
   const t = useT();
@@ -40,12 +42,15 @@ export function Dialog({
   // The dialog is controlled and has no Radix trigger, so Radix has nothing to hand focus
   // back to. Remember what had focus when it opened and restore it on close.
   const opener = useRef<HTMLElement | null>(null);
+  const content = useRef<HTMLDivElement | null>(null);
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="fixed inset-0 z-40 animate-fade-in bg-scrim" />
         <RadixDialog.Content
-          onOpenAutoFocus={() => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }}
+          ref={content}
+          tabIndex={-1}
+          onOpenAutoFocus={(event) => { event.preventDefault(); opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; const target = focusFirstField ? content.current?.querySelector<HTMLInputElement>("input") || content.current : content.current; target?.focus(); if (focusFirstField) target?.scrollIntoView({ block: "nearest" }); }}
           onCloseAutoFocus={(event) => { event.preventDefault(); opener.current?.focus(); }}
           onEscapeKeyDown={onEscapeKeyDown}
           // Without a description there is nothing to point at; an explicit undefined silences

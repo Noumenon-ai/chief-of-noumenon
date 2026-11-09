@@ -167,3 +167,18 @@ test("cached preference read and write with effort in localStorage", () => {
     effort: "high",
   });
 });
+
+
+test("blocked localStorage getter does not break chat", () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    get localStorage() { throw new Error("Storage blocked"); },
+  } });
+  try {
+    assert.equal(readCachedPreference(), null);
+    assert.doesNotThrow(() => writeCachedPreference({ provider: "claude", model: null }));
+  } finally {
+    if (previous) Object.defineProperty(globalThis, "window", previous);
+    else delete globalThis.window;
+  }
+});

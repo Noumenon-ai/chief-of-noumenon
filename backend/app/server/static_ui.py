@@ -7,8 +7,8 @@ page request: GET or HEAD on a path that is not the API, the webhook route or
 the API's own documentation. Everything else, including every other method, goes
 to the application unchanged and keeps its sign-in rules.
 
-Nothing here knows about a particular reverse proxy. Redirects are relative, so
-they stay correct whatever scheme and host the visitor used to get here.
+Except for the explicitly configured local sign-in host, redirects are relative
+and preserve the reverse proxy address used by the visitor.
 """
 
 from urllib.parse import urlsplit
@@ -66,7 +66,7 @@ def _relative(location: str, base_path: str = "") -> str:
     return path + (f"?{parts.query}" if parts.query else "")
 
 
-def serve_ui(app: ASGIApp, ui_dir, base_path: str = "") -> ASGIApp:
+def serve_ui(app: ASGIApp, ui_dir, base_path: str = "", *, check_hosts: bool = False) -> ASGIApp:
     """`app` with the pages in `ui_dir` answered before it. Raises if the folder is missing.
 
     With a `base_path` (a build made with OD_BASE_PATH=/app) the pages are answered only under
@@ -76,8 +76,28 @@ def serve_ui(app: ASGIApp, ui_dir, base_path: str = "") -> ASGIApp:
     pages = StaticFiles(directory=ui_dir, html=True)
 
     async def asgi(scope: Scope, receive: Receive, send: Send) -> None:
+        if check_hosts and scope["type"] == "http":
+            from app.auth import request_info
+            hostname = request_info.request_hostname(scope)
+            if not hostname or not request_info.host_is_trusted(hostname):
+                await PlainTextResponse("This server does not answer to that host name.", status_code=421)(scope, receive, send)
+                return
         if not is_page_request(scope, base_path):
             await app(scope, receive, send)
+            return
+        # Fresh self-hosted installs use one sign-in host, so localhost and
+        # 127.0.0.1 cannot split the browser cookie from the OAuth callback.
+        # Only local page aliases redirect; API requests and remote phone URLs do not.
+        from app.core.config import settings
+        from app.auth import request_info
+        canonical = urlsplit(settings.OPEN_DOTS_PUBLIC_URL)
+        hostname = request_info.request_hostname(scope)
+        if canonical.hostname in ('localhost', '127.0.0.1') and hostname in ('localhost', '127.0.0.1') and hostname != canonical.hostname:
+            destination = settings.OPEN_DOTS_PUBLIC_URL.rstrip('/') + scope['path']
+            query = scope.get('query_string', b'').decode('latin-1')
+            if query:
+                destination += '?' + query
+            await PlainTextResponse('', status_code=307, headers={'location': destination, 'cache-control': 'no-store'})(scope, receive, send)
             return
         if base_path:
             if scope["path"] == base_path:  # `/app` is the folder `/app/`

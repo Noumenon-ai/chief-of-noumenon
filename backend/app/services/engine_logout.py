@@ -1,4 +1,4 @@
-"""Bounded CLI sign-out, serialized with the engine's browser sign-in."""
+"""Bounded CLI sign-out, serialized per engine account."""
 
 import asyncio
 import json
@@ -8,8 +8,11 @@ from pathlib import Path
 
 from app.core import data_lease
 from app.services import cli_probe
-from app.services.codex_login import LoginError
 from app.services.local_claude_runner import child_env
+
+
+class LoginError(ValueError):
+    pass
 
 
 async def logout(controller, engine_id: str, executable: Path):
@@ -71,3 +74,20 @@ async def _probe(args, *, timeout, env):
     except asyncio.CancelledError:
         await task
         raise
+
+
+class LogoutOperation:
+    """Lifecycle for terminal-owned CLI accounts; no sign-in or credential IO."""
+    task = None
+    flow = None
+
+    def view(self, owner, operation_id):
+        raise KeyError(operation_id)
+
+    async def close(self):
+        if self.task is not None and not self.task.done():
+            self.task.cancel()
+            try:
+                await self.task
+            except asyncio.CancelledError:
+                pass

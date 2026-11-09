@@ -216,16 +216,14 @@ async def test_accept_edits_lets_a_workspace_edit_through_without_a_card(crt, se
         assert await store.list_approvals(db, thread.id) == []
 
 
-async def test_accept_edits_still_asks_about_an_edit_outside_the_workspace(crt, sessions, owner, codex, monkeypatch, tmp_path):
+async def test_accept_edits_denies_outside_workspace_without_card(crt, sessions, owner, codex, monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "LOCAL_TOOLS_ENABLED", True)
     codex.plan({"type": "file", "path": str(tmp_path / "elsewhere.txt")})
     thread = await codex_thread(crt, sessions, owner, mode="accept_edits")
     await crt.send_turn(thread.id, "write notes")
-    approval = await pending_approval(sessions, thread.id)
-    assert approval.tool == "apply_patch" and approval.kind == "file_write"
-    assert approval.input["changes"][0]["path"] == str(tmp_path / "elsewhere.txt")
-    assert await crt.answer_approval(approval.id, "deny")
     await finished(sessions, thread.id)
+    async with sessions() as db:
+        assert await store.list_approvals(db, thread.id) == []
     assert codex.answers()[0]["result"] == {"decision": "decline"}
 
 
@@ -236,7 +234,8 @@ async def test_plan_mode_is_read_only_and_declines_without_a_card(crt, sessions,
     await crt.send_turn(thread.id, "go")
     await finished(sessions, thread.id)
     started = codex.received("thread/start")[0]["params"]
-    assert (started["approvalPolicy"], started["sandbox"]) == ("never", "read-only")
+    assert (started["approvalPolicy"], started["sandbox"]) == ("untrusted", "read-only")
+    assert "--cards-only" in started["config"]["mcp_servers"]["team"]["args"]
     assert codex.answers()[0]["result"] == {"decision": "decline"}
     async with sessions() as db:
         assert await store.list_approvals(db, thread.id) == []
@@ -368,7 +367,7 @@ async def test_probe_reports_signed_out(codex):
     codex.plan(login="out")
     probe = await CodexAdapter().probe()
     assert not probe.ready and probe.installed and probe.signed_in is False
-    assert "engine settings" in probe.reason and "terminal" not in probe.reason
+    assert "codex login" in probe.reason and "terminal" in probe.reason and "Refresh" in probe.reason
     assert "example.com" not in json.dumps(probe.__dict__, default=str)
 
 

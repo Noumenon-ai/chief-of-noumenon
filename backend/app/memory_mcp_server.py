@@ -66,8 +66,9 @@ class Server:
         temporary.write_text(json.dumps({"name": name, "arguments": arguments}), encoding="utf-8")
         os.replace(temporary, path)
         response = self.mailbox / f"resp-{token}.json"
-        deadline = time.monotonic() + 120
-        while time.monotonic() < deadline:
+        # The owning turn removes this folder on stop. A person may take
+        # longer than a transport timeout to answer an approval.
+        while self.mailbox.is_dir():
             if response.exists():
                 result = json.loads(response.read_text(encoding="utf-8"))
                 response.unlink(missing_ok=True)

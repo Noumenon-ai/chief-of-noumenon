@@ -183,7 +183,12 @@ def network_box(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, 'SQLITE_PATH', str(tmp_path / 'data' / 'app.db'))
     monkeypatch.setattr(box.sys, 'platform', 'linux')
     monkeypatch.setattr(box.profile, 'active', lambda: False)
-    monkeypatch.setattr(box.shutil, 'which', lambda name: '/usr/bin/bwrap')
+    engine = tmp_path / 'fake-codex'
+    engine.write_text('#!/bin/sh\nexit 0\n')
+    engine.chmod(0o755)
+    which = box.shutil.which
+    monkeypatch.setattr(box.shutil, 'which', lambda name, **kw: '/usr/bin/bwrap' if name == 'bwrap'
+                        else str(engine) if name == 'codex' else which(name, **kw))
     workspace = tmp_path / 'workspace'
     workspace.mkdir()
     return workspace
@@ -194,9 +199,8 @@ def real_network_box(monkeypatch, tmp_path):
     """Enable the real Linux sandbox without platform or executable fakes."""
     monkeypatch.setattr(settings, 'TURN_SANDBOX_ENABLED', True)
     monkeypatch.setattr(settings, 'TURN_SANDBOX_NETWORK_ENABLED', True)
-    # A venv can link to a managed Python outside /usr. Grant only that runtime,
-    # as an operator must for a custom installation; never grant its parent/home.
-    monkeypatch.setattr(settings, 'TURN_SANDBOX_READONLY_PATHS', str(Path(sys.base_prefix).resolve()))
+    # Managed Python is discovered without an operator runtime grant.
+    monkeypatch.setattr(settings, 'TURN_SANDBOX_READONLY_PATHS', '')
     monkeypatch.setattr(settings, 'TURN_SANDBOX_WRITABLE_PATHS', '')
     monkeypatch.setattr(settings, 'SQLITE_PATH', str(tmp_path / 'data' / 'app.db'))
     workspace = tmp_path / 'workspace'

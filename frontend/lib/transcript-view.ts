@@ -56,12 +56,30 @@ type AnnounceItem = { kind: string; key: string; text?: string; incomplete?: boo
 export function announcement(items: readonly AnnounceItem[]): { key: string; text: string } | null {
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i];
-    if (item.kind === "approval" && item.status === "pending") return { key: item.key, text: "Your agent is waiting for your approval." };
+    if (item.kind === "approval" && item.status === "pending") return { key: item.key, text: "Your bot is waiting for your approval." };
     if (item.kind === "turn_end" && item.status === "failed") return { key: item.key, text: "The run failed." };
     if (item.kind === "assistant" && !item.incomplete && item.text) {
       const text = spokenText(item.text);
-      return { key: item.key, text: `Agent replied: ${text.length > 240 ? `${text.slice(0, 240)}…` : text}` };
+      return { key: item.key, text: `Bot replied: ${text.length > 240 ? `${text.slice(0, 240)}…` : text}` };
     }
   }
   return null;
+}
+
+// Approvals have no call id in the event contract. Pair only equal tool/input
+// within the same turn, once per call, in event order. Preserve every approval.
+export function mergeReceipts<T extends { kind: string; turnId?: number | null; name?: string; tool?: string; input?: unknown }>(items: readonly T[]): T[] {
+  const consumed = new Set<number>();
+  const merged = new Map<number, T>();
+  for (let i = 0; i < items.length; i++) {
+    const approval = items[i];
+    if (approval.kind !== "approval") continue;
+    const matches = items.map((item, index) => ({ item, index })).filter(({ item, index }) => !consumed.has(index) && item.kind === "tool" && item.turnId === approval.turnId && item.name === approval.tool && JSON.stringify(item.input) === JSON.stringify(approval.input));
+    const match = matches.filter(m => m.index < i).at(-1) ?? matches[0];
+    if (match) {
+      consumed.add(match.index);
+      merged.set(i, { ...approval, toolResult: match.item });
+    }
+  }
+  return items.map((item, index) => merged.get(index) ?? item).filter((_, index) => !consumed.has(index));
 }

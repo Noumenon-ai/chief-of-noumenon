@@ -17,11 +17,11 @@ const MAX_DESCRIPTION = 4_000;
 const MAX_INSTRUCTIONS_BYTES = 24_000;
 
 export const GROK_AGENT_EXPORT_PROMPT = [
-  "Please export this bot so I can recreate its basic setup in another agent app.",
+  "Please export this bot so I can recreate its basic setup in another bot app.",
   "Reply with one JSON code block in this shape. Keep the full standing instructions exactly as written.",
   "{",
-  '  "format": "open-dots.grok-agent/1",',
-  '  "name": "Agent name",',
+  '  "format": "open-dots.grok-bot/1",',
+  '  "name": "Bot name",',
   '  "title": "Short role title",',
   '  "description": "Short description",',
   '  "instructions": "Full standing instructions"',
@@ -31,11 +31,11 @@ export const GROK_AGENT_EXPORT_PROMPT = [
 ].join("\n");
 
 export const HERMES_AGENT_EXPORT_PROMPT = [
-  "Please export the basic setup of the Hermes Agent profile we are using so I can recreate it in another agent app.",
+  "Please export the basic setup of the Hermes Bot profile we are using so I can recreate it in another bot app.",
   "Reply with one JSON code block in this shape. Copy the full standing persona/instructions from SOUL.md when available.",
   "{",
-  '  "format": "open-dots.hermes-agent/1",',
-  '  "name": "Agent name",',
+  '  "format": "open-dots.hermes-bot/1",',
+  '  "name": "Bot name",',
   '  "title": "Short role title",',
   '  "description": "Short description",',
   '  "instructions": "Full standing persona and instructions"',
@@ -119,12 +119,12 @@ export function parseExternalAgentSetup(
     source === "grok" ? persona.description : "",
   );
 
-  if (!name) throw new Error("The export needs an agent name.");
-  if (/[\r\n]/u.test(name)) throw new Error("The agent name must fit on one line.");
-  if (name.length > MAX_NAME) throw new Error("The agent name is longer than 80 characters.");
-  if (title.length > MAX_TITLE) throw new Error("The agent title is longer than 200 characters.");
+  if (!name) throw new Error("The export needs a bot name.");
+  if (/[\r\n]/u.test(name)) throw new Error("The bot name must fit on one line.");
+  if (name.length > MAX_NAME) throw new Error("The bot name is longer than 80 characters.");
+  if (title.length > MAX_TITLE) throw new Error("The bot title is longer than 200 characters.");
   if (description.length > MAX_DESCRIPTION) throw new Error("The description is longer than 4,000 characters.");
-  if (!instructions) throw new Error("The export needs the agent's standing instructions.");
+  if (!instructions) throw new Error("The export needs the bot's standing instructions.");
   if (utf8Length(instructions) > MAX_INSTRUCTIONS_BYTES) {
     throw new Error("The instructions are longer than 24,000 bytes.");
   }
@@ -138,10 +138,10 @@ export function parseExternalAgentSetup(
     sourceLabel: source === "grok"
       ? "Grok Bot"
       : source === "hermes"
-        ? "Hermes Agent"
+        ? "Hermes Bot"
         : source === "openbot"
           ? "OpenBot database"
-          : "Another agent app",
+          : "Another bot app",
     name,
     title,
     description: description === instructions ? "" : description,

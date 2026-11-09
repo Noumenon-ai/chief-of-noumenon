@@ -1,6 +1,6 @@
 # Architecture
 
-Open Duet is a local-first agent workspace. A web or Electron client talks to
+Chief of Noumenon is a local-first agent workspace. A web or Electron client talks to
 one FastAPI backend, which owns conversations, approval decisions, agent data,
 and routine scheduling.
 
@@ -23,7 +23,8 @@ Next.js UI ─────────────── FastAPI backend ──�
                            isolated per-agent
                            shell or desktop
 
-Optional legacy path: Telegram and Boat sandbox tasks
+Telegram owner poller -> durable alerts and approval decisions
+Optional legacy path: Boat sandbox tasks
 ```
 
 ## Main components
@@ -76,5 +77,6 @@ computer access. The engine registry reports capabilities to the UI; consult
 available. Source behavior and the latest tagged installer can differ; the
 [roadmap snapshot](ROADMAP.md) records the current boundary.
 
-The original Boat sandbox task flow and Telegram bot remain optional and
-separate from local agents, threads and routines.
+Telegram is an optional owner-only alert transport with approval buttons.
+Incoming messages never start turns. Existing Telegram threads remain readable in the app.
+The original Boat sandbox task flow remains separate and optional.

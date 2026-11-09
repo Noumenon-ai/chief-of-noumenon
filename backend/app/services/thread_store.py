@@ -221,8 +221,31 @@ async def get_approval(db: AsyncSession, approval_id: str) -> Approval | None:
     return await db.get(Approval, approval_id)
 
 
-async def list_all_events(db: AsyncSession, thread_id: int, *, page: int = 500) -> list[Event]:
+async def list_all_events(db: AsyncSession, thread_id: int, *, page: int = 100, max_events: int | None = None) -> list[Event]:
     """Every stored event of a thread, ascending (read in pages)."""
+    if max_events is not None:
+        # Engine replay is bounded independently of full transcript/export access.
+        rows = []
+        before = None
+        while len(rows) <= max_events:
+            query = select(Event).where(Event.thread_id == thread_id)
+            if before is not None:
+                query = query.where(Event.seq < before)
+            batch = list((await db.scalars(query.order_by(Event.seq.desc())
+                         .limit(min(page, max_events + 1 - len(rows))))).all())
+            if not batch:
+                break
+            rows.extend(batch)
+            before = batch[-1].seq
+        clipped = len(rows) > max_events
+        rows = list(reversed(rows[:max_events]))
+        if clipped:
+            # Do not replay tool results without their turn's prompt.
+            start = next((i for i, e in enumerate(rows) if e.type == 'turn.started'), 0)
+            rows = rows[start:]
+            rows.insert(0, Event(thread_id=thread_id, seq=0, type='assistant.message',
+                data={'text': '[Earlier history omitted from this bounded replay. Use session_search/session_read for older context; the full transcript is still stored.]'}))
+        return rows
     events: list[Event] = []
     after = 0
     while True:
@@ -355,6 +378,7 @@ async def create_thread(
     title: str | None = None,
     workspace_path: str | None = None,
     agent_id: int | None = None,
+    origin: str = "app",
     kind: str = "chat",
     job_id: int | None = None,
     room_id: int | None = None,
@@ -383,7 +407,7 @@ async def create_thread(
         session_state=session_state,
         provider_state=provider_state,
         workspace_path=workspace_path,
-        agent_id=agent_id, kind=kind, job_id=job_id, room_id=room_id,
+        agent_id=agent_id, origin=origin, kind=kind, job_id=job_id, room_id=room_id,
     )
     db.add(thread)
     await db.flush()
@@ -498,6 +522,7 @@ async def start_turn(
     owner_instance: str | None = None,
     attachments: list[dict] | None = None,
     origin: str | None = None,
+    card_answer: tuple[str, str] | None = None,
 ) -> Turn:
     """Start the thread's next turn and store its `turn.started` event.
 
@@ -535,6 +560,16 @@ async def start_turn(
         raise ThreadBusy(thread_id) from exc
     if thread.title is None:
         thread.title = make_title(prompt_text) or None
+    from app.services import chat_cards
+    if card_answer is not None:
+        await chat_cards.answer_event(db, thread_id, *card_answer, turn_id=turn.id)
+    else:
+        # A typed reply also resolves outstanding questions. It never resolves approvals.
+        events = await list_all_events(db, thread_id)
+        answered = {e.data.get('id') for e in events if e.type == 'chat.card.answered'}
+        for event in events:
+            if event.type == 'chat.card' and event.data.get('kind') in ('question', 'welcome') and event.data.get('id') not in answered:
+                await chat_cards.answer_event(db, thread_id, event.data['id'], prompt_text[:400], turn.id)
     started = {"prompt_text": prompt_text}
     if attachments:
         started["attachments"] = attachments
@@ -742,10 +777,14 @@ async def create_approval(
     summary: str | None = None,
     kind: str | None = None,
     owner_token: str | None = None,
+    automatic: str | None = None,
+    automatic_source: str | None = None,
 ) -> Approval:
     """Record a question about one tool call and its `approval.requested` event.
     Raises TurnNotRunning if the turn is not running (and, when `owner_token`
     is given, not owned by it)."""
+    if automatic is not None:
+        _check(automatic, DECISIONS, "decision")
     await begin_write(db)
     still_running = [Turn.id == turn_id, Turn.thread_id == thread_id, Turn.status == "running"]
     if owner_token is not None:
@@ -763,17 +802,22 @@ async def create_approval(
         input=input,
         summary=summary,
         kind=kind,
-        status="pending",
+        status=automatic or "pending",
+        decided_at=utcnow() if automatic else None,
     )
     db.add(approval)
     await db.flush()
-    await _add_event(
-        db,
-        thread_id,
-        "approval.requested",
-        {"approval_id": approval.id, "tool": tool, "kind": kind, "summary": summary, "input": input},
-        turn_id,
-    )
+    if automatic is None:
+        await _add_event(
+            db,
+            thread_id,
+            "approval.requested",
+            {"approval_id": approval.id, "tool": tool, "kind": kind, "summary": summary, "input": input},
+            turn_id,
+        )
+    else:
+        await _add_event(db, thread_id, 'approval.resolved',
+                         {'approval_id': approval.id, 'status': automatic, 'by': automatic_source}, turn_id)
     await db.commit()
     return approval
 

@@ -84,3 +84,29 @@ def test_a_real_computer_is_hardened_and_runs_commands_in_the_workspace(machine,
     assert provider.start(spec).state == "running"
     provider.delete(spec)
     assert provider.status(spec).state == "missing"
+
+
+def test_real_desktop_profiles_are_container_private(tmp_path):
+    """No downloads: qualify isolation only with the bundled desktop image present."""
+    from uuid import uuid4
+    if docker_cli.run(["image", "inspect", docker_cli.DESKTOP_IMAGE], timeout=10).code != 0:
+        pytest.skip("bundled desktop image is absent")
+    provider = DockerProvider()
+    specs = []
+    try:
+        for number in (1, 2):
+            folder = tmp_path / str(number)
+            folder.mkdir()
+            specs.append(Spec(computer_id=number, instance=uuid4().hex, image=docker_cli.DESKTOP_IMAGE,
+                              workspace=str(folder), kind="desktop"))
+            provider.create(specs[-1])
+        first, second = specs
+        write = docker_cli.run(docker_cli.exec_args(first.name,
+            "mkdir -p /home/agent/browser-profile; printf private > /home/agent/browser-profile/isolation-test", 10, first.run_as), timeout=20)
+        assert write.code == 0
+        other = docker_cli.run(docker_cli.exec_args(second.name,
+            "test ! -e /home/agent/browser-profile/isolation-test", 10, second.run_as), timeout=20)
+        assert other.code == 0
+    finally:
+        for spec in specs:
+            provider.delete(spec)

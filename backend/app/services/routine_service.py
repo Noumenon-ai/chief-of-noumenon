@@ -703,6 +703,9 @@ class RoutineScheduler:
     async def tick(self) -> None:
         async with self._lock:
             await self._deliver(await work_reminders.remind_due(self.session, self.owner_id, self.clock()))
+            from app.services import reminders, quiet_notifications
+            await self._deliver(await reminders.deliver_due(self.session, self.owner_id, self.clock()))
+            await quiet_notifications.summarize(self.session, self.owner_id, self.clock())
             await self._enqueue_due()
             await self._start_queued()
             await self._follow_active()
@@ -739,6 +742,8 @@ class RoutineScheduler:
         staged = []
         async with self.session() as db:
             await begin_write(db)
+            from app.services import chief_preferences, quiet_hours
+            quiet_options = await chief_preferences.get(db, self.owner_id)
             rows = (
                 await db.execute(
                     select(RoutineRun, Routine)
@@ -763,7 +768,7 @@ class RoutineScheduler:
                         f"Routine “{routine.name}” was interrupted", INTERRUPTED_MESSAGE,
                     ))
                     changed.append(run.id)
-                elif run.trigger in ("schedule", "retry") and self._too_late(routine, run.scheduled_for, now):
+                elif run.trigger in ("schedule", "retry") and not (run.scheduled_for and quiet_hours.quiet_until(quiet_options, run.scheduled_for)) and self._too_late(routine, run.scheduled_for, now):
                     # A retry is held to the same catch-up window as an occurrence.
                     run.state, run.finished_at = "missed", now
                     run.error = "Missed: the app was not running in time to start it."
@@ -828,6 +833,10 @@ class RoutineScheduler:
         now = self.clock()
         staged = []
         async with self.session() as db:
+            from app.services import chief_preferences, quiet_hours
+            options = await chief_preferences.get(db, self.owner_id)
+            if quiet_hours.quiet_until(options, now):
+                return
             # SQLite has no SKIP LOCKED: the whole claim is one write
             # transaction, so a second scheduler waits, then finds nothing due.
             await begin_write(db)
@@ -846,6 +855,10 @@ class RoutineScheduler:
                 )
             ).scalars().all()
             for routine in due:
+                # Coalesce quiet-period occurrences into one deferred run.
+                end = quiet_hours.quiet_until(options, routine.next_run_at)
+                if end and end <= now:
+                    routine.next_run_at = now
                 staged.extend(await self._enqueue_occurrence(db, routine, now))
             await db.commit()
         await self._deliver(staged)
@@ -1055,6 +1068,12 @@ class RoutineScheduler:
     async def _start(self, run_id: int) -> None:
         rt = self.runtime
         now = self.clock()
+        from app.services import chief_preferences, quiet_hours, daily_briefs
+        async with self.session() as db:
+            pending = await db.get(RoutineRun, run_id)
+            options = await chief_preferences.get(db, self.owner_id)
+            if pending and pending.trigger != 'manual' and quiet_hours.quiet_until(options, now):
+                return
         claimed = await self._claim(run_id, now)
         if claimed is None:
             return
@@ -1077,6 +1096,14 @@ class RoutineScheduler:
             return
         if agent.archived_at is not None:
             await self._fail(run.id, "Its agent is archived.", pause_reason="Its agent is archived. Unarchive it or choose another agent, then resume.")
+            return
+        async with self.session() as db:
+            kind = await daily_briefs.program(db, routine)
+        if kind:
+            try:
+                await daily_briefs.execute(self, run, routine, kind)
+            except Exception:
+                await self._fail(run.id, 'The read-only program could not complete. Check the sources and retry.', retry=False)
             return
         mode = effective_approval_mode(routine.approval_mode, agent.approval_mode)
         title = f"{routine.name} · {_local(run.scheduled_for or now, routine.timezone)}"[:120]

@@ -160,7 +160,7 @@ test('an interrupted turn says whether the engine had the message', () => {
   assert.match(interruptedText('shutdown', 'before_accept'), /^The app was closed before the engine received this message, so nothing ran/);
   assert.match(interruptedText('lease_expired', 'after_accept'), /may already have run tools/);
   assert.match(interruptedText('lease_expired', 'unknown'), /just after the engine received this message/);
-  assert.match(interruptedText('shutdown', ''), /^The app was closed while the agent was working/);
+  assert.match(interruptedText('shutdown', ''), /^The app was closed while the bot was working/);
   assert.ok(failureNextStep('engine_limited'));
 });
 

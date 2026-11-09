@@ -157,7 +157,10 @@ async def test_revoking_access_after_auto_decision_but_before_allow_delivery_blo
         if tool == "mcp__computer__exec" and not revoked and decision == ("allowed", "routine_uninterrupted_grant"):
             revoked = True
             async with sessions() as db:
-                (await db.get(Routine, routine.id)).uninterrupted_access = False
+                from app.db.transactions import begin_write
+                await begin_write(db)
+                current = await service.get_routine(db, owner, routine.id, lock=True)
+                current.uninterrupted_access = False
                 await db.commit()
         return decision
     monkeypatch.setattr(routine_uninterrupted, "automatic", revoke_after_decision)

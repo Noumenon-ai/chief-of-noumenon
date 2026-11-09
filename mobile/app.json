@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Suparagent",
+    "name": "Chief of Noumenon",
     "slug": "suparagent",
     "version": "0.2.0",
     "orientation": "portrait",
@@ -21,7 +21,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Suparagent uses the camera only to scan the pairing QR code shown by your own server.",
+          "cameraPermission": "Chief of Noumenon uses the camera only to scan the pairing QR code shown by your own server.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
@@ -29,8 +29,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Suparagent reads a photo only when you choose one to attach to a message.",
-          "cameraPermission": "Suparagent uses the camera only to scan the pairing QR code shown by your own server.",
+          "photosPermission": "Chief of Noumenon reads a photo only when you choose one to attach to a message.",
+          "cameraPermission": "Chief of Noumenon uses the camera only to scan the pairing QR code shown by your own server.",
           "microphonePermission": false
         }
       ],

@@ -92,13 +92,13 @@ def boat_api():
     "fail_path, credentials",
     [
         (None, True),
-        (".claude/.credentials.json", True),
+        (".config/gh/hosts.yml", True),
         (".claude/settings.json", True),
         (None, False),
     ],
     ids=[
         "success-control", "credential-write-failure", "hook-write-failure",
-        "missing-control",
+        "cli-owned-account-control",
     ],
 )
 async def test_launch_setup_error_is_terminal(
@@ -108,10 +108,10 @@ async def test_launch_setup_error_is_terminal(
         await user_credential_service.save_token(
             db_session,
             user_id=user_id,
-            provider="claude",
-            file_path=".claude/.credentials.json",
+            provider="github",
+            file_path=".config/gh/hosts.yml",
             plaintext=json.dumps({
-                "claudeAiOauth": {"expiresAt": 1, "accessToken": "owned-fixture"},
+                "syntheticGithub": {"expiresAt": 1, "accessToken": "owned-fixture"},
             }),
         )
     base_url, state = boat_api
@@ -139,12 +139,8 @@ async def test_launch_setup_error_is_terminal(
             state["launches"],
         ) == (502, "failed", True, 0)
         assert task.prompt_id is None
-    elif credentials:
+    else:
         assert response.status_code == 200
         assert task.status == "running"
         assert task.prompt_id == "1"
         assert state["launches"] == 1
-    else:
-        assert response.status_code == 400
-        assert task.status == "failed"
-        assert state["launches"] == 0

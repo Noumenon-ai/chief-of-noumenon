@@ -66,7 +66,7 @@ test('computer creation is gated by the selected engine capability', () => {
 
   const unsupported = computerCreationGate(false, 'Codex');
   assert.equal(unsupported.enabled, false);
-  assert.match(unsupported.reason, /Codex can't run its tools in an agent computer/);
+  assert.match(unsupported.reason, /Codex can't run its tools in a bot computer/);
   assert.match(unsupported.reason, /engine that supports computers/);
 
   const unknown = computerCreationGate(undefined, 'Codex');
@@ -118,7 +118,7 @@ test('a computer command can be always allowed, and automatic answers say why', 
   assert.ok(canAlwaysAllow('mcp__computer__exec', { command: 'ls' }));
   assert.ok(!canAlwaysAllow('mcp__computer__write_file', { path: 'a', content: 'b' }));
   const base = { id: '1', at: '', thread_id: 1, turn_id: 1, approval_id: 'a', tool: 'mcp__computer__read_file', kind: 'file_read', summary: 'computer: read_file a.txt', rule: null, remembered: false, mode: 'ask' };
-  assert.match(decisionText({ ...base, event: 'auto_allowed', source: 'computer_read' }), /reading inside the agent's computer/);
+  assert.match(decisionText({ ...base, event: 'auto_allowed', source: 'computer_read' }), /reading inside the bot's computer/);
   assert.match(decisionText({ ...base, event: 'auto_allowed', source: 'saved_rule' }), /a saved rule allowed it/);
   assert.match(decisionText({ ...base, event: 'denied', source: 'plan_mode' }), /plan only changes nothing/);
   assert.match(decisionText({ ...base, event: 'denied', source: 'user' }), /^You denied/);
@@ -129,4 +129,15 @@ test('hostedBrowserLine says whether a hosted server lets agents browse', () => 
   assert.equal(hostedBrowserLine({ hosted: false, browser_local: true }), null);
   assert.match(hostedBrowserLine({ hosted: true, browser_local: true }), /Browser: on/);
   assert.match(hostedBrowserLine({ hosted: true, browser_local: false }), /Browser: off/);
+});
+
+test('bundled image build accepts only a computer ID and exposes progress', async () => {
+  const calls = respondJson(200, { status: 'building', output: 'step 1' });
+  const state = await api.buildComputerImage(12);
+  await api.computerImageProgress(12);
+  assert.equal(state.status, 'building');
+  assert.match(calls[0].url, /\/computers\/12\/build-image$/);
+  assert.equal(calls[0].options.method, 'POST');
+  assert.equal(calls[0].options.body, undefined);
+  assert.match(calls[1].url, /\/computers\/12\/build-image$/);
 });

@@ -82,7 +82,7 @@ def hosted_adapters() -> dict:
 
     labels = {"codex": "Codex", "cursor": "Cursor", "gemini": "Gemini CLI",
               "antigravity": "Google Gemini (Antigravity)", "opencode": "OpenCode (experimental)",
-              "openrouter": "OpenRouter", "acp": "ACP agent", "openai_compat": "OpenAI-compatible"}
+              "openrouter": "OpenRouter", "acp": "Custom command engine", "openai_compat": "OpenAI-compatible"}
     adapters: dict = {"claude": BoatClaudeAdapter(SdkBoatBoxes())}
     for key, label in labels.items():
         adapters[key] = UnavailableAdapter(key, label, HOSTED_REASON)
@@ -111,7 +111,7 @@ def default_adapters() -> dict:
         ("antigravity", "Google Gemini (Antigravity)", AntigravityAdapter),
         ("opencode", "OpenCode (experimental)", OpenCodeAdapter),
         ("openrouter", "OpenRouter", OpenRouterAdapter),
-        ("acp", "ACP agent", AcpAdapter),
+        ("acp", "Custom command engine", AcpAdapter),
         ("openai_compat", "OpenAI-compatible", OpenAIChatAdapter),
     ):
         selected = os.environ.get("OPEN_DOTS_PRESET_ENGINES")
