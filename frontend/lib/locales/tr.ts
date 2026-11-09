@@ -1,6 +1,7 @@
 import type { MessageKey } from "../i18n";
 
 export const tr: Record<MessageKey, string> = {
+  "updates.available": "Güncelleme var",
   "theme.label": "Tema",
   "theme.system": "Sistem",
   "theme.light": "Açık",
@@ -55,6 +56,7 @@ export const tr: Record<MessageKey, string> = {
   "time.now": "şimdi",
   "time.minutes": "{n} dk önce",
   "time.hours": "{n} sa önce",
+  "time.today": "bugün",
   "time.yesterday": "dün",
   "time.days": "{n} gün önce",
   "palette.title": "Şuraya git",

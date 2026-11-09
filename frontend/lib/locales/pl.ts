@@ -1,6 +1,7 @@
 import type { MessageKey } from "../i18n";
 
 export const pl: Record<MessageKey, string> = {
+  "updates.available": "Dostępna aktualizacja",
   "theme.label": "Motyw",
   "theme.system": "Systemowy",
   "theme.light": "Jasny",
@@ -55,6 +56,7 @@ export const pl: Record<MessageKey, string> = {
   "time.now": "przed chwilą",
   "time.minutes": "{n} min temu",
   "time.hours": "{n} godz. temu",
+  "time.today": "dzisiaj",
   "time.yesterday": "wczoraj",
   "time.days": "{n} dni temu",
   "palette.title": "Przejdź do",

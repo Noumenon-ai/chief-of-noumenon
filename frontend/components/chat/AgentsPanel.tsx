@@ -15,8 +15,9 @@ import { useEffect, useRef, useState } from "react";
 import { relativeReceipt } from "@/lib/control-room";
 import { useToast } from "@/components/ui/Toast";
 import { api, ApiError, isLocalApiEndpoint, type Agent, type AgentInput, type AgentMemory, type ApprovalMode, type Engine, type OpenBotDatabasePreview, type OpenBotDatabaseProfilePreview } from "@/lib/api";
+import { type AgentMigrationFilePreview, type AgentMigrationFileProfilePreview } from "@/lib/api";
 import {
-  APPROVAL_MODES,
+  approvalModesForProvider,
   agentFileHasNotes,
   agentFileText,
   approvalModeLabel,
@@ -28,6 +29,8 @@ import {
 import {
   GROK_AGENT_EXPORT_PROMPT,
   HERMES_AGENT_EXPORT_PROMPT,
+  GROK_AGENT_BASIC_EXPORT_PROMPT,
+  HERMES_AGENT_BASIC_EXPORT_PROMPT,
   parseExternalAgentSetup,
   type AgentMigrationPreview,
   type AgentMigrationSource,
@@ -56,6 +59,7 @@ type Draft = {
   instructions: string;
   provider: string;
   model: string | null;
+  effort: string | null;
   workspace_path: string;
   approval_mode: ApprovalMode;
   memory_enabled: boolean;
@@ -77,6 +81,7 @@ const EMPTY: Draft = {
   instructions: "",
   provider: "claude",
   model: null,
+  effort: null,
   workspace_path: "",
   approval_mode: "ask",
   memory_enabled: true,
@@ -96,8 +101,9 @@ function toDraft(agent: Agent): Draft {
     instructions: agent.instructions ?? "",
     provider: agent.provider,
     model: agent.model,
+    effort: agent.effort ?? null,
     workspace_path: agent.workspace_path ?? "",
-    approval_mode: agent.approval_mode,
+    approval_mode: agent.approval_mode === "approve_for_me" && !approvalModesForProvider(agent.provider).some((mode) => mode.value === "approve_for_me") ? "ask" : agent.approval_mode,
     memory_enabled: agent.memory_enabled ?? true,
     fallback_provider: agent.fallback_provider ?? null,
     fallback_model: agent.fallback_model ?? null,
@@ -115,6 +121,7 @@ function toInput(draft: Draft): AgentInput {
     instructions: draft.instructions.trim(),
     provider: draft.provider,
     model: draft.model?.trim() || null,
+    effort: draft.effort,
     workspace_path: draft.workspace_path.trim() || null,
     approval_mode: draft.approval_mode,
     memory_enabled: draft.memory_enabled,
@@ -145,8 +152,11 @@ type ImportState = {
   document: Record<string, unknown>;
   name: string;
   hasNotes: boolean;
+  hasSkills: boolean;
   includeNotes: boolean;
+  includeSkills: boolean;
   migration?: AgentMigrationPreview;
+  migrationFileProfile?: AgentMigrationFileProfilePreview;
 };
 type MigrationState = { source: AgentMigrationSource | null; text: string; copied: boolean };
 
@@ -228,6 +238,7 @@ export function AgentsPanel({
   const [importing, setImporting] = useState<ImportState | null>(null);
   const [migration, setMigration] = useState<MigrationState | null>(null);
   const [openBotDatabase, setOpenBotDatabase] = useState<OpenBotDatabasePreview | null>(null);
+  const [migrationFilePreview, setMigrationFilePreview] = useState<AgentMigrationFilePreview | null>(null);
   const [computerOf, setComputerOf] = useState<Agent | null>(null);
   const [skillsOf, setSkillsOf] = useState<Agent | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Agent | null>(initialDeleteAgent);
@@ -256,11 +267,13 @@ export function AgentsPanel({
   }, []);
   useEffect(() => { let live = true; collaboration.team().then(value => { if (live) setTeam(value); }).catch(() => {}); return () => { live = false; }; }, []);
   const fileInput = useRef<HTMLInputElement>(null);
+  const migrationFileInput = useRef<HTMLInputElement>(null);
   const openBotDatabaseInput = useRef<HTMLInputElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
   const keepAgentRef = useRef<HTMLButtonElement>(null);
   const deleteConfirmationRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
+  const canReadLocalBackend = isLocalApiEndpoint();
   const canReadOpenBotDatabase = isLocalApiEndpoint();
 
   useEffect(() => {
@@ -458,10 +471,11 @@ export function AgentsPanel({
     setError(null);
     try {
       const parsed = parseAgentFile(await file.text());
-      const agent = parsed.agent as { name?: unknown } | undefined;
-      const name = typeof agent?.name === "string" ? agent.name : file.name;
+      const parsedAgent = parsed.agent as Record<string, unknown> | undefined;
+      const name = typeof parsedAgent?.name === "string" ? parsedAgent.name : file.name;
       const hasNotes = agentFileHasNotes(parsed);
-      setImporting({ document: parsed, name, hasNotes, includeNotes: hasNotes });
+      const hasSkills = Array.isArray(parsedAgent?.skills) && parsedAgent.skills.length > 0;
+      setImporting({ document: parsed, name, hasNotes, hasSkills, includeNotes: false, includeSkills: false });
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -469,16 +483,35 @@ export function AgentsPanel({
     }
   };
 
-  const previewMigration = () => {
+  const previewMigration = async () => {
     if (!migration?.source || migration.source === "openbot") return;
     setError(null);
+    if ((migration.source === "grok" || migration.source === "hermes") && canReadLocalBackend) {
+      setBusy(true);
+      try {
+        const file = new File([migration.text], "agent-migration.json", { type: "application/json" });
+        const preview = await api.previewAgentMigration(file);
+        setMigrationFilePreview(preview);
+      } catch (err) {
+        setError(errorText(err));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     try {
       const preview = parseExternalAgentSetup(migration.text, migration.source);
+      const notes = preview.document.notes;
+      const skills = preview.document.skills;
+      const hasNotes = Boolean(notes && typeof notes === "object" && Object.keys(notes).length > 0);
+      const hasSkills = Array.isArray(skills) && skills.length > 0;
       setImporting({
         document: preview.document,
         name: preview.name,
-        hasNotes: false,
+        hasNotes,
+        hasSkills,
         includeNotes: false,
+        includeSkills: false,
         migration: preview,
       });
       setMigration(null);
@@ -491,9 +524,9 @@ export function AgentsPanel({
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is unavailable.");
       const prompt = migration?.source === "hermes"
-        ? HERMES_AGENT_EXPORT_PROMPT
+        ? canReadLocalBackend ? HERMES_AGENT_EXPORT_PROMPT : HERMES_AGENT_BASIC_EXPORT_PROMPT
         : migration?.source === "grok"
-          ? GROK_AGENT_EXPORT_PROMPT
+          ? canReadLocalBackend ? GROK_AGENT_EXPORT_PROMPT : GROK_AGENT_BASIC_EXPORT_PROMPT
           : null;
       if (!prompt) throw new Error("Choose an export source first.");
       await navigator.clipboard.writeText(prompt);
@@ -523,7 +556,9 @@ export function AgentsPanel({
       document: profile.document,
       name: profile.name,
       hasNotes: false,
+      hasSkills: false,
       includeNotes: false,
+      includeSkills: false,
       migration: {
         document: profile.document,
         sourceLabel: "OpenBot database",
@@ -535,6 +570,57 @@ export function AgentsPanel({
       },
     });
     setOpenBotDatabase(null);
+    setMigration(null);
+  };
+
+  const previewAgentMigrationFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (!canReadLocalBackend) {
+      setError("Manifest file import is available only in the local app.");
+      if (migrationFileInput.current) migrationFileInput.current.value = "";
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const preview = await api.previewAgentMigration(file);
+      setMigrationFilePreview(preview);
+      setMigration((current) => current ? { ...current, source: preview.source } : current);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+      if (migrationFileInput.current) migrationFileInput.current.value = "";
+    }
+  };
+
+  const reviewMigrationFileProfile = (profile: AgentMigrationFileProfilePreview) => {
+    const agent = profile.document.agent && typeof profile.document.agent === "object"
+      ? profile.document.agent as Record<string, unknown>
+      : {};
+    const stringField = (key: string) => typeof agent[key] === "string" ? agent[key] as string : "";
+    const notes = profile.document.notes;
+    const skills = profile.document.skills;
+    const hasNotes = Boolean(notes && typeof notes === "object" && Object.keys(notes).length > 0);
+    const hasSkills = Array.isArray(skills) && skills.length > 0;
+    setImporting({
+      document: profile.document,
+      name: profile.name,
+      hasNotes,
+      hasSkills,
+      includeNotes: false,
+      includeSkills: false,
+      migrationFileProfile: profile,
+      migration: {
+        document: profile.document,
+        sourceLabel: `${migrationFilePreview?.source === "hermes" ? "Hermes Bot" : "Grok Bot"} manifest`,
+        name: profile.name,
+        title: profile.title ?? "",
+        description: stringField("description"),
+        instructions: stringField("instructions"),
+      },
+    });
+    setMigrationFilePreview(null);
     setMigration(null);
   };
 
@@ -553,7 +639,8 @@ export function AgentsPanel({
   const editorDirty = draft !== null && (
     (originalDraft !== null && draftSignature(draft) !== draftSignature(originalDraft)) || leadDirty || membersDirty || templateSkillsDirty
   );
-  const modeInfo = APPROVAL_MODES.find((m) => m.value === draft?.approval_mode);
+  const availableApprovalModes = approvalModesForProvider(draft?.provider);
+  const modeInfo = availableApprovalModes.find((m) => m.value === draft?.approval_mode);
   const canEditConnectedApps = draft !== null && draft.id !== null && supportsConnectedApps(draft.provider);
   const heading = draft
     ? draft.id === null
@@ -596,6 +683,7 @@ export function AgentsPanel({
     setExporting(null);
     setImporting(null);
     setMigration(null);
+    setMigrationFilePreview(null);
     setOpenBotDatabase(null);
     setComputerOf(null);
     setSkillsOf(null);
@@ -746,7 +834,7 @@ export function AgentsPanel({
                   <TabPanel value="model" className="space-y-4">
                     <section className="space-y-2">
                       <h3 className="text-sm font-medium text-ink">{tx("Model")}</h3>
-                      <EngineModelFields engines={engines} provider={draft.provider} model={draft.model} disabled={busy} hasComputer={agents.some((agent) => agent.id === draft.id && agent.computer != null)} onChange={(provider, model) => setDraft({ ...draft, provider, model })} />
+                      <EngineModelFields engines={engines} provider={draft.provider} model={draft.model} effort={draft.effort} disabled={busy} hasComputer={agents.some((agent) => agent.id === draft.id && agent.computer != null)} onChange={(provider, model, effort) => setDraft({ ...draft, provider, model, effort: effort ?? null, approval_mode: approvalModesForProvider(provider).some((mode) => mode.value === draft.approval_mode) ? draft.approval_mode : "ask" })} />
                       <p className="text-xs text-muted">{tx("Engine changes apply to new conversations. Existing conversations keep their engine.")}</p>
                     </section>
 
@@ -790,7 +878,7 @@ export function AgentsPanel({
                     <fieldset className="space-y-2 text-xs text-muted">
                       <legend>{tx("Approvals")}</legend>
                       <div className="mt-1 flex flex-wrap gap-2">
-                        {APPROVAL_MODES.map((mode) => (
+                        {availableApprovalModes.map((mode) => (
                           <label
                             key={mode.value}
                             className={`cursor-pointer rounded-md border px-3 py-2 text-sm touch:min-h-11 ${
@@ -915,7 +1003,7 @@ export function AgentsPanel({
             <div className="space-y-3 text-sm">
               {migration.source === null ? (
                 <>
-                  <p>{tx("Choose how you want to bring in a single bot setup.")}</p>
+                  <p>{tx("Choose a source for the bot profiles you want to import.")}</p>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -960,7 +1048,7 @@ export function AgentsPanel({
                   <p>
                     {tx("Choose the OpenBot")}{" "}<code>{"openbot.db"}</code> {tx("file. Close OpenBot first so its latest changes are saved. The read-only file can be up to 128 MB and must use a supported schema version.")}</p>
                   <p className="text-xs text-muted">
-                    {tx("The file is sent only to the local Chief of Noumenon backend for preview and discarded afterward. Only bot names, titles and role text are returned; memories, skills, routines, connections, messages, credentials, tools and other settings are not imported. This option is unavailable on hosted accounts.")}</p>
+                    {tx("The file is sent only to the local Chief of Noumenon backend for preview and discarded afterward. Only bot names, titles and role text are returned; memories, skills, routines, connections, messages, credentials, tools and other settings are not imported.")}</p>
                   {!openBotDatabase ? (
                     <button
                       type="button"
@@ -1003,44 +1091,65 @@ export function AgentsPanel({
                 <>
                   <p>
                     {migration.source === "grok"
-                      ? tx("Copy the prompt into Grok Bot, then paste its JSON reply below.")
+                      ? canReadLocalBackend ? tx("Copy the bundle prompt into Grok Bot, then paste its versioned manifest for roster preview.") : tx("Copy the basic single-profile prompt into Grok Bot, then paste its JSON reply below.")
                       : migration.source === "hermes"
-                        ? tx("Copy the prompt into Hermes Bot, then paste its JSON reply below.")
-                        : tx("Paste one bot's JSON export. We will read common name, title, description and instruction fields.")}
+                        ? canReadLocalBackend ? tx("Copy the bundle prompt into Hermes Bot, then paste its versioned manifest for roster preview.") : tx("Copy the basic single-profile prompt into Hermes Bot, then paste its JSON reply below.")
+                        : tx("Paste one native bot JSON export. We will read its name, title, description and instructions.")}
                   </p>
-                  {migration.source !== "other" ? (
+                  {migration.source === "grok" || migration.source === "hermes" ? (
                     <details className="rounded-md border border-line p-3">
                       <summary className="cursor-pointer font-medium">{tx("Export prompt")}</summary>
                       <div className="mt-2 space-y-2">
-                        <textarea
-                          readOnly
-                          aria-label={`${migration.source === "hermes" ? "Hermes Bot" : "Grok Bot"} export prompt`}
-                          value={migration.source === "hermes" ? HERMES_AGENT_EXPORT_PROMPT : GROK_AGENT_EXPORT_PROMPT}
-                          rows={8}
-                          className={`${FIELD} font-mono text-xs`}
-                        />
-                        <button type="button" onClick={copyMigrationPrompt} className={BUTTON}>
-                          {migration.copied ? tx("Copied") : tx("Copy prompt")}
-                        </button>
+                        <textarea readOnly aria-label={`${migration.source} export prompt`} value={migration.source === "hermes" ? canReadLocalBackend ? HERMES_AGENT_EXPORT_PROMPT : HERMES_AGENT_BASIC_EXPORT_PROMPT : canReadLocalBackend ? GROK_AGENT_EXPORT_PROMPT : GROK_AGENT_BASIC_EXPORT_PROMPT} rows={9} className={`${FIELD} font-mono text-xs`} />
+                        <button type="button" onClick={copyMigrationPrompt} className={BUTTON}>{migration.copied ? tx("Copied") : tx("Copy prompt")}</button>
                       </div>
                     </details>
-                  ) : (
-                    <div className="rounded-md border border-line p-3 text-xs text-muted">
-                      {tx("Expected fields: name, title, description and instructions. Other settings are ignored.")}</div>
-                  )}
+                  ) : migration.source === "other" ? (
+                    <div className="rounded-md border border-line p-3 text-xs text-muted">{tx("Expected fields: name, title, description and instructions. Other settings are ignored.")}</div>
+                  ) : null}
+                  {migration.source === "grok" || migration.source === "hermes" ? (
+                    <>
+                      <input ref={migrationFileInput} type="file" accept=".json,.zip,application/json,application/zip" className="hidden" aria-label={tx("Choose migration manifest file")} onChange={(event) => previewAgentMigrationFile(event.target.files?.[0])} />
+                      <div className="rounded-md border border-line p-3">
+                        <p className="text-xs text-muted">{tx("Pasted JSON and JSON/ZIP files are previewed as a roster. File content is sent only to your Chief of Noumenon backend.")}</p>
+                        <button type="button" onClick={() => migrationFileInput.current?.click()} disabled={!canReadLocalBackend || busy} title={!canReadLocalBackend ? "Available only in the local app." : undefined} className={`${BUTTON} mt-2`}>
+                          {tx("Choose manifest file")}{" "}{canReadLocalBackend ? "" : tx(" · local app only")}
+                        </button>
+                        {!canReadLocalBackend && <p className="mt-1 text-xs text-muted">{tx("File import is unavailable on this server. Paste the source response below instead.")}</p>}
+                      </div>
+                      {migrationFilePreview && (
+                        <div className="space-y-2 rounded-md border border-line p-3">
+                          <p className="font-medium">{migrationFilePreview.profiles.length} {tx("profile")}{" "}{migrationFilePreview.profiles.length === 1 ? "" : "s"} {tx("found ·")}{" "}{migrationFilePreview.source}</p>
+                          {migrationFilePreview.skipped.length > 0 && <p className="text-xs text-muted">{tx("Skipped from manifest:")}{" "}{migrationFilePreview.skipped.join(", ")}</p>}
+                          <div className="max-h-56 space-y-1 overflow-auto">
+                            {migrationFilePreview.profiles.map((profile) => (
+                              <div key={profile.key} className="rounded-md px-3 py-2 hover:bg-hover">
+                                <p className="font-medium">{profile.name}{profile.title ? ` · ${profile.title}` : ""}</p>
+                                <p className="mt-1 text-xs text-muted">{tx("Included:")}{" "}{["name", "title", "description", "instructions", ...(profile.document.notes ? ["notes"] : []), ...(Array.isArray(profile.document.skills) && profile.document.skills.length ? ["text-only skills"] : [])].filter((field) => field === "name" ? Boolean(profile.name) : field === "title" ? Boolean(profile.title) : field === "notes" || field === "text-only skills" ? true : Boolean((profile.document.agent as Record<string, unknown> | undefined)?.[field])).join(", ") || tx("None")}</p>
+                                <p className="mt-1 text-xs text-muted">{tx("Skipped:")}{" "}{profile.skipped.length ? profile.skipped.join(", ") : tx("None")}</p>
+                                <p className="mt-1 text-xs text-muted">{tx("Redacted:")}{" "}{profile.redacted.length ? profile.redacted.join(", ") : tx("None")}</p>
+                                <button type="button" onClick={() => reviewMigrationFileProfile(profile)} className={`${BUTTON} mt-2`}>{tx("Review profile")}</button>
+                              </div>
+                            ))}
+                          </div>
+                          <button type="button" onClick={() => { setMigrationFilePreview(null); migrationFileInput.current?.click(); }} disabled={busy || !canReadLocalBackend} className={BUTTON}>{tx("Choose another file")}</button>
+                        </div>
+                      )}
+                    </>
+                  ) : null}
                   <label className="block space-y-1">
-                    <span className="text-xs font-medium">{tx("Paste JSON export")}</span>
+                    <span className="text-xs font-medium">{migration.source === "grok" || migration.source === "hermes" ? canReadLocalBackend ? tx("Paste versioned manifest") : tx("Paste basic bot JSON") : tx("Paste JSON export")}</span>
                     <textarea
                       aria-label={tx("Paste bot setup JSON")}
                       value={migration.text}
                       onChange={(event) => setMigration({ ...migration, text: event.target.value, copied: false })}
                       rows={9}
                       className={`${FIELD} font-mono text-xs`}
-                      placeholder={"{\"name\":\"Research assistant\",\"instructions\":\"...\"}"}
+                      placeholder={migration.source === "grok" || migration.source === "hermes" ? canReadLocalBackend ? '{"format":"open-dots.agent-migration","version":1,"source":"grok","agents":[...]}' : '{"name":"Research assistant","instructions":"..."}' : '{"name":"Research assistant","instructions":"..."}'}
                     />
                   </label>
                   <p className="text-xs text-muted">
-                    {tx("Only name, title, description and instructions are imported. Skills, routines, connected apps, credentials, memories, tools, files and chat history are not transferred.")}</p>
+                    {tx("Profile preview can include notes and text-only skills. Credentials, connections, routines, executable skills, files and conversation history are excluded.")}</p>
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -1048,7 +1157,8 @@ export function AgentsPanel({
                       disabled={!migration.text.trim() || busy}
                       className={PRIMARY}
                     >
-                      {tx("Review import")}</button>
+                      {busy ? tx("Previewing…") : canReadLocalBackend && (migration.source === "grok" || migration.source === "hermes") ? tx("Preview manifest roster") : tx("Review import")}
+                    </button>
                     <button type="button" onClick={back} disabled={busy} className={BUTTON}>{tx("Cancel")}</button>
                   </div>
                 </>
@@ -1094,7 +1204,17 @@ export function AgentsPanel({
                     </dl>
                   </div>
                   <p className="text-xs text-muted">
-                    {tx("Skills, routines, connected apps, credentials, memories, tools, files and chat history are not transferred. Configure those separately after reviewing the bot.")}</p>
+                    {importing.migration
+                      ? tx("Only the reviewed profile fields and optional notes or text-only skills can be copied. Schedules, tools, files, avatars, conversations and full workspace state are not imported.")
+                      : tx("Skills, routines, connected apps, credentials, memories, tools, files and chat history are not transferred. Configure those separately after reviewing the bot.")}
+                  </p>
+                  {importing.migrationFileProfile && (
+                    <div className="rounded-md border border-line p-3 text-xs">
+                      <p className="font-medium">{tx("Preview details")}</p>
+                      <p className="mt-1">{tx("Skipped:")}{" "}{importing.migrationFileProfile.skipped.length ? importing.migrationFileProfile.skipped.join(", ") : tx("None reported")}</p>
+                      <p className="mt-1">{tx("Redacted:")}{" "}{importing.migrationFileProfile.redacted.length ? importing.migrationFileProfile.redacted.join(", ") : tx("None reported")}</p>
+                    </div>
+                  )}
                 </>
               ) : (
                 <p>
@@ -1107,11 +1227,16 @@ export function AgentsPanel({
                     checked={importing.includeNotes}
                     onChange={() => setImporting({ ...importing, includeNotes: !importing.includeNotes })}
                   />
-                  {tx("Keep the file's starter notes")}</label>
+                  {tx("Include notes as starter notes")}</label>
+              )}
+              {importing.hasSkills && (
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+                  <input type="checkbox" checked={importing.includeSkills} onChange={() => setImporting({ ...importing, includeSkills: !importing.includeSkills })} />
+                  {tx("Include text-only skills; imported skills start disabled")}</label>
               )}
               <div className="flex gap-2">
                 <button
-                  onClick={() => run(() => api.importAgent(importing.document, importing.includeNotes), back)}
+                  onClick={() => run(() => api.importAgent(importing.document, importing.includeNotes, importing.includeSkills), back)}
                   disabled={busy}
                   className={PRIMARY}
                 >
@@ -1219,7 +1344,7 @@ export function AgentsPanel({
                           <div ref={deleteConfirmationRef} role="alert" className="mt-3 rounded-md border border-danger/50 p-3 pb-4 text-xs">
                             <p className="font-medium">{t("rail.deleteTitle", { name: agent.name })}</p>
                             <p className="mt-1 text-muted">
-                              {tx("This removes the bot, its notes and skills, and its computer. Its conversations stay in history but become unlinked and continue without this bot's instructions. Its workspace folder stays; routines assigned to it will fail and pause. This cannot be undone.")}</p>
+                              {tx("This removes the bot, its notes and skills, and its computer. Its conversations stay in history but become unlinked and continue without this bot's instructions. Its workspace folder stays; routines assigned to it will be safely turned off. This cannot be undone.")}</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               <button ref={keepAgentRef} onClick={() => setDeleteConfirm(null)} disabled={busy} className={SMALL}>
                                 {t("rail.keepBot")}

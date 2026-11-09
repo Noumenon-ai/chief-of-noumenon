@@ -1,5 +1,6 @@
 // Shared Hebrew controls; untranslated specialist settings use the English catalog.
 export const he = {
+  "updates.available": "עדכון זמין",
   "voice.language": "שפת ההקלטה",
   "voice.auto": "אוטומטי",
   "voice.browserPrivacy": "הקלדה קולית בדפדפן שולחת שמע ליצרן הדפדפן: Google ב־Chrome. דפדפנים אחרים בוחרים את ספק העיבוד שלהם.",

@@ -48,7 +48,7 @@ def config(argv):
     return tomllib.loads('\n'.join(argv[i+1] for i, arg in enumerate(argv) if arg == '-c'))
 
 
-@pytest.mark.parametrize('mode', ['ask', 'accept_edits', 'plan'])
+@pytest.mark.parametrize('mode', ['ask', 'accept_edits', 'approve_for_me', 'plan'])
 @pytest.mark.parametrize('tools', [False, True])
 @pytest.mark.parametrize('resume', [False, True])
 async def test_profile_every_mode_and_resume(protected, codex, monkeypatch, mode, tools, resume):
@@ -85,7 +85,7 @@ async def test_profile_every_mode_and_resume(protected, codex, monkeypatch, mode
     gate.open.assert_not_awaited()
 
 
-@pytest.mark.parametrize('mode', ['ask', 'accept_edits', 'plan'])
+@pytest.mark.parametrize('mode', ['ask', 'accept_edits', 'approve_for_me', 'plan'])
 @pytest.mark.parametrize('method', codex_adapter.FILE_REQUESTS)
 @pytest.mark.parametrize('outside', ['absolute', 'traversal', 'symlink', 'rename', 'grant', 'unknown'])
 async def test_outside_patch_denied_without_card(protected, codex, mode, method, outside):
@@ -171,7 +171,7 @@ async def test_escalation_never_gets_card(protected, codex, extra):
     gate.open.assert_not_awaited()
 
 
-@pytest.mark.parametrize('mode', ['ask', 'accept_edits', 'plan'])
+@pytest.mark.parametrize('mode', ['ask', 'accept_edits', 'approve_for_me', 'plan'])
 async def test_permission_root_grant_is_empty(protected, codex, mode):
     codex.plan({'type': 'native_request', 'method': 'item/permissions/requestApproval', 'grant_root': '/'})
     result, _, gate = await run(codex, mode)

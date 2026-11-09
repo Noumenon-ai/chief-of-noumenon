@@ -24,7 +24,8 @@ from datetime import datetime, timedelta
 from app import composio_generic
 
 LIST_ACCOUNTS = "list_accounts"
-ROUTINE_WRITE_TOOLS = ("gmail_send_email", "github_create_branch", "github_commit_file", "gmail_prepare_checked_reply")
+ROUTINE_WRITE_TOOLS = ("gmail_send_email", "github_fork_repository", "github_create_branch", "github_commit_file",
+                       "github_create_pull_request", "gmail_prepare_checked_reply")
 LEVELS = ("read", "write")  # in order: write includes read
 MAX_RESULT_CHARS = 20_000
 MAX_ITEMS = 30
@@ -36,6 +37,7 @@ _NAME = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 _REF = re.compile(r"^[A-Za-z0-9._/-]{1,200}$")
 _CAMPAIGN_BRANCH = re.compile(r"^campaign/[A-Za-z0-9._/-]{1,150}$")
 _SHA = re.compile(r"^[0-9a-f]{40}$")
+_PR_HEAD = re.compile(r"^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}):)?campaign/[A-Za-z0-9._/-]{1,150}$")
 MAX_FILE = 100_000
 _ALIAS = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.-]{0,39}$")
 _LINE_BAD = re.compile(r"[\x00-\x1f\x7f]")
@@ -125,6 +127,14 @@ TOOLS: tuple[Tool, ...] = (
     _read("github_list_pull_request_files", "GITHUB_LIST_PULL_REQUESTS_FILES", "List the files a pull request changes.",
           {"owner": OWNER, "repo": REPO, "pull_number": PULL, "per_page": PER_PAGE}, ("owner", "repo", "pull_number"),
           list_key="*", fields=("filename", "status", "additions", "deletions", "changes")),
+    _read("github_list_pull_request_reviews", "GITHUB_LIST_REVIEWS_FOR_A_PULL_REQUEST",
+          "List the reviews (approved, changes requested, commented) on a pull request.",
+          {"owner": OWNER, "repo": REPO, "pull_number": PULL, "per_page": PER_PAGE}, ("owner", "repo", "pull_number"),
+          list_key="*", fields=("id", "user.login", "state", "submitted_at", "commit_id", "html_url", "body")),
+    _read("github_list_pull_request_review_comments", "GITHUB_LIST_REVIEW_COMMENTS_ON_A_PULL_REQUEST",
+          "List the inline review comments reviewers left on lines of a pull request's diff.",
+          {"owner": OWNER, "repo": REPO, "pull_number": PULL, "per_page": PER_PAGE}, ("owner", "repo", "pull_number"),
+          list_key="*", fields=("id", "user.login", "path", "line", "in_reply_to_id", "created_at", "html_url", "body")),
     _read("github_list_commits", "GITHUB_LIST_COMMITS", "List recent commits of a repository, optionally of one branch or path.",
           {"owner": OWNER, "repo": REPO, "per_page": PER_PAGE,
            "sha": _text(200, "A branch name or commit id to start from.", "ref"),
@@ -134,9 +144,9 @@ TOOLS: tuple[Tool, ...] = (
           {"owner": OWNER, "repo": REPO, "per_page": PER_PAGE}, ("owner", "repo"),
           list_key="*", fields=("name", "protected", "commit.sha")),
     _read("github_get_file", "GITHUB_GET_REPOSITORY_CONTENT", "Read one text file of a repository, or list a folder.",
-          {"owner": OWNER, "repo": REPO, "path": _text(500, "The file or folder path, for example \"README.md\".", "path"),
+          {"owner": OWNER, "repo": REPO, "path": _text(500, "The file or folder path, for example \"README.md\" or \"docs\". Leave it out to list the top level of the repository; do not send \".\".", "path"),
            "ref": _text(200, "A branch name, tag or commit id (default: the main branch).", "ref")},
-          ("owner", "repo", "path"), special="file"),
+          ("owner", "repo"), special="file"),
     _read("github_search_issues", "GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS",
           "Search issues and pull requests with GitHub's search words, for example \"repo:octocat/hello-world is:open label:bug\".",
           {"q": _text(256, "The search text.", "line"), "per_page": PER_PAGE}, ("q",),
@@ -183,6 +193,24 @@ TOOLS: tuple[Tool, ...] = (
            ("owner", "repo", "issue_number"), fields=CHANGED),
     _write("github_reopen_issue", "GITHUB_REOPEN_ISSUE", "Reopen a closed issue. A person is asked to approve it first.",
            {"owner": OWNER, "repo": REPO, "issue_number": ISSUE}, ("owner", "repo", "issue_number"), fields=CHANGED),
+    _write("github_create_pull_request", "GITHUB_CREATE_A_PULL_REQUEST",
+           "Open a pull request from a campaign/ branch (or from owner:campaign/... on your fork) into a branch of the target repository. "
+           "It cannot merge anything. A person is asked to approve it first.",
+           {"owner": OWNER, "repo": REPO,
+            "title": TITLE, "body": BODY,
+            "head": _text(200, "The campaign/ branch with your changes; for a fork use \"forkowner:campaign/branch\".", "pr_head"),
+            "base": _text(200, "The branch of the target repository to merge into, for example \"main\".", "ref"),
+            "draft": {"type": "boolean", "description": "Open it as a draft."}},
+           ("owner", "repo", "title", "head", "base"), fields=("number", "html_url", "state", "draft")),
+    _write("github_merge_pull_request", "GITHUB_MERGE_A_PULL_REQUEST",
+           "Merge a pull request. Read it first and pass its head commit id, so only the version a person approved is merged. A person is asked to approve it first.",
+           {"owner": OWNER, "repo": REPO,
+            "pull_number": _int(1, 2_000_000_000, "The pull request number."),
+            "sha": _text(40, "The full head commit id of the pull request as you read it. GitHub refuses the merge if the branch has moved.", "sha"),
+            "merge_method": {"type": "string", "enum": ["merge", "squash", "rebase"], "description": "How to merge (default merge)."},
+            "commit_title": _text(200, "Title for the merge commit.", "line"),
+            "commit_message": _text(2000, "Extra text for the merge commit.")},
+           ("owner", "repo", "pull_number", "sha"), fields=("merged", "sha", "message")),
     _write("github_dispatch_workflow", "GITHUB_CREATE_A_WORKFLOW_DISPATCH_EVENT",
            "Start a GitHub Actions workflow run on a branch or tag. The workflow must allow manual runs. A person is asked to approve it first.",
            {"owner": OWNER, "repo": REPO,
@@ -370,6 +398,10 @@ def _bad_path(value: str) -> bool:
 
 def _check(name: str, spec: dict, value: object):
     kind = spec["type"]
+    if kind == "boolean":
+        if not isinstance(value, bool):
+            raise BadArguments(f"{name} must be true or false.")
+        return value
     if kind == "integer":
         if isinstance(value, bool) or not isinstance(value, int) or not spec["minimum"] <= value <= spec["maximum"]:
             raise BadArguments(f"{name} must be a whole number from {spec['minimum']} to {spec['maximum']}.")
@@ -406,8 +438,12 @@ def _check(name: str, spec: dict, value: object):
         raise BadArguments(f"{name} is not a valid branch, tag or commit.")
     if fmt == "campaign_branch" and (not _CAMPAIGN_BRANCH.match(value) or ".." in value or value.endswith(("/", ".lock"))):
         raise BadArguments(f"{name} must be a new branch name starting with campaign/.")
+    if fmt == "pr_head" and (not _PR_HEAD.match(value) or ".." in value or value.endswith(("/", ".lock"))):
+        raise BadArguments(f"{name} must be a campaign/ branch, or owner:campaign/ branch on a fork.")
     if fmt == "sha" and not _SHA.match(value):
         raise BadArguments(f"{name} must be a full 40-character commit id.")
+    if fmt == "path" and any(part == "." for part in value.split("/")):
+        raise BadArguments(f"{name} cannot contain a \".\" segment. Leave {name} out to list the top level of the repository.")
     if fmt == "path" and _bad_path(value):
         raise BadArguments(f"{name} is not a valid path.")
     if fmt == "line" and _LINE_BAD.search(value):
@@ -457,6 +493,8 @@ def clean_arguments(tool: Tool, arguments: object) -> tuple[dict, str | None]:
         sent["sha"] = sent.pop("from_sha")
     if tool.name == "github_commit_file":
         sent["content"] = base64.b64encode(sent["content"].encode("utf-8")).decode("ascii")
+    if tool.name == "github_get_file":
+        sent.setdefault("path", "")  # Composio requires the field; empty means the repository root
     if "per_page" in tool.properties:
         sent.setdefault("per_page", 10)
     if tool.name == "googlecalendar_list_events":

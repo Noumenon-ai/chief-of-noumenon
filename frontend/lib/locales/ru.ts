@@ -1,6 +1,7 @@
 import type { MessageKey } from "../i18n";
 
 export const ru: Record<MessageKey, string> = {
+  "updates.available": "Доступно обновление",
   "theme.label": "Тема",
   "theme.system": "Системная",
   "theme.light": "Светлая",
@@ -55,6 +56,7 @@ export const ru: Record<MessageKey, string> = {
   "time.now": "только что",
   "time.minutes": "{n} мин. назад",
   "time.hours": "{n} ч. назад",
+  "time.today": "сегодня",
   "time.yesterday": "вчера",
   "time.days": "{n} дн. назад",
   "palette.title": "Перейти к",

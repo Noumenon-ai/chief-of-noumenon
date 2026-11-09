@@ -32,9 +32,13 @@ def test_install_kind_and_update_command():
     assert "docker compose" in get_update_command("docker")
 
     assert detect_install_kind({"OPEN_DOTS_SERVICE": "1"}) == "service"
-    assert "systemctl restart" in get_update_command("service")
+    assert get_update_command("service") == (
+        "git pull && bash scripts/install.sh && systemctl --user restart chief-of-noumenon.service"
+    )
 
-    assert get_update_command("git") == "git pull && uv sync && (cd frontend && npm run build)"
+    assert get_update_command("git") == (
+        "git pull && (cd backend && uv sync --frozen) && (cd frontend && npm ci && npm run build)"
+    )
 
 
 @pytest.mark.asyncio
@@ -42,7 +46,7 @@ async def test_read_version_endpoint(api):
     res = await api.get("/api/v1/version")
     assert res.status_code == 200
     data = res.json()
-    assert data["current_version"] == version_service.APP_VERSION
+    assert data["current_version"] == version_service.get_current_version()
     assert "install_kind" in data
     assert "update_command" in data
     assert "release_notes_url" in data
@@ -52,7 +56,7 @@ async def test_read_version_endpoint(api):
 @pytest.mark.asyncio
 async def test_read_version_with_newer_release(api, monkeypatch):
     async def mock_fetch_release(client=None):
-        return "0.9.0", "https://github.com/Anil-matcha/open-duet/releases/tag/v0.9.0"
+        return "0.9.0", "https://github.com/Noumenon-ai/chief-of-noumenon/releases/tag/v0.9.0"
 
     monkeypatch.setattr(version_service, "fetch_latest_release", mock_fetch_release)
 
@@ -61,13 +65,13 @@ async def test_read_version_with_newer_release(api, monkeypatch):
     data = res.json()
     assert data["update_available"] is True
     assert data["latest_version"] == "0.9.0"
-    assert data["release_notes_url"] == "https://github.com/Anil-matcha/open-duet/releases/tag/v0.9.0"
+    assert data["release_notes_url"] == "https://github.com/Noumenon-ai/chief-of-noumenon/releases/tag/v0.9.0"
 
 
 @pytest.mark.asyncio
 async def test_read_version_with_same_release(api, monkeypatch):
     async def mock_fetch_release(client=None):
-        return "0.8.1", "https://github.com/Anil-matcha/open-duet/releases/tag/v0.8.1"
+        return "0.8.1", "https://github.com/Noumenon-ai/chief-of-noumenon/releases/tag/v0.8.1"
 
     monkeypatch.setattr(version_service, "fetch_latest_release", mock_fetch_release)
 
@@ -88,7 +92,30 @@ async def test_read_version_network_error_graceful(api, monkeypatch):
     res = await api.get("/api/v1/version?refresh=true")
     assert res.status_code == 200
     data = res.json()
-    assert data["current_version"] == version_service.APP_VERSION
+    assert data["current_version"] == version_service.get_current_version()
     assert data["update_available"] is False
     assert data["latest_version"] is None
 
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status,body", [(404, {}), (200, [])])
+async def test_no_chief_release_keeps_update_notice_off(status, body):
+    def reply(request):
+        assert request.url.host == "api.github.com"
+        assert request.url.path == "/repos/Noumenon-ai/chief-of-noumenon/releases"
+        return httpx.Response(status, json=body)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
+        info = await version_service.get_version_info(force_refresh=True, client=client)
+    assert info.update_available is False
+    assert info.latest_version is None
+    assert info.release_notes_url == "https://github.com/Noumenon-ai/chief-of-noumenon/releases"
+
+
+@pytest.mark.asyncio
+async def test_release_link_cannot_send_chief_users_to_another_product(monkeypatch):
+    async def release(client=None):
+        return "99.0.0", "https://github.com/example/other-product/releases/tag/v99.0.0"
+    monkeypatch.setattr(version_service, "fetch_latest_release", release)
+    info = await version_service.get_version_info(force_refresh=True)
+    assert info.release_notes_url == "https://github.com/Noumenon-ai/chief-of-noumenon/releases/tag/v99.0.0"

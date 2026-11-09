@@ -13,7 +13,7 @@ from app.routers.decisions import router as decisions_router
 from app.routers.approval_rules import router as approval_rules_router
 from app.routers.sentinel import router as sentinel_router
 from app.routers.computers import router as computers_router
-from app.routers.computer_credentials import router as computer_credentials_router
+from app.routers.computer_credentials import router as computer_credentials_router, muapi_router as muapi_credentials_router
 from app.routers.browser_viewer import router as browser_viewer_router
 from app.routers.computer_viewer import router as computer_viewer_router
 from app.routers.engines import router as engines_router
@@ -54,6 +54,7 @@ router.include_router(approval_rules_router)
 router.include_router(sentinel_router)
 router.include_router(computers_router)
 router.include_router(computer_credentials_router)
+router.include_router(muapi_credentials_router)
 router.include_router(computer_viewer_router)
 router.include_router(browser_viewer_router)
 router.include_router(engines_router)
@@ -90,6 +91,7 @@ router.include_router(community_mcp_router)
 from app.routers.onboarding import router as onboarding_router
 from app.routers.engine_install import router as engine_install_router
 from app.routers.desktop_account import router as desktop_account_router
+from app.routers.workflows import router as workflows_router
 router.include_router(onboarding_router)
 router.include_router(engine_install_router)
 router.include_router(desktop_account_router)
@@ -108,3 +110,5 @@ router.include_router(chief_router)
 
 from app.routers.phone import router as phone_router
 router.include_router(phone_router)
+
+router.include_router(workflows_router)

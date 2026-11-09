@@ -1,6 +1,7 @@
 import type { MessageKey } from "../i18n";
 
 export const zh: Record<MessageKey, string> = {
+  "updates.available": "有可用更新",
   "theme.label": "主题",
   "theme.system": "系统",
   "theme.light": "浅色",
@@ -55,6 +56,7 @@ export const zh: Record<MessageKey, string> = {
   "time.now": "刚刚",
   "time.minutes": "{n} 分钟前",
   "time.hours": "{n} 小时前",
+  "time.today": "今天",
   "time.yesterday": "昨天",
   "time.days": "{n} 天前",
   "palette.title": "前往",

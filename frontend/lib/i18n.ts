@@ -1,5 +1,6 @@
 // Shared interface messages. Missing catalog entries fall back to English.
 // Keys are surface.name; placeholders such as {name} are filled at runtime. Locale modules contain data only.
+import { upstreamEnglish } from "./locales/upstream-extra.ts";
 import { auditHebrew } from "./locales/audit-he.ts";
 import { he } from "./locales/he.ts";
 import { de } from "./locales/de.ts";
@@ -19,6 +20,7 @@ import { chatAppsMessages } from "./locales/chat-apps-extra.ts";
 import { appSettingsMessages } from "./locales/app-settings-extra.ts";
 
 export const en = {
+  "updates.available": "Update available",
   "voice.browserPrivacy": "Browser voice typing sends audio to your browser maker: Google in Chrome. Other browsers choose their own processor.",
   "voice.browserFallback": "Browser voice typing is unavailable. Using transcription on your computer; keep speaking.",
   "voice.finishing": "Finishing voice typing…",
@@ -222,6 +224,7 @@ export const en = {
   "time.now": "just now",
   "time.minutes": "{n} min ago",
   "time.hours": "{n} h ago",
+  "time.today": "today",
   "time.yesterday": "yesterday",
   "time.days": "{n} days ago",
   "palette.title": "Go to",
@@ -309,6 +312,15 @@ export const en = {
   "chat.cancelAudio": "Cancel audio processing",
   "chat.transcriptCaveat": "Machine transcripts may contain uncertain words or names. Review the transcript before requesting later actions.",
   "composer.placeholder": "Message your bot",
+  "composer.steerPlaceholder": "Type to steer the running turn",
+  "composer.queuePlaceholder": "Type a message to send after this turn",
+  "composer.steerHint": "Send this into the running turn",
+  "composer.queueHint": "Queue this for the next turn",
+  "composer.queuedForNext": "Queued for the next turn",
+  "composer.removeQueued": "Remove queued message",
+  "composer.retryQueued": "Retry sending queued message",
+  "composer.queueFull": "The follow-up queue is full. Remove a message before adding another.",
+  "composer.messageTooLong": "Messages can be at most 100,000 characters.",
   "composer.label": "Message",
   "composer.attach": "Attach files or media",
   "composer.attachButton": "Attach files",
@@ -793,6 +805,15 @@ export type MessageKey = Exclude<keyof typeof en,
   | "chat.reaction.replyThumbsUp"
   | "chat.reaction.replyThumbsDown"
   | "chat.reaction.sent"
+  | "composer.steerPlaceholder"
+  | "composer.queuePlaceholder"
+  | "composer.steerHint"
+  | "composer.queueHint"
+  | "composer.queuedForNext"
+  | "composer.removeQueued"
+  | "composer.retryQueued"
+  | "composer.queueFull"
+  | "composer.messageTooLong"
 >;
 type EnglishKey = keyof typeof en;
 export const LOCALES = ["en", "he", "de", "es", "fr", "it", "ja", "ko", "nl", "pl", "pt", "ru", "tr", "zh"] as const;
@@ -956,6 +977,7 @@ export const es: Partial<Record<EnglishKey, string>> = {
   "time.now": "ahora",
   "time.minutes": "hace {n} min",
   "time.hours": "hace {n} h",
+  "time.today": "hoy",
   "time.yesterday": "ayer",
   "time.days": "hace {n} días",
   "palette.title": "Ir a",
@@ -1285,6 +1307,7 @@ for (const locale of LOCALES) {
   }
 }
 
+Object.assign(writableCatalogs.en, upstreamEnglish);
 Object.assign(writableCatalogs.he, auditHebrew);
 
 function isLocale(value: string): value is Locale {

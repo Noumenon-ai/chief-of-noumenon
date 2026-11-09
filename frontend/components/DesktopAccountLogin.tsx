@@ -42,7 +42,7 @@ export function DesktopAccountLogin({ status, onSignedIn }: { status: DesktopAcc
 
   return <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center space-y-5 px-5 py-8">
     <ThemeToggle />
-    <div><h1 className="text-2xl font-semibold">Desktop account sign-in</h1><p className="mt-2 text-sm text-muted">This legacy account flow uses suparagent.ai, operated separately from Chief of Noumenon. The self-hosted web app uses your own server passphrase.</p></div>
+    <div><h1 className="text-2xl font-semibold">Desktop account sign-in</h1><p className="mt-2 text-sm text-muted">This account flow uses a separately operated account service. The web app uses your own server passphrase.</p></div>
     {status.profile_bound && <Banner tone="warning">Your bots and conversations on this computer are locked until you sign in with the account linked to it.</Banner>}
     <p className="text-sm text-muted">Your bots and files stay on this computer. Account sign-in does not upload them or connect your email inbox.</p>
     <form className="space-y-4" onSubmit={submit}>

@@ -1,7 +1,9 @@
 {
   "schema_version": 1,
   "community": [
-    "plugins/community/muapi.json"
+    "plugins/community/muapi.json",
+    "plugins/community/pixeltable-docs.json",
+    "plugins/community/youcom.json"
   ],
   "tested": []
 }

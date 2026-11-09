@@ -33,7 +33,7 @@ Your choices can send data to third parties:
   chosen computer. Optional Boat computers use the person's Boat account.
 - Dependency installers, engine/model downloads, marketplace/release checks
   and optional legacy desktop account flows contact their respective suppliers
-  (including GitHub and the separately operated suparagent.ai legacy service).
+  (including GitHub and the separately operated desktop account service).
   These are not Chief of Noumenon's hosted service.
 
 Chat microphone voice typing uses browser speech recognition when available and

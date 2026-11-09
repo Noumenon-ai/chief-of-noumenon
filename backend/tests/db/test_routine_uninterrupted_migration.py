@@ -1,4 +1,5 @@
 import sqlite3
+import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from tests.db.sqlite_helpers import BACKEND_DIR, run_alembic
@@ -25,7 +26,7 @@ def test_existing_routines_and_runs_start_without_uninterrupted_access(tmp_path)
 def test_single_alembic_head_and_offline_upgrade_sql(tmp_path):
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
-    assert ScriptDirectory.from_config(config).get_heads() == ["f7a9d1c3b205"]
+    assert ScriptDirectory.from_config(config).get_heads() == ["b8c1d4e7f206"]
     result = run_alembic(tmp_path / "offline.db", "upgrade", "d7a4c91e5b26:head", "--sql")
     assert result.returncode == 0, result.stderr
     assert "ALTER TABLE routine ADD COLUMN uninterrupted_access" in result.stdout
@@ -42,3 +43,19 @@ def test_existing_threads_gain_app_origin(tmp_path):
     assert result.returncode == 0, result.stderr
     with sqlite3.connect(database) as db:
         assert db.execute("SELECT origin FROM thread").fetchone() == ("app",)
+
+
+@pytest.mark.parametrize("base", ["f7a9d1c3b205", "a1b2c3d4e5f6"])
+def test_merge_upgrades_both_existing_branches(tmp_path, base):
+    database = tmp_path / "merged.db"
+    result = run_alembic(database, "upgrade", base)
+    assert result.returncode == 0, result.stderr
+    with sqlite3.connect(database) as db:
+        db.execute("INSERT INTO thread (owner_id,provider) VALUES ('owner','claude')")
+    result = run_alembic(database, "upgrade", "head")
+    assert result.returncode == 0, result.stderr
+    with sqlite3.connect(database) as db:
+        assert db.execute("SELECT origin FROM thread").fetchone() == ("app",)
+        assert "effort" in {row[1] for row in db.execute("PRAGMA table_info(agent)")}
+        assert {"workflow", "workflow_run"} <= {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert db.execute("SELECT version_num FROM alembic_version").fetchall() == [("b8c1d4e7f206",)]

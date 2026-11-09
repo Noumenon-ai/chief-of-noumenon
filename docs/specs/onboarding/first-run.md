@@ -48,10 +48,10 @@ show Mac permission actions. Connect apps from Settings only when needed.
 
 ## Account-service integration and verification limits
 
-The desktop backend proxies the fixed account-service HTTPS endpoint at
-`https://suparagent.ai/api/v1/accounts/desktop`. The service must implement email
+The desktop backend proxies the existing account-service HTTPS API.
+The service must implement email
 start/verify, session lookup and sign-out before distributing this desktop build.
-Existing hosted password sign-in and standalone owner-passphrase sign-in remain
+Desktop code sign-in and standalone owner-passphrase sign-in remain
 separate paths. Fresh sign-in needs network access; after the short validation
 cache expires, account-service failures show retry and keep the workspace locked.
 

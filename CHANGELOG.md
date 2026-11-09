@@ -2,14 +2,52 @@
 
 ## Unreleased
 
+## 0.8.4 - 2026-11-07
+
 ### Added
 
-- Add a review-first agent migration flow for pasted Grok Bot and Hermes Agent exports, common single-agent JSON, and supported OpenBot databases. Preview the name, title and instructions before import; the new agent uses the normal safe defaults. Connected accounts, credentials, skills, routines, files and chat history are not transferred.
+- Add Pixeltable Docs to the Community marketplace so agents can search and read its public documentation without an account or API key.
+- Improve the visual workflow builder with note and shape toolbars and validation for step connections.
+- Muapi is now a cloud computer provider alongside Boat. In the computer panel choose **Cloud · Muapi** (listed first) or **Cloud · Boat**; each has its own encrypted, write-only API key on this device. Muapi computers are shell-only for now and are billed per second from your Muapi credits while running. Covered by new provider unit tests against a mocked Muapi API; not yet tried against the live Muapi service.
+
+## 0.8.3 - 2026-11-06
+
+### Added
+
+- Add a visual workflow builder with interactive trigger nodes.
 
 ### Changed
 
+- Require Developer ID signing and Apple notarization for tagged macOS release builds. Local Mac packages remain unsigned.
+
+## 0.8.2 - 2026-11-05
+
+### Added
+
+- Save an agent's selected reasoning effort and use it as the default for new conversations from that agent. Conversations can still choose their own effort in the model dialog. No automated tests, typecheck, migration run, app launch, provider turn or package check was run for this source change.
+- Add **Select all available actions** and **Clear all actions** controls to routine connected-app permissions. Bulk selection respects the selected agent's active account access and includes writes only when the agent already has write access.
+- Add local desktop import for prompt-generated JSON and compatible version 1 profile ZIPs with one root JSON profile list. Preview up to 20 profiles and import one at a time as fresh Ask-first agents with the default model and new folders. Optional memory facts require opt-in; standalone `SKILL.md` skills arrive disabled, and supported full persona text can come from `INSTRUCTIONS.md` or `SOUL.md`. The reader skips skills that require supporting files, arbitrary workspace files, routines, avatars and channels; native allowlisting and secret redaction apply. Credentials, connected accounts, tools, executable skill content and history are excluded. Hosted accounts keep the basic single-profile prompt-and-paste flow.
+- Let the phone app create and edit agents. A new **Chat, files and agents** pairing choice gives a phone the `manage` scope (chat and files, plus agents and rooms): create, edit, duplicate, pin and archive agents with the web editor's fields, and create, edit, hold members of and delete rooms. The server refuses the workspace folder, Accept edits, connected apps and the lead role from any device without full access, and a copy made by such a device is never looser than the original.
+
+### Changed
+
+- Let the phone app connect over plain `http://` to an address on your own network (`localhost`, `10.x`, `172.16`-`172.31.x`, `192.168.x`, `169.254.x`, `::1`, `fc00::/7`, `.local`); every other address still needs HTTPS. Pairing and Settings say the connection is not encrypted.
+- Disable the hard active-time answer limit by default so an agent can finish long tasks; the inactivity watchdog still stops stalled turns.
+- Let people message while a turn is running: steer providers that support it, and queue follow-ups for the next turn on other engines.
 - Keep active rooms inside the chat workspace so conversation navigation stays visible. Center and widen the docked composer with the transcript; keep member controls, instructions and export/delete actions in a responsive details panel, with the ordered reply queue and routing reason alongside room work. Add keyboard-accessible `@` suggestions and distinguish duplicate agent names in the member list, queue and speaker labels.
 - Replace the compact Team coordination dialog with a full-screen workspace for agents, delegated work and rooms. Group jobs by attention, running, waiting and finished; show who requested and owns each job, its delegation parent and timing, with existing approval, open and stop controls. Let Work filters wrap on narrow screens so every filter stays visible.
+
+### Fixed
+- Make Markdown links to files inside the conversation's pinned workspace downloadable from the assistant reply. Other local paths stay plain text.
+- Clarify the free desktop app's local Docker option beside the Boat API key prompt in web mode.
+- Handle missing profile titles in migration previews so the local app UI builds successfully.
+- Include the local Whisper and media packages in the backend lockfile so frozen setup succeeds.
+
+- Make the phone app pairing QR name the API address instead of the web page when the web UI is a separate dev server (port 3000 against port 8000), and swap `localhost` for the address the page was opened from; when the backend serves the UI, nothing changes.
+- Reopen first-agent setup after the last agent is deleted, carrying forward the saved engine and model.
+- Save the latest model selection from the chat engine/model dialog, even when the dropdown update and submit happen before the next render.
+- Let a new conversation use a different engine from its selected agent while keeping the agent's instructions and workspace.
+- Allow safe Bash approval rules to save commands with long file paths; the credential check no longer treats Unix paths as raw tokens.
 
 ## 0.8.1 - 2026-11-03
 

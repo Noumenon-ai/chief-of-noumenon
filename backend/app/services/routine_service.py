@@ -54,7 +54,7 @@ DUE_BATCH = 20
 START_BATCH = 10
 # Stricter first: a routine run uses whichever of its own and its agent's
 # modes comes first here.
-_STRICTNESS = ("plan", "ask", "accept_edits")
+_STRICTNESS = ("plan", "ask", "accept_edits", "approve_for_me")
 
 LIMITS = {
     "run_limit_minutes": (1, 240),
@@ -86,6 +86,17 @@ class InvalidRoutine(ValueError):
     def __init__(self, message: str, code: str = "invalid_routine") -> None:
         super().__init__(message)
         self.code = code
+
+
+class SpentSchedule(InvalidRoutine):
+    """A completed one-time routine cannot be re-enabled without updating the date."""
+
+    def __init__(
+        self,
+        message: str = "A completed one-time routine cannot be re-enabled. Edit the date and time to run it again.",
+        code: str = "spent_schedule",
+    ) -> None:
+        super().__init__(message, code)
 
 
 class RoutineBusy(Exception):
@@ -365,6 +376,13 @@ async def update_routine(
         if "timezone" in changes:
             routine.timezone = (changes["timezone"] or "UTC").strip()
         _apply(routine, now)
+        if routine.schedule_kind == "once" and routine.next_run_at is not None:
+            agent = await db.get(Agent, routine.agent_id)
+            if agent is not None and agent.archived_at is None:
+                routine.paused = False
+                routine.paused_reason = None
+            else:
+                routine.next_run_at = None
     await db.flush()
     if commit:
         await db.commit()
@@ -390,6 +408,13 @@ async def set_paused(
     now = now or utcnow()
     await begin_write(db)
     routine = await get_routine(db, owner_id, routine_id, lock=True)
+    if not paused:
+        if routine.schedule_kind == "once":
+            if schedules.next_after("once", routine.schedule_spec, routine.timezone, now) is None:
+                raise SpentSchedule()
+        agent = await db.get(Agent, routine.agent_id)
+        if agent is None or agent.archived_at is not None:
+            raise InvalidRoutine("The assigned agent no longer exists or is archived.", "agent_missing")
     routine.paused = paused
     routine.paused_reason = None
     if paused:

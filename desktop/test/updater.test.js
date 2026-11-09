@@ -13,7 +13,7 @@ const DIGEST = `sha256:${crypto.createHash("sha256").update(BYTES).digest("hex")
 function release(tag, overrides = {}) {
   return {
     tag_name: tag,
-    html_url: `https://github.com/Anil-matcha/open-duet/releases/tag/${tag}`,
+    html_url: `https://github.com/Noumenon-ai/chief-of-noumenon/releases/tag/${tag}`,
     assets: [
       { name: `Chief-of-Noumenon-${tag.slice(1)}-arm64.dmg`, browser_download_url: `https://github.com/x/${tag}.dmg`, size: BYTES.length, digest: DIGEST },
       { name: `Chief-of-Noumenon-Setup-${tag.slice(1)}.exe`, browser_download_url: `https://github.com/x/${tag}.exe`, size: BYTES.length, digest: DIGEST },
@@ -179,4 +179,20 @@ test("update IPC accepts only the app's own main frame", async () => {
   await assert.rejects(handler(good, "rm -rf"), /Unknown/);
   await assert.rejects(handler({ sender: {}, senderFrame: {} }, "state"), /only available/);
   assert.deepEqual(calls, [["check", { manual: true }], ["open", "https://github.com/r"]]);
+});
+
+
+test("update checks use Chief releases and stay quiet when no release exists", async () => {
+  const updater = createUpdater({
+    currentVersion: "0.8.4", platform: "darwin", arch: "arm64",
+    cacheDir: os.tmpdir(), downloadsDir: os.tmpdir(), openFile: async () => "",
+    fetchImpl: async (url) => {
+      assert.equal(url, "https://api.github.com/repos/Noumenon-ai/chief-of-noumenon/releases?per_page=30");
+      return jsonResponse([]);
+    },
+  });
+  const state = await updater.check();
+  assert.equal(state.status, "idle");
+  assert.equal(state.version, undefined);
+  assert.equal(state.notesUrl, undefined);
 });

@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Columns3,
+  GitBranch,
   LayoutGrid,
   Plus,
   Settings,
@@ -26,6 +27,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { AgentRow } from "./AgentRow";
 import { ThreadRow, type RowActions } from "./ThreadRow";
 import { useUnread } from "./useUnread";
+import { useVersionUpdate } from "@/lib/use-version-update";
 
 export type SidebarLive = {
   // The open conversation and its agent are the only ones whose live state this page knows.
@@ -95,6 +97,7 @@ export function Sidebar({
   onNewAgent,
   onOpenRoutines,
   onOpenPlanner,
+  onOpenWorkflows,
   onNavigate,
   collaboration,
 }: {
@@ -116,16 +119,18 @@ export function Sidebar({
   onNewAgent?: () => void;
   onOpenRoutines?: () => void;
   onOpenPlanner?: () => void;
+  onOpenWorkflows?: () => void;
   onNavigate?: () => void;
   collaboration?: React.ReactNode;
 }) {
   const t = useT();
+  const { updateAvailable, latestVersion } = useVersionUpdate();
   const [searching, setSearching] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [showAllAgents, setShowAllAgents] = useState(false);
   const [recentCollapsed, setRecentCollapsed] = useState(false);
   const listed = sidebarAgents(agents);
-  const [agentsCollapsed, setAgentsCollapsed] = useState(() => listed.length === 0);
+  const [agentsCollapsed, setAgentsCollapsed] = useState(false);
   const unread = useUnread(threads, selectedThreadId);
 
   const names = new Map((agents ?? []).map((agent) => [agent.id, agent.name]));
@@ -366,6 +371,19 @@ export function Sidebar({
               <span className="font-medium">{t("sidebar.routines")}</span>
             </button>
           )}
+          {onOpenWorkflows && (
+            <button
+              type="button"
+              onClick={() => {
+                onOpenWorkflows();
+                onNavigate?.();
+              }}
+              className={cn(ROW, "hover:bg-hover/60")}
+            >
+              <GitBranch size={16} aria-hidden="true" className="shrink-0 text-muted" />
+              <span className="font-medium">{t("Workflows")}</span>
+            </button>
+          )}
           <Link href="/apps/" className={cn(ROW, "hover:bg-hover/60")}>
             <LayoutGrid size={16} aria-hidden="true" className="shrink-0 text-muted" />
             <span className="font-medium">{t("sidebar.apps")}</span>
@@ -383,6 +401,14 @@ export function Sidebar({
           >
             <Settings size={16} aria-hidden="true" className="shrink-0 text-muted" />
             <span>{t("sidebar.settings")}</span>
+            {updateAvailable && (
+              <span
+                className="ml-auto inline-flex items-center rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent"
+                title={`Chief of Noumenon ${latestVersion ?? ""} is available`}
+              >
+                {t("updates.available")}
+              </span>
+            )}
           </Link>
           <div className="pr-1">
             <ThemeToggle iconOnly />

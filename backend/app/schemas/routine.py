@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ScheduleKind = Literal["cron", "weekdays", "interval", "once", "manual"]
-ApprovalMode = Literal["ask", "accept_edits", "plan"]
+ApprovalMode = Literal["ask", "accept_edits", "approve_for_me", "plan"]
 
 
 class ConnectedAppGrant(BaseModel):
@@ -146,6 +146,7 @@ class RoutineResponse(BaseModel):
     updated_at: datetime
     # Derived for the client.
     summary: str = ""
+    status: Literal["on", "off", "done"] = "on"
     next_dates: list[datetime] = Field(default_factory=list)
     webhook_enabled: bool = False
     latest_run: RoutineRunResponse | None = None

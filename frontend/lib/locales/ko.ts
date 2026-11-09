@@ -1,6 +1,7 @@
 import type { MessageKey } from "../i18n";
 
 export const ko: Record<MessageKey, string> = {
+  "updates.available": "업데이트 사용 가능",
   "theme.label": "테마",
   "theme.system": "시스템",
   "theme.light": "라이트",
@@ -55,6 +56,7 @@ export const ko: Record<MessageKey, string> = {
   "time.now": "방금",
   "time.minutes": "{n}분 전",
   "time.hours": "{n}시간 전",
+  "time.today": "오늘",
   "time.yesterday": "어제",
   "time.days": "{n}일 전",
   "palette.title": "이동",

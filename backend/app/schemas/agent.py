@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.schemas.computer import ComputerSummary
 
-ApprovalMode = Literal["ask", "accept_edits", "plan"]
+ApprovalMode = Literal["ask", "accept_edits", "approve_for_me", "plan"]
 
 # Standing instructions are capped in bytes, not characters, so the limit means
 # the same thing in every language.
@@ -45,6 +45,7 @@ class AgentCreateRequest(BaseModel):
     # model is checked against it (422 `unknown_model`).
     provider: str = Field(default="claude", min_length=1, max_length=64)
     model: str | None = Field(default=None, max_length=200)
+    effort: str | None = Field(default=None, max_length=64)
     # Omitted: the agent gets its own folder under the default workspace root.
     # Otherwise an absolute path (or `~/...`) to an existing folder.
     workspace_path: str | None = Field(default=None, max_length=1000)
@@ -86,7 +87,7 @@ class AgentCreateRequest(BaseModel):
 
 
 class AgentUpdateRequest(BaseModel):
-    """Change any of these; send at least one. `title`, `description`, `model`
+    """Change any of these; send at least one. `title`, `description`, `model`, `effort`
     and `workspace_path` accept an explicit null to go back to the default."""
 
     make_lead: bool | None = None
@@ -98,6 +99,7 @@ class AgentUpdateRequest(BaseModel):
     # change without `model` goes back to the new engine's default model.
     provider: str | None = Field(default=None, min_length=1, max_length=64)
     model: str | None = Field(default=None, max_length=200)
+    effort: str | None = Field(default=None, max_length=64)
     workspace_path: str | None = Field(default=None, max_length=1000)
     approval_mode: ApprovalMode | None = None
     pinned: bool | None = None
@@ -150,6 +152,7 @@ class AgentResponse(BaseModel):
     instructions: str
     provider: str
     model: str | None
+    effort: str | None = None
     # Null: a thread started from this agent gets its own folder, named by the
     # agent's id, under the default workspace root.
     workspace_path: str | None
@@ -223,6 +226,24 @@ class AgentImportRequest(BaseModel):
     include_notes: bool = True
     # False leaves the file's skills out. Imported skills always start off.
     include_skills: bool = True
+
+
+class AgentMigrationProfilePreview(BaseModel):
+    key: str
+    name: str
+    title: str | None
+    # A normalized native agent package; send it to the existing import API.
+    document: dict
+    skipped: list[str]
+    redacted: list[str]
+
+
+class AgentMigrationPreviewResponse(BaseModel):
+    format: Literal["open-dots.agent-migration"]
+    version: Literal[1]
+    source: Literal["grok", "hermes"]
+    profiles: list[AgentMigrationProfilePreview]
+    skipped: list[str]
 
 
 class OpenBotDatabaseProfilePreview(BaseModel):

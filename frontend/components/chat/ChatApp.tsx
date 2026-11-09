@@ -2,10 +2,12 @@
 import { channelOrder, engineName, previewText } from "@/lib/control-room";
 
 import Link from "next/link";
-import { Monitor, RefreshCw } from "lucide-react";
+import { Monitor, RefreshCw, X } from "lucide-react";
+import { useVersionUpdate } from "@/lib/use-version-update";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api, request, ApiError, isLaunchTokenMissing, type Agent, type Engine, type LocalStatus, type Thread } from "@/lib/api";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { api, request, ApiError, isLaunchTokenMissing, type Agent, type Engine, type LocalStatus, type NotificationPreferences, type Thread } from "@/lib/api";
+import { notifyApprovalNeeded, notifyTurnCompletion } from "@/lib/desktop-notifications";
 import { activeAgents, approvalModeLabel, modelLabel } from "@/lib/agents";
 import { pendingApprovals, type NeedsYouItem } from "@/lib/transcript";
 import { attachmentProblem, conversationUsage, formatCost, formatTokens, MAX_ATTACHMENTS } from "@/lib/everyday";
@@ -20,6 +22,7 @@ import { computerChip } from "@/lib/computers";
 import { AgentsPanel } from "./AgentsPanel";
 import { NotificationBell } from "./NotificationBell";
 import { RoutinesPanel } from "./RoutinesPanel";
+import { WorkflowsPanel } from "@/components/workflows/WorkflowsPanel";
 import { PlannerPanel } from "./PlannerPanel";
 import { EngineModelFields } from "./EngineModelFields";
 import { ComputerView } from "./ComputerPanel";
@@ -40,6 +43,7 @@ import { useChannelSnapshots } from "./useChannelSnapshots";
 import { useT } from "@/lib/use-i18n";
 import { reportPresence } from "@/lib/presence";
 import { readCachedPreference, resolveEngineModel, writeCachedPreference } from "@/lib/engine-selection";
+import { EMPTY_QUEUED_FOLLOW_UPS, loadQueuedFollowUps, MAX_FOLLOW_UP_TEXT_CHARS, MAX_QUEUED_FOLLOW_UPS, newQueuedFollowUp, saveQueuedFollowUps, subscribeQueuedFollowUps, type QueuedFollowUp } from "@/lib/queued-follow-ups";
 import { chatHref, parsePanel, type Panel } from "@/lib/panel";
 import { parseSkillCommand, skillErrorText, toggleSkill, learnableTurn, type SkillSummary, type SkillLearnSource } from "@/lib/skills";
 import { RoomList } from "./RoomList";
@@ -54,6 +58,7 @@ import type { NeedsYouSnapshot } from "@/lib/needs-you";
 
 const LIST_REFRESH_MS = 15_000;
 const COMPUTER_STATUS_REFRESH_MS = 15_000;
+const emptyQueuedFollowUpsSnapshot = () => EMPTY_QUEUED_FOLLOW_UPS;
 
 type Gate =
   | { phase: "loading" }
@@ -156,6 +161,25 @@ export function ChatApp() {
   const setPanel = (next: Panel | null) => router.replace(chatHref(params.toString(), next));
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const subscribeToThreadQueue = useCallback(
+    (subscriber: () => void) => threadId === null ? () => {} : subscribeQueuedFollowUps(threadId, subscriber),
+    [threadId],
+  );
+  const getThreadQueue = useCallback(
+    () => threadId === null ? EMPTY_QUEUED_FOLLOW_UPS : loadQueuedFollowUps(threadId),
+    [threadId],
+  );
+  const threadQueuedFollowUps = useSyncExternalStore(
+    subscribeToThreadQueue,
+    getThreadQueue,
+    emptyQueuedFollowUpsSnapshot,
+  );
+  const currentThreadIdRef = useRef(threadId);
+  useEffect(() => { currentThreadIdRef.current = threadId; }, [threadId]);
+  const queuedDrainRef = useRef(false);
+  const [queuedTurn, setQueuedTurn] = useState<{ threadId: number; turnId: number } | null>(null);
+  const [queuedSending, setQueuedSending] = useState(false);
+  const [failedQueued, setFailedQueued] = useState<{ threadId: number; id: string } | null>(null);
   const [focusComposer, setFocusComposer] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const answeringNow = useRef(false);
@@ -171,6 +195,7 @@ export function ChatApp() {
   // Named agents. null: the backend has none to offer (an older one answers 404),
   // and the page behaves as before.
   const [agents, setAgents] = useState<Agent[] | null>(null);
+  const firstAgentRedirecting = useRef(false);
   const [agentTick, setAgentTick] = useState(0);
   const [agentsShown, setAgentsShown] = useState(false);
   const agentsOpen = agentsShown || params.get("view") === "agents";
@@ -187,8 +212,10 @@ export function ChatApp() {
   const [agentsCreate, setAgentsCreate] = useState(false);
   const [routinesShown, showRoutines] = useState(false);
   const [plannerShown, showPlanner] = useState(false);
+  const [workflowsShown, showWorkflows] = useState(false);
   const routinesOpen = routinesShown || params.get("view") === "routines";
   const plannerOpen = plannerShown || params.get("view") === "planner";
+  const workflowsOpen = workflowsShown || params.get("view") === "workflows";
   const clearBriefTarget = () => {
     const query = new URLSearchParams(params.toString());
     query.delete("view"); query.delete("routine"); query.delete("task");
@@ -196,6 +223,7 @@ export function ChatApp() {
   };
   const setRoutinesOpen = (open: boolean) => { showRoutines(open); if (!open && params.get("view") === "routines") clearBriefTarget(); };
   const setPlannerOpen = (open: boolean) => { showPlanner(open); if (!open && params.get("view") === "planner") clearBriefTarget(); };
+  const setWorkflowsOpen = (open: boolean) => { showWorkflows(open); if (!open && params.get("view") === "workflows") clearBriefTarget(); };
   const [approvalsOpen, setApprovalsOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [todayOpen, setTodayOpen] = useState(false);
@@ -239,13 +267,19 @@ export function ChatApp() {
   const [audioOpen, setAudioOpen] = useState(false);
   // Null selects the lead or the most recently active bot.
   const [newAgentId, setNewAgentId] = useState<number | null>(() => parseThreadId(params.get("agent")));
+  const newAgentIdRef = useRef(newAgentId);
+  useLayoutEffect(() => { newAgentIdRef.current = newAgentId; }, [newAgentId]);
   const [engines, setEngines] = useState<Engine[] | null>(null);
   const cachedPref = readCachedPreference();
   const [newProvider, setNewProvider] = useState(() => params.get("engine") || cachedPref?.provider || "claude");
-  const [newModel, setNewModel] = useState<string | null>(() => params.get("model") || cachedPref?.model || null);
-  const [newEffort, setNewEffort] = useState<string | null>(() => params.get("effort") || cachedPref?.effort || null);
+  const [newProviderOverride, setNewProviderOverride] = useState<string | null>(() => params.get("engine"));
+  const [newModel, setNewModel] = useState<string | null>(() => params.get("model") || (newAgentId === null && params.get("engine") === null ? cachedPref?.model ?? null : null));
+  const [newEffort, setNewEffort] = useState<string | null>(() => params.get("effort") || (newAgentId === null && params.get("engine") === null ? cachedPref?.effort ?? null : null));
 
   const [modelDraft, setModelDraft] = useState<{ threadId: number | null; agentId: number | null; provider: string; model: string | null; effort: string | null } | null>(null);
+  // A dropdown selection can reach the submit click before the parent render commits.
+  const modelDraftRef = useRef<typeof modelDraft>(null);
+  useLayoutEffect(() => { modelDraftRef.current = modelDraft; }, [modelDraft]);
   const [modelBusy, setModelBusy] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
 
@@ -288,7 +322,7 @@ export function ChatApp() {
     api.getEngines().then((items) => {
       if (cancelled) return;
       setEngines(items);
-      if (!params.get("engine") && threadId === null && startingAgentId === null) {
+      if (!params.get("engine") && threadId === null && newAgentIdRef.current === null) {
         setNewProvider((current) => {
           const resolved = resolveEngineModel({ provider: current, model: newModel, effort: newEffort }, items);
           if (resolved.model !== newModel && !params.get("model")) {
@@ -406,6 +440,18 @@ export function ChatApp() {
   }, [ready, agentTick, transcript.runningTurnId]);
 
   useEffect(() => {
+    if (!ready || !admin || agents === null || agents.length > 0 || firstAgentRedirecting.current) return;
+    let cancelled = false;
+    onboarding.get().then((progress) => {
+      if (!cancelled && progress.status === "pending" && !progress.existing_agents) {
+        firstAgentRedirecting.current = true;
+        router.replace("/onboarding/");
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [admin, agents, ready, router]);
+
+  useEffect(() => {
     if (!ready) return;
     let live = true;
     collaboration.team().then(value => { if (live) setTeamState(value); }).catch(() => {});
@@ -420,7 +466,7 @@ export function ChatApp() {
         const target = agents?.find(agent => agent.id === detail.id);
         if (target) { setEditAgent(target); setAgentsCreate(false); setAgentsOpen(true); }
       } else {
-        setNewAgentId(detail.id); setNewModel(null); router.push(`/chat?agent=${detail.id}`); setFocusComposer(true);
+        setNewAgentId(detail.id); setNewProviderOverride(null); setNewModel(null); setNewEffort(null); router.push(`/chat?agent=${detail.id}`); setFocusComposer(true);
       }
     };
     window.addEventListener("open-dots:open-agent", openAgent);
@@ -490,10 +536,106 @@ export function ChatApp() {
     };
   }, [admin, ready, computerAgentId, computerId]);
 
-  const selectedProvider = thread?.provider ?? startingAgent?.provider ?? newProvider;
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences | null>(null);
+  const liveTurnStarted = useRef(false);
+  const lastRunningTurnId = useRef<number | null>(null);
+  const alertedApprovalIds = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    // Notification preferences are owner data; a paired phone never asks for them.
+    if (!admin) return;
+    let alive = true;
+    api.getNotificationPreferences().then((loaded) => {
+      if (alive) setNotificationPrefs(loaded);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [admin]);
+
+  useEffect(() => {
+    // A different conversation starts with no turn in flight; never carry
+    // the previous thread's turn state into it.
+    liveTurnStarted.current = false;
+    lastRunningTurnId.current = null;
+  }, [threadId]);
+
+  useEffect(() => {
+    if (stream.connection === "live" && transcript.runningTurnId !== null && lastRunningTurnId.current === null) {
+      liveTurnStarted.current = true;
+    }
+  }, [stream.connection, transcript.runningTurnId]);
+
+  useEffect(() => {
+    if (transcript.runningTurnId !== null) {
+      lastRunningTurnId.current = transcript.runningTurnId;
+    }
+  }, [transcript.runningTurnId]);
+
+  useEffect(() => {
+    const finishedTurnId = lastRunningTurnId.current;
+    if (transcript.runningTurnId === null && finishedTurnId !== null && liveTurnStarted.current) {
+      liveTurnStarted.current = false;
+      lastRunningTurnId.current = null;
+
+      if (notificationPrefs && notificationPrefs.desktop_enabled) {
+        const turnEndItem = transcript.items.find(
+          (item) => item.kind === "turn_end" && item.turnId === finishedTurnId
+        );
+        const status = (turnEndItem as { status?: string })?.status ?? "completed";
+        const error = (turnEndItem as { error?: string })?.error ?? null;
+
+        const assistantItem = [...transcript.items]
+          .reverse()
+          .find((item) => item.kind === "assistant" && item.turnId === finishedTurnId);
+        const textContent = (assistantItem as { text?: string })?.text ?? null;
+
+        const agentName = threadAgent?.name || "Chief of Noumenon";
+
+        notifyTurnCompletion({
+          agentName,
+          text: textContent,
+          status,
+          error,
+          threadId,
+          prefs: notificationPrefs,
+          onOpenThread: (tid) => router.push(`/chat?thread=${tid}`),
+        });
+      }
+    }
+  }, [transcript.runningTurnId, transcript.items, notificationPrefs, threadAgent, threadId, router]);
+
+  useEffect(() => {
+    if (!liveTurnStarted.current || !notificationPrefs || !notificationPrefs.desktop_enabled) return;
+
+    for (const item of transcript.items) {
+      if (item.kind === "approval" && item.status === "pending") {
+        if (!alertedApprovalIds.current.has(item.approvalId)) {
+          alertedApprovalIds.current.add(item.approvalId);
+          const agentName = threadAgent?.name || "Chief of Noumenon";
+          notifyApprovalNeeded({
+            agentName,
+            summary: item.summary,
+            tool: item.tool,
+            threadId,
+            approvalId: item.approvalId,
+            prefs: notificationPrefs,
+            onOpenThread: (tid) => router.push(`/chat?thread=${tid}`),
+          });
+        }
+      }
+    }
+  }, [transcript.items, notificationPrefs, threadAgent, threadId, router]);
+
+  const { updateAvailable, latestVersion, dismissed: updateDismissed, dismiss: dismissUpdateNotice } = useVersionUpdate();
+
+  const selectedProvider = thread?.provider ?? (startingAgent ? newProviderOverride ?? startingAgent.provider : newProviderOverride ?? newProvider);
   const selectedEngine = engines?.find((engine) => engine.id === selectedProvider);
-  const selectedAgent = threadId === null ? startingAgent : threadAgent?.provider === thread?.provider ? threadAgent : null;
+  const selectedAgent = threadId === null
+    ? (startingAgent?.provider === selectedProvider ? startingAgent : null)
+    : (threadAgent?.provider === thread?.provider ? threadAgent : null);
   const selectedModel = (threadId === null ? newModel : thread?.model) ?? selectedAgent?.model ?? null;
+  const selectedEffort = threadId === null
+    ? newEffort ?? (selectedAgent && (newModel === null || newModel === selectedAgent.model) ? selectedAgent.effort ?? null : null)
+    : thread?.effort ?? null;
   const skillAgent = threadId === null ? startingAgent : threadAgent;
   const skillAgentId = skillAgent?.id ?? null;
   const [skillsTick, setSkillsTick] = useState(0);
@@ -522,6 +664,53 @@ export function ChatApp() {
       working: transcript.runningTurnId !== null,
     },
   } : channelSnapshots;
+  const canMessageDuringRun = stream.threadId === threadId && transcript.runningTurnId !== null && threadId !== null && thread?.kind === "chat" && !waiting;
+  const workingMode = canMessageDuringRun
+    ? selectedEngine?.capabilities.steering ? "steer" as const : "queue" as const
+    : null;
+  const failedQueuedId = failedQueued?.threadId === threadId ? failedQueued.id : null;
+  const queuedTurnPending = queuedTurn?.threadId === threadId &&
+    !transcript.items.some((item) => item.kind === "turn_end" && item.turnId === queuedTurn.turnId);
+
+  const writeQueuedFollowUps = (id: number, items: QueuedFollowUp[]) => {
+    saveQueuedFollowUps(id, items);
+  };
+
+  const enqueueFollowUp = (id: number, text: string): boolean => {
+    const current = loadQueuedFollowUps(id);
+    if (current.length >= MAX_QUEUED_FOLLOW_UPS) return false;
+    writeQueuedFollowUps(id, [...current, newQueuedFollowUp(text)]);
+    return true;
+  };
+
+  useEffect(() => {
+    const first = threadQueuedFollowUps[0];
+    if (
+      threadId === null || stream.threadId !== threadId || !first || stream.connection !== "live" || transcript.runningTurnId !== null ||
+      waiting || sending || queuedSending || queuedTurnPending || failedQueuedId === first.id || queuedDrainRef.current
+    ) return;
+    queuedDrainRef.current = true;
+    setQueuedSending(true);
+    liveTurnStarted.current = true;
+    void api.sendTurn(threadId, first.text).then((turn) => {
+      const current = loadQueuedFollowUps(threadId);
+      if (current[0]?.id === first.id) writeQueuedFollowUps(threadId, current.slice(1));
+      if (currentThreadIdRef.current === threadId) setQueuedTurn({ threadId, turnId: turn.id });
+      if (currentThreadIdRef.current === threadId) {
+        setSendError(null);
+        setFailedQueued(null);
+      }
+    }).catch((err) => {
+      if (currentThreadIdRef.current === threadId) {
+        setSendError(sendErrorText(err));
+        setFailedQueued({ threadId, id: first.id });
+      }
+    }).finally(() => {
+      queuedDrainRef.current = false;
+      setQueuedSending(false);
+    });
+  }, [threadId, threadQueuedFollowUps, stream.connection, transcript.runningTurnId, waiting, sending, queuedSending, queuedTurnPending, failedQueuedId, stream.threadId]);
+
   const totals = conversationUsage(
     transcript.items.flatMap((item) => (item.kind === "turn_end" ? [{ usage: item.usage }] : []))
   );
@@ -538,8 +727,8 @@ export function ChatApp() {
     blockedReason = "Start a new session to continue this conversation.";
   else if (threadId === null && startingAgentId === null) blockedReason = "Set up a bot before sending a message.";
   else if (waiting) blockedReason = `${threadAgent?.name ?? startingAgent?.name ?? "Your bot"} is waiting for your answer above.`;
-  else if (transcript.runningTurnId !== null) blockedReason = "An answer is running…";
-  else if (selectedEngine && !selectedEngine.available) blockedReason = selectedEngine.reason ?? "This engine is unavailable. Check its settings.";
+  else if (transcript.runningTurnId !== null && !canMessageDuringRun) blockedReason = "An answer is running…";
+  else if (selectedEngine && !selectedEngine.available && !canMessageDuringRun) blockedReason = selectedEngine.reason ?? "This engine is unavailable. Check its settings.";
 
   // A signed-out engine gets a button to its sign-in; there may be no terminal to use.
   const signInAction = selectedEngine && !selectedEngine.available && selectedEngine.signed_in === false
@@ -555,6 +744,8 @@ export function ChatApp() {
   if (blockedReason === null && hasAudio && (!audioCapability?.available || !audioConsent)) blockedReason = !audioCapability?.available ? t("chat.audioUnavailable") : t("chat.audioConsentRequired", { provider: audioCapability?.provider_label ?? "OpenAI" });
 
   if (blockedReason === null && audioUrl.trim() && attached.length >= MAX_ATTACHMENTS) blockedReason = `Attach at most ${MAX_ATTACHMENTS} files or audio links to one message.`;
+  if (blockedReason === null && canMessageDuringRun && (attached.length > 0 || audioUrl.trim()))
+    blockedReason = "Remove attachments and audio links to send a text follow-up while this answer is running.";
 
   const sendingReactionReplyDisabled = threadId === null || !ready || stream.connection === "failed" || thread === null ||
     thread.session_state === "broken" || waiting || transcript.runningTurnId !== null ||
@@ -575,6 +766,49 @@ export function ChatApp() {
 
   const send = async () => {
     if (blockedReason || sending || !ready) return;
+    if (transcript.runningTurnId !== null) {
+      if (!canMessageDuringRun || threadId === null) return;
+      const text = draft.trim();
+      if (!text) return;
+      if (text.length > MAX_FOLLOW_UP_TEXT_CHARS) {
+        setSendError(t("composer.messageTooLong"));
+        return;
+      }
+      if (attached.length > 0 || audioUrl.trim()) {
+        setSendError("Remove attachments and audio links before sending a message during a running answer.");
+        return;
+      }
+      setSendError(null);
+      setSending(true);
+      try {
+        let queued = workingMode === "queue";
+        if (!queued) {
+          try {
+            await api.steerThread(threadId, text);
+          } catch (err) {
+            if (err instanceof ApiError && ["steer_unsupported", "turn_not_steerable", "steer_rejected", "no_running_turn"].includes(err.code ?? "")) {
+              queued = true;
+            } else {
+              throw err;
+            }
+          }
+        }
+        if (queued && !enqueueFollowUp(threadId, text)) {
+          setSendError(t("composer.queueFull"));
+          return;
+        }
+        setDraft("");
+        setChosenSkills(() => []);
+        setAttachNotice(null);
+      } catch (err) {
+        setSendError(sendErrorText(err));
+      } finally {
+        setSending(false);
+        setListTick((n) => n + 1);
+      }
+      return;
+    }
+
     // `/name rest` for a skill that is on selects it; anything else is sent as typed.
     const command = parseSkillCommand(draft, agentSkills.filter((s) => s.enabled).map((s) => s.name));
     const usedSkills = command ? toggleSkillOn(chosenSkills, command.name) : chosenSkills;
@@ -588,10 +822,10 @@ export function ChatApp() {
     try {
       let id = threadId;
       if (id === null) {
-        id = (await api.createThread(startingAgentId, startingAgentId !== null ? { model: newModel, effort: newEffort } : { provider: newProvider, model: newModel, effort: newEffort })).id;
+        id = (await api.createThread(startingAgentId, { provider: selectedProvider, model: newModel, effort: newEffort })).id;
         if (startingAgentId === null) {
-          writeCachedPreference({ provider: newProvider, model: newModel, effort: newEffort });
-          if (admin) void api.setEnginePreference({ provider: newProvider, model: newModel, effort: newEffort }).catch(() => {});
+          writeCachedPreference({ provider: selectedProvider, model: newModel, effort: newEffort });
+          if (admin) void api.setEnginePreference({ provider: selectedProvider, model: newModel, effort: newEffort }).catch(() => {});
         }
         // Open it now: the stream replays from the start, so nothing is missed.
         router.replace(`/chat?thread=${id}`);
@@ -600,6 +834,7 @@ export function ChatApp() {
       for (const file of attached) ids.push((await api.uploadAttachment(id, file, audioConsent ? "openai" : undefined, processing.signal)).id);
       if (audioUrl.trim()) ids.push((await api.importAudioUrl(id, audioUrl.trim(), audioConsent ? "openai" : "", processing.signal)).id);
       processing.signal.throwIfAborted();
+      liveTurnStarted.current = true;
       const connectName = !ids.length && !usedSkills.length && session?.scopes.includes("admin")
         ? message.match(/^\s*(?:connect|add)\s+(?:the\s+)?(.+?)(?:\s+app)?[.!]?\s*$/i)?.[1] : undefined;
       if (connectName) {
@@ -629,6 +864,7 @@ export function ChatApp() {
     setSendError(null);
     setSending(true);
     try {
+      liveTurnStarted.current = true;
       await api.sendTurn(threadId!, message);
       return true;
     } catch (err) {
@@ -642,7 +878,7 @@ export function ChatApp() {
 
   const saveModel = async () => {
     if (!modelDraft) return;
-    const target = modelDraft;
+    const target = modelDraftRef.current ?? modelDraft;
     setModelBusy(true); setModelError(null);
     const model = target.model?.trim() || null;
     const effort = target.effort?.trim() || null;
@@ -652,12 +888,18 @@ export function ChatApp() {
         setThreads((previous) => previous?.map((item) => item.id === target.threadId ? updated : item) ?? null);
         setOpenedThread((previous) => previous?.id === target.threadId ? updated : previous);
       } else {
-        setNewProvider(target.provider);
         setNewModel(model);
         setNewEffort(effort);
-        writeCachedPreference({ provider: target.provider, model, effort });
-        if (admin) void api.setEnginePreference({ provider: target.provider, model, effort }).catch(() => {});
+        if (target.agentId !== null) {
+          setNewProviderOverride(target.provider === startingAgent?.provider ? null : target.provider);
+        } else {
+          setNewProvider(target.provider);
+          setNewProviderOverride(null);
+          writeCachedPreference({ provider: target.provider, model, effort });
+          if (admin) void api.setEnginePreference({ provider: target.provider, model, effort }).catch(() => {});
+        }
       }
+      modelDraftRef.current = null;
       setModelDraft((previous) => previous === target ? null : previous);
     } catch (err) { setModelError(err instanceof ApiError ? err.message : "Could not change the model."); }
     finally { setModelBusy(false); }
@@ -759,14 +1001,15 @@ export function ChatApp() {
   const openModelDialog = () => {
     setModelError(null);
     const activeModelId = (threadId === null ? newModel : thread?.model) ?? null;
-    const activeEffort = (threadId === null ? newEffort : thread?.effort) ?? null;
-    setModelDraft({
+    const activeEffort = (threadId === null ? selectedEffort : thread?.effort) ?? null;
+    const draft = {
       threadId,
       agentId: startingAgentId,
       provider: selectedProvider,
       model: activeModelId,
       effort: activeEffort,
-    });
+    };
+    setModelDraft(draft);
   };
 
   const refreshToday = async () => {
@@ -834,7 +1077,7 @@ export function ChatApp() {
           ? {
               label: engineName(selectedProvider, selectedModel),
               disabled: modelBusy || sending || transcript.runningTurnId !== null,
-              onClick: openModelDialog,
+              onClick: () => openModelDialog(),
             }
           : undefined
       }
@@ -890,7 +1133,7 @@ export function ChatApp() {
 
   // Start a conversation: with the given agent, or (no argument) with whatever is chosen now.
   const startChat = (agentId?: number) => {
-    if (agentId !== undefined) { setNewAgentId(agentId); setNewModel(null); }
+    if (agentId !== undefined) { setNewProviderOverride(null); setNewAgentId(agentId); setNewModel(null); setNewEffort(null); }
     setModelDraft(null);
     setFocusComposer(true);
     router.push("/chat");
@@ -920,6 +1163,7 @@ export function ChatApp() {
       collaboration={ready ? <RoomList selected={roomId} onTeam={() => setTeamOpen(true)} onNavigate={() => setDrawerOpen(false)} /> : undefined}
       onOpenRoutines={admin && ready && agents !== null ? () => setRoutinesOpen(true) : undefined}
       onOpenPlanner={admin && ready && agents !== null ? () => setPlannerOpen(true) : undefined}
+      onOpenWorkflows={admin && ready && agents !== null ? () => setWorkflowsOpen(true) : undefined}
       onNavigate={() => { setDrawerOpen(false); setModelDraft(null); }}
     />
   );
@@ -988,24 +1232,56 @@ export function ChatApp() {
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} label={t("header.allTools")}>{sidebar}</Drawer>
       <div className="control-chat relative flex min-w-0 flex-1 flex-col">
       {buildHeader(true)}
+      {updateAvailable && !updateDismissed && (
+        <aside aria-label={t("updates.available")} className="flex justify-center px-4 py-2.5">
+          <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-2.5 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-xs text-ink shadow-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-accent">{t("updates.available")}</span>
+              <span>{t("Chief of Noumenon {version} is available.", { version: latestVersion ?? "" })}</span>
+            </div>
+            <span className="hidden text-muted/60 sm:inline" aria-hidden="true">•</span>
+            <Link
+              href="/settings/#setting-general-updates"
+              className="font-medium text-accent hover:underline"
+            >
+              {t("View in Settings")}
+            </Link>
+            <button
+              type="button"
+              onClick={dismissUpdateNotice}
+              className="ml-0.5 rounded p-0.5 text-muted transition-colors hover:text-ink cursor-pointer"
+              aria-label={t("Dismiss update notice")}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </aside>
+      )}
       {modelDraft && modelDraft.threadId === threadId && (threadId !== null || modelDraft.agentId === startingAgentId) && engines && (
-        <Dialog open onOpenChange={(open) => { if (!open) setModelDraft(null); }} title={t("header.engineModel")} size="sm">
+        <Dialog open onOpenChange={(open) => { if (!open) { modelDraftRef.current = null; setModelDraft(null); } }} title={t("header.engineModel")} size="sm">
           <form onSubmit={(event) => { event.preventDefault(); void saveModel(); }} className="space-y-4">
             <EngineModelFields
               engines={engines}
               provider={modelDraft.provider}
               model={modelDraft.model}
               effort={modelDraft.effort}
-              onChange={(provider, model, effort) => setModelDraft({ ...modelDraft, provider, model, effort: effort ?? null })}
+              onChange={(provider, model, effort) => {
+                const current = modelDraftRef.current ?? modelDraft;
+                if (!current) return;
+                const next = { ...current, provider, model, effort: effort ?? null };
+                modelDraftRef.current = next;
+                setModelDraft(next);
+              }}
               disabled={modelBusy}
-              lockProvider={threadId !== null || startingAgentId !== null}
+              lockProvider={threadId !== null}
               defaultLabel={selectedAgent?.model && selectedAgent.model !== "default" ? `Bot default (${modelLabel(selectedAgent.model)})` : t("audit.botDefault")}
+              hasComputer={startingAgent?.computer != null}
             />
             {threadId !== null && <p className="text-xs text-muted">{t("audit.engineNextMessage")}</p>}
             {modelError && <p role="alert" className="text-sm text-danger">{modelError}</p>}
             <div className="flex flex-wrap items-center gap-2">
               <Button type="submit" variant="primary" disabled={modelBusy}>{modelBusy ? t("audit.saving") : t("audit.useModel")}</Button>
-              <Button disabled={modelBusy} onClick={() => setModelDraft(null)}>{t("common.cancel")}</Button>
+              <Button disabled={modelBusy} onClick={() => { modelDraftRef.current = null; setModelDraft(null); }}>{t("common.cancel")}</Button>
               <Button variant="ghost" disabled={modelBusy} onClick={() => { setModelBusy(true); api.getEngines(true).then(setEngines).catch(() => setModelError("Could not refresh engines.")).finally(() => setModelBusy(false)); }}>{t("audit.checkEngines")}</Button>
             </div>
           </form>
@@ -1026,6 +1302,9 @@ export function ChatApp() {
         <RoutinesPanel key={params.get("routine")} routineId={parseThreadId(params.get("routine"))} agents={agents} onClose={() => setRoutinesOpen(false)} />
       )}
       {admin && plannerOpen && agents !== null && <PlannerPanel key={params.get("task")} taskId={parseThreadId(params.get("task"))} agents={agents} threads={threads ?? []} onClose={() => setPlannerOpen(false)} onOpenRoutines={() => { setPlannerOpen(false); setRoutinesOpen(true); }} />}
+      {admin && workflowsOpen && agents !== null && (
+        <WorkflowsPanel agents={agents} engines={engines ?? []} onClose={() => setWorkflowsOpen(false)} />
+      )}
       {admin && agentsOpen && agents !== null && (
         <AgentsPanel
           agents={agents}
@@ -1035,7 +1314,7 @@ export function ChatApp() {
             setAgentTick(value => value + 1);
             setAgentsOpen(false); setEditAgent(null); setDeleteAgentTarget(null);
             const target = threads?.find(item => item.agent_id === id && !item.archived_at && item.session_state !== "broken");
-            setNewAgentId(id); setNewModel(null); setDraft(t("agentTeam.setupStarter")); setFocusComposer(true);
+            setNewAgentId(id); setNewModel(null); setNewEffort(null); setDraft(t("agentTeam.setupStarter")); setFocusComposer(true);
             router.push(target ? `/chat?thread=${target.id}` : `/chat?agent=${id}`);
           }}
           initialDeleteAgent={deleteAgentTarget}
@@ -1043,6 +1322,7 @@ export function ChatApp() {
           onChanged={() => { setAgentTick((n) => n + 1); setDeleteAgentTarget(null); }}
           onCreated={(agent) => {
             setAgents(current => [...(current ?? []).filter(item => item.id !== agent.id), agent]);
+            setNewEffort(null);
             startChat(agent.id);
           }}
           onDeleted={(id) => {
@@ -1083,6 +1363,7 @@ export function ChatApp() {
               computerId={admin ? threadComputer?.id : undefined}
               onTakeOver={admin ? () => chooseComputer(true) : undefined}
               threadId={threadId}
+              workspacePath={thread?.workspace_path ?? null}
               loading={threadId !== null && thread === null}
               agent={threadAgent ? { id: threadAgent.id, name: threadAgent.name } : startingAgent ? { id: startingAgent.id, name: startingAgent.name } : null}
               emptyAction={admin && choosable.length === 0 && agents !== null ? { label: "Set up your first bot", onClick: () => { setAgentsCreate(true); setAgentsOpen(true); } } : signInAction}
@@ -1129,6 +1410,45 @@ export function ChatApp() {
               <p>{t("chat.transcriptCaveat")}</p>
             </div>
           </Dialog>}
+          {threadId !== null && threadQueuedFollowUps.length > 0 && (
+            <div className="mx-auto mb-1 w-full max-w-3xl px-3" aria-live="polite">
+              <div className="rounded-field border border-line bg-raised px-3 py-2">
+                <p className="text-xs font-medium text-muted">{t("composer.queuedForNext")}</p>
+                <ul className="mt-1 space-y-1">
+                  {threadQueuedFollowUps.map((item) => (
+                    <li key={item.id} className="flex items-start justify-between gap-3 text-sm">
+                      <span className="min-w-0 whitespace-pre-wrap break-words">{item.text}</span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        {failedQueuedId === item.id && (
+                          <button
+                            type="button"
+                            onClick={() => { setSendError(null); setFailedQueued(null); }}
+                            className="cursor-pointer text-xs text-accent underline"
+                          >
+                            {t("composer.retryQueued")}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (failedQueuedId === item.id) {
+                              setFailedQueued(null);
+                              setSendError(null);
+                            }
+                            writeQueuedFollowUps(threadId, threadQueuedFollowUps.filter((queued) => queued.id !== item.id));
+                          }}
+                          aria-label={t("composer.removeQueued")}
+                          className="cursor-pointer text-muted hover:text-ink"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
           <Composer
             onAudioLink={admin ? () => setAudioOpen(true) : undefined}
             draftKey={threadId === null ? `new-${startingAgentId ?? "plain"}` : String(threadId)}
@@ -1137,11 +1457,12 @@ export function ChatApp() {
             value={draft}
             onChange={setDraft}
             onSend={send}
-            sending={sending}
+            sending={sending || queuedSending}
             blockedReason={blockedReason}
             blockedAction={signInAction}
             error={sendError}
             running={transcript.runningTurnId !== null}
+            workingMode={workingMode}
             stopping={stoppingTurn !== null && stoppingTurn === transcript.runningTurnId}
             onStop={stop}
             files={attached}

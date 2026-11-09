@@ -3,7 +3,7 @@ import type { SkillDoc, SkillPreview, SkillSave, SkillSummary, SkillLearnPreview
 import type { TemplateCatalog, TemplateSkill } from "./templates";
 import type { ComposioAccount, ComposioApp, ComposioLink } from "./connected-apps";
 import type { MarketplaceCatalog, MarketplaceConnection, MarketplaceSection, MarketplaceTool } from "./marketplace";
-const API_BASE =
+export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 export function isLocalApiEndpoint(): boolean {
@@ -387,7 +387,7 @@ export type PermissionAsk = {
   answered_at: string | null;
 };
 
-export type ApprovalMode = "ask" | "accept_edits" | "plan";
+export type ApprovalMode = "ask" | "accept_edits" | "approve_for_me" | "plan";
 
 // An agent's own isolated machine (a Docker container) where its turns run
 // their commands and file edits. Older backends never send these fields.
@@ -487,6 +487,7 @@ export type Agent = {
   instructions: string | null;
   provider: string;
   model: string | null;
+  effort?: string | null;
   workspace_path: string | null;
   approval_mode: ApprovalMode;
   pinned?: boolean;
@@ -514,6 +515,23 @@ export type Agent = {
   computer?: ComputerSummary | null;
 };
 
+export type AgentMigrationFileProfilePreview = {
+  key: string;
+  name: string;
+  title: string | null;
+  document: Record<string, unknown>;
+  skipped: string[];
+  redacted: string[];
+};
+
+export type AgentMigrationFilePreview = {
+  format: "open-dots.agent-migration";
+  version: number;
+  source: "grok" | "hermes";
+  profiles: AgentMigrationFileProfilePreview[];
+  skipped: string[];
+};
+
 export type OpenBotDatabaseProfilePreview = {
   key: string;
   name: string;
@@ -535,6 +553,7 @@ export type AgentInput = {
   instructions?: string;
   provider?: string;
   model?: string | null;
+  effort?: string | null;
   workspace_path?: string | null;
   approval_mode?: ApprovalMode;
   pinned?: boolean;
@@ -582,7 +601,7 @@ export type Engine = {
   models: EngineModel[];
   default_model: string | null;
   custom_models: boolean;
-  capabilities: { tools: boolean; approvals: boolean; mcp: boolean; images: boolean; resume: boolean; computers: boolean };
+  capabilities: { tools: boolean; approvals: boolean; mcp: boolean; images: boolean; resume: boolean; computers: boolean; steering?: boolean };
   configurable: boolean;
   can_write_text?: boolean;
   config: Record<string, unknown> | null;
@@ -746,6 +765,7 @@ export type AgentExport = {
 export type Thread = {
   id: number;
   origin?: "app" | "telegram";
+  kind?: string;
   // Present once the backend supports named agents; null for a plain chat.
   agent_id?: number | null;
   title: string | null;
@@ -915,6 +935,7 @@ export type Routine = {
   created_at: string;
   updated_at: string;
   summary: string;
+  status?: "on" | "off" | "done";
   next_dates: string[];
   webhook_enabled: boolean;
   latest_run: RoutineRun | null;
@@ -943,6 +964,110 @@ export type RoutineInput = {
 export type SchedulePreview = { summary: string; next_dates: string[] };
 export type WebhookSecret = { routine: Routine; secret: string; path: string };
 
+
+export type WorkflowStep = {
+  id: string;
+  name: string;
+  type: "action" | "llm" | "agent" | "condition" | "approval" | "end" | "note" | "shape" | "trigger" | "section" | "text";
+  trigger_type?: "manual" | "schedule" | "webhook" | "message";
+  schedule_kind?: "daily" | "hourly" | "weekly" | "monthly" | "cron";
+  schedule_days?: string;
+  schedule_time?: string;
+  schedule_hours?: number;
+  schedule_cron?: string;
+  webhook_url?: string;
+  webhook_secret?: string;
+  message_keyword?: string;
+  agent_id?: number;
+  prompt?: string;
+  text?: string;
+  font_size?: string;
+  shape?: "rectangle" | "circle" | "diamond" | "triangle" | "inverted" | "oval" | "star";
+  tone?: string;
+  ink?: string;
+  font?: string;
+  size?: string | number;
+  align?: string;
+  bold?: boolean;
+  model?: string;
+  effort?: string | null;
+  system_prompt?: string | null;
+  approval_mode?: ApprovalMode;
+  next_step_id?: string | null;
+  target_port?: "text" | "image" | "file";
+  target?: string;
+  operator?: "contains" | "not_contains" | "equals" | "not_equals" | "matches_regex" | "is_empty" | "is_not_empty";
+  value?: string;
+  if_true?: string;
+  if_true_target_port?: "text" | "image" | "file";
+  if_false?: string;
+  if_false_target_port?: "text" | "image" | "file";
+  timeout_minutes?: number;
+  on_approve?: string;
+  on_approve_target_port?: "text" | "image" | "file";
+  on_reject?: string | null;
+  on_reject_target_port?: "text" | "image" | "file";
+  status?: "completed" | "failed";
+  message?: string;
+  color?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+};
+
+export type Workflow = {
+  id: number;
+  owner_id: string;
+  name: string;
+  description: string | null;
+  trigger_type: "manual" | "schedule" | "webhook";
+  trigger_spec: Record<string, unknown>;
+  steps: WorkflowStep[];
+  paused: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkflowRun = {
+  id: number;
+  workflow_id: number;
+  owner_id: string;
+  trigger: string;
+  status: "running" | "waiting_approval" | "completed" | "failed" | "cancelled";
+  current_step_id: string | null;
+  context: Record<string, unknown>;
+  step_states: Record<string, {
+    id: string;
+    name: string;
+    type: string;
+    status: string;
+    output?: string;
+    result?: boolean;
+    branch_taken?: string;
+    decision?: string;
+    notes?: string;
+    prompt?: string;
+    message?: string;
+    started_at?: string;
+    finished_at?: string;
+  }>;
+  pending_approval: {
+    step_id: string;
+    name: string;
+    prompt: string;
+    timeout_minutes: number;
+    on_approve?: string;
+    on_reject?: string | null;
+    requested_at: string;
+  } | null;
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AppNotification = {
   id: number;
   kind: string;
@@ -960,7 +1085,11 @@ export type NotificationPreferences = {
   notify_needs_you: boolean;
   notify_failures: boolean;
   notify_task_due: boolean;
+  notify_turn_completed?: boolean;
   sound_enabled: boolean;
+  quiet_hours_enabled?: boolean;
+  quiet_hours_start?: string;
+  quiet_hours_end?: string;
 };
 
 export const api = {
@@ -1221,10 +1350,17 @@ export const api = {
 
   // A new agent from an agent file; it always starts on "Ask first".
   // 422 invalid_agent_file when the file is not one.
-  importAgent: (document: unknown, includeNotes = true) =>
+  importAgent: (document: unknown, includeNotes = true, includeSkills = false) =>
     request<Agent>("/agents/import", {
       method: "POST",
-      body: JSON.stringify({ document, include_notes: includeNotes }),
+      body: JSON.stringify({ document, include_notes: includeNotes, include_skills: includeSkills }),
+    }),
+
+  previewAgentMigration: (file: File) =>
+    request<AgentMigrationFilePreview>("/agents/import/migration/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: file,
     }),
 
   previewOpenBotDatabase: (file: File) => {
@@ -1237,6 +1373,9 @@ export const api = {
   // as "computers are not available" and keep working. ---
 
   computersHealth: () => request<ComputerHealth>("/computers/health"),
+  muapiCredentialStatus: () => request<{ configured: boolean }>("/computers/muapi-credentials"),
+  saveMuapiCredential: (apiKey: string) => request<{ configured: boolean }>("/computers/muapi-credentials", { method: "PUT", body: JSON.stringify({ api_key: apiKey }) }),
+  deleteMuapiCredential: () => request<void>("/computers/muapi-credentials", { method: "DELETE" }),
   boatCredentialStatus: () => request<{ configured: boolean }>("/computers/boat-credentials"),
   saveBoatCredential: (apiKey: string) => request<{ configured: boolean }>("/computers/boat-credentials", { method: "PUT", body: JSON.stringify({ api_key: apiKey }) }),
   deleteBoatCredential: () => request<void>("/computers/boat-credentials", { method: "DELETE" }),
@@ -1256,7 +1395,7 @@ export const api = {
   releaseBrowserControl: (agentId: number, leaseId: string) => request<ControlSnapshot>(`/agents/${agentId}/browser/control`, { method: "POST", keepalive: true, body: JSON.stringify({ action: "release", lease_id: leaseId }) }),
   browserControlHeartbeat: (agentId: number, leaseId: string) => request<void>(`/agents/${agentId}/browser/control/heartbeat`, { method: "POST", body: JSON.stringify({ lease_id: leaseId }) }),
   computerScreenshot: (id: number) => requestBlobUrl(`/computers/${id}/screenshot`),
-  createAgentComputer: (agentId: number, settings: ComputerSettings & { provider?: "docker" | "boat"; kind?: ComputerKind; start?: boolean } = {}) =>
+  createAgentComputer: (agentId: number, settings: ComputerSettings & { provider?: "docker" | "muapi" | "boat"; kind?: ComputerKind; start?: boolean } = {}) =>
     request<Computer>(`/agents/${agentId}/computer`, { method: "POST", body: JSON.stringify(settings) }),
 
   buildComputerImage: (computerId: number) => request<{ status: string; output: string }>(`/computers/${computerId}/build-image`, { method: "POST" }),
@@ -1307,6 +1446,13 @@ export const api = {
         ...(attachmentIds.length ? { attachment_ids: attachmentIds } : {}),
         ...(skills.length ? { skills } : {}),
       }),
+    }),
+
+  // Send text into the active turn for engines that support live steering.
+  steerThread: (threadId: number, text: string) =>
+    request<{ status: "steered"; turn_id: number }>(`/threads/${threadId}/steer`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
     }),
 
   // Stop the running answer. 202 once Claude was told to stop; the end arrives as
@@ -1463,6 +1609,42 @@ export const api = {
     }),
   enableRoutineWebhook: (id: number) => request<WebhookSecret>(`/routines/${id}/webhook`, { method: "POST" }),
   disableRoutineWebhook: (id: number) => request<Routine>(`/routines/${id}/webhook`, { method: "DELETE" }),
+  // --- Multi-step Workflows ---
+  listWorkflows: () => request<Workflow[]>("/workflows"),
+  getWorkflow: (id: number) => request<Workflow>(`/workflows/${id}`),
+  createWorkflow: (data: Partial<Workflow>) =>
+    request<Workflow>("/workflows", { method: "POST", body: JSON.stringify(data) }),
+  updateWorkflow: (id: number, data: Partial<Workflow>) =>
+    request<Workflow>(`/workflows/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteWorkflow: (id: number) => request<void>(`/workflows/${id}`, { method: "DELETE" }),
+  startWorkflowRun: (id: number, input: Record<string, unknown> = {}, background = false) =>
+    request<WorkflowRun>(`/workflows/${id}/runs`, {
+      method: "POST",
+      body: JSON.stringify({ input, background }),
+    }),
+  listWorkflowRuns: (id: number, limit = 50) =>
+    request<WorkflowRun[]>(`/workflows/${id}/runs?limit=${limit}`),
+  listAllWorkflowRuns: (limit = 50) =>
+    request<WorkflowRun[]>(`/workflows/runs/all?limit=${limit}`),
+  getWorkflowRun: (runId: number) => request<WorkflowRun>(`/workflows/runs/${runId}`),
+  approveWorkflowRun: (runId: number, decision: "approve" | "reject", notes?: string) =>
+    request<WorkflowRun>(`/workflows/runs/${runId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ decision, notes }),
+    }),
+  cancelWorkflowRun: (runId: number) =>
+    request<WorkflowRun>(`/workflows/runs/${runId}/cancel`, { method: "POST" }),
+  runWorkflowStep: (workflowId: number, stepId: string, input: Record<string, unknown> = {}) =>
+    request<{ step_id: string; status: string; output: string }>(
+      `/workflows/${workflowId}/steps/${stepId}/run`,
+      { method: "POST", body: JSON.stringify({ input }) }
+    ),
+  triggerWorkflowWebhook: (id: number, payload: Record<string, unknown> = {}) =>
+    request<WorkflowRun>(`/workflows/${id}/trigger`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   listNotifications: (limit = 30) => request<AppNotification[]>(`/notifications?limit=${limit}`),
   unreadNotifications: () => request<{ unread: number }>("/notifications/unread-count"),
   readNotification: (id: number) => request<void>(`/notifications/${id}/read`, { method: "POST" }),
@@ -1481,6 +1663,11 @@ export const api = {
     return requestForm<UploadedAttachment>(`/threads/${threadId}/attachments`, form, signal);
   },
   audioCapabilities: () => request<{ provider: string; provider_label: string; available: boolean; retention: string }>("/threads/audio/capabilities"),
+  dictateAudio: (file: Blob | File, filename = "recording.webm", signal?: AbortSignal) => {
+    const form = new FormData();
+    form.append("file", file, filename);
+    return requestForm<{ text: string; duration_seconds: number; device: string }>("/threads/audio/dictate", form, signal);
+  },
   importAudioUrl: (threadId: number, url: string, consentProvider: string, signal?: AbortSignal) => request<UploadedAttachment>(`/threads/${threadId}/attachments/audio-url`, { method: "POST", signal, body: JSON.stringify({ url, consent_provider: consentProvider }) }),
   // Object URLs for bytes behind the session (an <img> cannot send the CSRF or
   // launch headers some setups need). The caller revokes them.

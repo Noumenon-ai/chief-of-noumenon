@@ -44,6 +44,19 @@ keeps the saved key for the same URL; changing the URL drops it unless you
 enter a key again. **Forget settings** deletes the configuration and credential.
 For OpenRouter, save an API key. The address is fixed to OpenRouter over HTTPS; configure a proxy with the generic OpenAI-compatible engine.
 
+In **Agents → Model and approvals**, choose a reasoning effort for that agent's
+selected model when the model supports it. New conversations from the agent use
+that effort by default; a conversation's engine/model dialog can override it.
+
+## Messages while an answer is running
+
+The composer stays available during a turn. Engines that advertise live steering
+receive a text message in the running turn; currently Codex uses the app-server
+`turn/steer` request. Other engines queue the text and send it as the next turn
+when the current one ends. Queued messages are kept in this browser profile and
+can be removed before they are sent. Attachments are not included in a mid-turn
+message.
+
 
 Settings forms come from each adapter's `config_fields` and `setup` descriptors.
 Ready engines appear before engines that need setup, including in engine pickers.
@@ -279,6 +292,15 @@ HTTP egress gate is enabled, native command networking is disabled
 outer gate for its commands. App-owned backend bridges keep their existing
 network controls. Otherwise command networking is enabled; DNS resolver access
 is included, but connectivity still depends on the host.
+
+Cursor's **Approve for me** mode passes its native `--auto-review` flag before
+`acp`. Claude's mode uses its native `--permission-mode auto` reviewer
+for local CLI tools. Turns with connected apps, marketplace tools, team tools,
+or computer/browser controls use Ask so those tools keep their app-level approval
+gates. Claude may report that `auto` is unavailable for the selected model or
+account; in that case its normal Ask behavior applies. Engines without a native
+reviewer do not offer this mode and treat a stored/API-supplied value as Ask.
+
 
 Before every engine turn start, the app checks the installed version and obtains
 a preflight result cached by executable identity/version, workspace identity,
@@ -546,3 +568,8 @@ timeout are set above the approval and execution budgets. Durable approval
 expiry is unchanged. Claude, Codex and local/API engines pause their active-work
 clock while the person decides. Stopping a turn still cancels its tools; no
 retry gains an approval from the earlier request.
+
+On protected Linux Codex turns, Chief keeps the verified `con` permission
+profile and the app approval reviewer even when Approve for me is selected.
+Native review remains available on the other supported paths. Connected-app
+writes, computer tools and other app-gated tools always retain their app gates.

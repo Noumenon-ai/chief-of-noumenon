@@ -485,3 +485,13 @@ button:active:not(:disabled) { transform: scale(.98); }
 }
 
 .chat-choice-card { width: fit-content; max-width: 94%; overflow-wrap: anywhere; }
+
+/* Workflow controls extend the existing conversation identity. */
+.workflow-canvas button { min-height: 44px; min-width: 44px; }
+.workflow-canvas header { min-height: 48px; height: auto; flex-wrap: wrap; gap: 8px; }
+.workflow-canvas input:focus-visible, .workflow-canvas textarea:focus-visible,
+.workflow-canvas button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 720px) {
+  .workflow-canvas .ui-dock-main { max-width: calc(100vw - 16px); overflow-x: auto; bottom: max(8px, env(safe-area-inset-bottom)); }
+  .workflow-canvas .ui-dock-left { left: 8px; bottom: 72px; }
+}

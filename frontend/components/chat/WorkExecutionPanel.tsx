@@ -11,6 +11,7 @@ import { ApiError, type Agent } from "@/lib/api";
 import { localDateTime } from "@/lib/planner";
 import { planner, type WorkItem, type WorkRun, type WorkRunInput, type WorkEvent } from "@/lib/planner-api";
 import { browserTimezone } from "@/lib/routines";
+import { approvalModesForProvider } from "@/lib/agents";
 import { EmptyPanel, ErrorState, LoadingState } from "./PanelState";
 
 const control = "w-full rounded-field border border-line bg-surface px-3 py-2 text-sm";
@@ -34,6 +35,7 @@ export function WorkExecutionPanel({ item, agents, onClose, onOpenThread, onRevi
   const [pending, setPending] = useState<WorkRunInput | null>(null);
   const [retrying, setRetrying] = useState(false);
   const timezone = browserTimezone();
+  const availableApprovalModes = approvalModesForProvider(agents.find((agent) => agent.id === agentId)?.provider);
   useEffect(() => {
     let live = true;
     const load = async () => {
@@ -91,13 +93,13 @@ export function WorkExecutionPanel({ item, agents, onClose, onOpenThread, onRevi
           <h3 className="font-medium">{tx(retrying ? "Review a new attempt" : "Start with bot")}</h3>
           {retrying && <p className="text-sm text-warning">{tx("Earlier work may be partly done. Check its conversation and adjust the prompt before trying again.")}</p>}
           <fieldset disabled={busy || !!pending} className="space-y-3">
-            <label htmlFor={`${id}-agent`} className="block text-sm">{tx("Bot")}<Select id={`${id}-agent`} required className={control} value={agentId} onChange={event => setAgentId(Number(event.target.value))}>
+            <label htmlFor={`${id}-agent`} className="block text-sm">{tx("Bot")}<Select id={`${id}-agent`} required className={control} value={agentId} onChange={event => { const nextAgentId = Number(event.target.value); setAgentId(nextAgentId); if (!approvalModesForProvider(agents.find((agent) => agent.id === nextAgentId)?.provider).some((entry) => entry.value === mode)) setMode("ask"); }}>
                 <option value={0} disabled>{tx("Choose a bot")}</option>
                 {agents.filter(agent => !agent.archived_at).map(agent => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
               </Select></label>
             <label htmlFor={`${id}-prompt`} className="block text-sm">{tx("Exact task prompt")}<textarea id={`${id}-prompt`} required maxLength={20000} rows={5} className={control} value={prompt} onChange={event => setPrompt(event.target.value)} /></label>
             <label htmlFor={`${id}-mode`} className="block text-sm">{tx("Approval mode")}<Select id={`${id}-mode`} className={control} value={mode} onChange={event => setMode(event.target.value as WorkRunInput["approval_mode"])}>
-                <option value="ask">{tx("Ask")}</option><option value="accept_edits">{tx("Accept edits")}</option><option value="plan">{tx("Plan")}</option>
+                {availableApprovalModes.map((entry) => <option key={entry.value} value={entry.value}>{tx(entry.label)}</option>)}
               </Select></label>
             <p className="text-xs text-muted">{tx("The stricter of this mode and the bot’s saved mode applies. Review approvals in the execution conversation.")}</p>
             <label htmlFor={`${id}-when`} className="block text-sm">{tx("Run once at ·")}{timezone}{tx("(leave empty to start now)")}<input id={`${id}-when`} type="datetime-local" className={control} value={when} onChange={event => setWhen(event.target.value)} /></label>
@@ -121,7 +123,7 @@ export function WorkExecutionPanel({ item, agents, onClose, onOpenThread, onRevi
             <div className="flex flex-wrap items-center gap-3">
               {run.thread_id && <Link className="text-accent underline" href={`/chat?thread=${run.thread_id}`} onClick={onOpenThread}>{tx("Open execution conversation")}</Link>}
               {activeStates.includes(run.state) && <Button size="sm" disabled={busy} onClick={() => void cancel(run)}>{tx(run.state === "scheduled" || run.state === "queued" ? "Cancel" : "Stop")}</Button>}
-              {!active && !item.archived && ["failed", "cancelled", "interrupted", "missed", "skipped"].includes(run.state) && <Button size="sm" disabled={busy || !!pending} onClick={() => { setAgentId(run.agent_id); setPrompt(run.prompt); setMode(run.approval_mode); setWhen(""); setRetrying(true); }}>{tx("Prepare retry")}</Button>}
+              {!active && !item.archived && ["failed", "cancelled", "interrupted", "missed", "skipped"].includes(run.state) && <Button size="sm" disabled={busy || !!pending} onClick={() => { setAgentId(run.agent_id); setPrompt(run.prompt); setMode(approvalModesForProvider(agents.find((agent) => agent.id === run.agent_id)?.provider).some((entry) => entry.value === run.approval_mode) ? run.approval_mode : "ask"); setWhen(""); setRetrying(true); }}>{tx("Prepare retry")}</Button>}
               {run.state === "completed" && <Button size="sm" disabled={busy} onClick={async () => { setBusy(true); try { await onReview(); } catch (err) { setError(message(err)); } finally { submitting.current = false; setBusy(false); } }}>{tx("Move to Review")}</Button>}
             </div>
           </article>)}

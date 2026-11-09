@@ -60,8 +60,8 @@ def test_every_tool_is_one_fixed_tool_and_writes_are_a_short_list():
         "GMAIL_CREATE_EMAIL_DRAFT": {"gmail_create_draft_reply", "gmail_prepare_checked_reply"}}
 
     writes = {t.name for t in tools.TOOLS if t.kind == "write"}
-    assert writes == {"github_create_issue", "github_comment_on_issue", "github_close_issue", "github_reopen_issue", "github_dispatch_workflow", "github_fork_repository", "github_create_branch", "github_commit_file", "gmail_create_draft_reply", "gmail_send_email", "googlecalendar_create_event", "gmail_prepare_checked_reply"}
-    for word in ("delete", "merge", "push", "force", "settings", "collaborator", "secret", "token"):
+    assert writes == {"github_create_issue", "github_comment_on_issue", "github_close_issue", "github_reopen_issue", "github_dispatch_workflow", "github_merge_pull_request", "github_create_pull_request", "github_fork_repository", "github_create_branch", "github_commit_file", "gmail_create_draft_reply", "gmail_send_email", "googlecalendar_create_event", "gmail_prepare_checked_reply"}
+    for word in ("delete", "push", "force", "settings", "collaborator", "secret", "token"):
         assert not any(word in t.name or word in t.slug.lower() for t in tools.TOOLS), word
 
 
@@ -69,7 +69,7 @@ def test_the_shim_shows_tools_by_level():
     read = {t["name"] for t in tools.mcp_tools({"github": "read"})}
     write = {t["name"] for t in tools.mcp_tools({"github": "write"})}
     assert tools.LIST_ACCOUNTS in read and tools.LIST_ACCOUNTS in write
-    assert read < write and write - read == {"github_create_issue", "github_comment_on_issue", "github_close_issue", "github_reopen_issue", "github_dispatch_workflow", "github_fork_repository", "github_create_branch", "github_commit_file"}
+    assert read < write and write - read == {"github_create_issue", "github_comment_on_issue", "github_close_issue", "github_reopen_issue", "github_dispatch_workflow", "github_merge_pull_request", "github_create_pull_request", "github_fork_repository", "github_create_branch", "github_commit_file"}
     assert [t["name"] for t in tools.mcp_tools({})] == [tools.LIST_ACCOUNTS]
     assert [t["name"] for t in tools.mcp_tools({"github": "admin"})] == [tools.LIST_ACCOUNTS]
     assert all(t["inputSchema"]["additionalProperties"] is False for t in tools.mcp_tools({"github": "write"}))
@@ -101,6 +101,8 @@ O, R = "o", "r"
     ("github_get_file", {"owner": O, "repo": R, "path": "/etc/passwd"}),
     ("github_get_file", {"owner": O, "repo": R, "path": "a\x00b"}),
     ("github_get_file", {"owner": O, "repo": R, "path": ""}),
+    ("github_get_file", {"owner": O, "repo": R, "path": "."}),
+    ("github_get_file", {"owner": O, "repo": R, "path": "./docs"}),
     ("github_get_file", {"owner": O, "repo": R, "path": "x", "ref": "a..b"}),
     ("github_get_file", {"owner": O, "repo": R, "path": "x", "ref": "main; rm"}),
     ("github_list_commits", {"owner": O, "repo": R, "sha": "x" * 201}),
@@ -135,6 +137,7 @@ def test_good_arguments_for_the_new_tools_are_rebuilt_as_given():
     closed = {"owner": O, "repo": R, "issue_number": 7, "state_reason": "not_planned"}
     assert tools.clean_arguments(tool("github_close_issue"), {**closed, "account": "work"}) == (closed, "work")
     assert tools.clean_arguments(tool("github_get_file"), {"owner": O, "repo": R, "path": "docs/guide.md", "ref": "feature/x-1"})[0]["path"] == "docs/guide.md"
+    assert tools.clean_arguments(tool("github_get_file"), {"owner": O, "repo": R})[0]["path"] == ""  # repo root: Composio needs the field
     assert tools.clean_arguments(tool("github_search_issues"), {"q": "repo:o/r is:open label:bug"})[0] == {"q": "repo:o/r is:open label:bug", "per_page": 10}
     assert tools.clean_arguments(tool("github_list_commits"), {"owner": O, "repo": R})[0]["per_page"] == 10
 
@@ -514,3 +517,37 @@ def test_calendar_policy(name, levels, expected):
 
 def test_a_calendar_change_is_never_allowed_in_plan_mode():
     assert composio_policy.automatic(composio_policy.PREFIX + "googlecalendar_create_event", "plan", {"googlecalendar": "write"}) == ("denied", "plan_mode")
+
+
+def test_merge_pull_request_needs_the_approved_head_commit():
+    merge = tool("github_merge_pull_request")
+    ok = {"owner": O, "repo": R, "pull_number": 5, "sha": "a" * 40, "merge_method": "squash"}
+    assert tools.clean_arguments(merge, ok) == (ok, None)
+    for bad in ({k: v for k, v in ok.items() if k != "sha"}, {**ok, "sha": "main"}, {**ok, "merge_method": "fast"}, {**ok, "force": True}):
+        with pytest.raises(Exception):
+            tools.clean_arguments(merge, bad)
+
+
+def test_create_pull_request_only_from_campaign_branches():
+    pr = tool("github_create_pull_request")
+    ok = {"owner": O, "repo": R, "title": "Add MuAPI", "head": "me:campaign/muapi", "base": "main", "body": "Disclosure.", "draft": True}
+    assert tools.clean_arguments(pr, ok) == (ok, None)
+    assert tools.clean_arguments(pr, {**ok, "head": "campaign/x"})[0]["head"] == "campaign/x"
+    for bad in ({**ok, "head": "main"}, {**ok, "head": "me:main"}, {**ok, "head": "campaign/../x"}, {**ok, "base": "a..b"},
+                {k: v for k, v in ok.items() if k != "base"}, {**ok, "maintainer_can_modify": True}):
+        with pytest.raises(Exception):
+            tools.clean_arguments(pr, bad)
+    assert {"github_fork_repository", "github_create_pull_request"} <= set(tools.ROUTINE_WRITE_TOOLS)
+    assert "github_merge_pull_request" not in tools.ROUTINE_WRITE_TOOLS
+
+
+def test_review_reads_are_read_only_and_bound_to_one_pull_request():
+    for name in ("github_list_pull_request_reviews", "github_list_pull_request_review_comments"):
+        t = tool(name)
+        assert t.kind == "read" and t.required == ("owner", "repo", "pull_number")
+        ok = {"owner": O, "repo": R, "pull_number": 7}
+        assert tools.clean_arguments(t, ok)[0]["pull_number"] == 7
+        with pytest.raises(Exception):
+            tools.clean_arguments(t, {**ok, "body": "x"})
+        with pytest.raises(Exception):
+            tools.clean_arguments(t, {"owner": O, "repo": R})

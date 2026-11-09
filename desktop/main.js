@@ -18,6 +18,7 @@ const { layout, packagedLayout } = require("./src/paths");
 const { createKeyStore, KeyStoreError } = require("./src/keystore");
 const { startBackend, backendEnvironment, newToken } = require("./src/backend");
 const { attachTokenTo, lockDown, sameOrigin } = require("./src/origin");
+const { registerExternalLinks } = require("./src/external-links");
 const { registerPathPicker } = require("./src/path-picker");
 const { registerDesktopPermissions } = require("./src/desktop-permissions");
 const { registerGoogleSignIn } = require("./src/google-sign-in");
@@ -133,6 +134,10 @@ async function main() {
   app.setName(mode === "dev" ? "Chief of Noumenon (dev)" : "Chief of Noumenon");
   app.setPath("userData", userData);
 
+  if (process.platform === "win32") {
+    app.setAppUserModelId(app.isPackaged ? "app.opendots.desktop" : process.execPath);
+  }
+
   if (!app.requestSingleInstanceLock()) {
     app.exit(0);
     return;
@@ -181,15 +186,25 @@ async function main() {
         title: payload.title,
         body: typeof payload.body === "string" ? payload.body : "",
         silent: payload.silent === true,
+        icon: hasIcon ? iconPath : undefined,
       });
       notif.on("click", () => {
         if (window && !window.isDestroyed()) {
           if (window.isMinimized()) window.restore();
+          window.show();
           window.focus();
+          if (payload.thread_id != null) {
+            window.webContents.send("open-dots:notification-clicked", { thread_id: payload.thread_id });
+          }
         }
       });
-      notif.show();
-      return true;
+      try {
+        notif.show();
+        return true;
+      } catch (err) {
+        console.error("desktop notification show failed:", err);
+        return false;
+      }
     }
     return false;
   });
@@ -282,6 +297,12 @@ async function main() {
   backendOrigin = started.origin;
   attachTokenTo(window.webContents.session, started.origin, token);
   lockDown(window.webContents, started.origin, window.webContents.session);
+  registerExternalLinks(window.webContents, {
+    Menu,
+    clipboard,
+    openExternal: (url) => shell.openExternal(url),
+    getWindow: () => window,
+  });
   try {
     await window.loadURL(`${started.origin}/chat/`);
   } catch (error) {

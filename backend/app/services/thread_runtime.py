@@ -122,10 +122,6 @@ class AgentArchived(Exception):
     """A new conversation cannot start from an archived agent."""
 
 
-class AgentProviderMismatch(Exception):
-    """The request names a provider other than the agent's."""
-
-
 class SessionNotResettable(Exception):
     """This provider keeps no session of its own, so there is nothing to reset."""
 
@@ -138,6 +134,18 @@ class TurnNotHere(Exception):
     """The thread's turn is running, but not in this process, so this process
     cannot stop it. It ends by itself when its owner finishes, or is interrupted
     when its lease runs out."""
+
+
+class TurnNotSteerable(Exception):
+    """This provider or turn does not accept in-run messages."""
+
+
+class SteerRejected(Exception):
+    """The provider refused an in-run message; it was not delivered."""
+
+
+class SteerIndeterminate(Exception):
+    """The provider did not confirm whether it received an in-run message."""
 
 
 class ProviderUnavailable(Exception):
@@ -732,10 +740,11 @@ class ThreadRuntime:
         db=None,
     ) -> store.Thread:
         """A new thread for this runtime's owner. With `agent_id` the thread is
-        started from that agent: its provider is used and its workspace is
-        pinned now (later edits to the agent's workspace do not move the
-        thread). Raises UnknownProvider, UnknownAgent, AgentArchived,
-        AgentProviderMismatch, or OSError when the agent's folder is gone."""
+        started from that agent: its workspace is pinned now (later edits
+        to the agent's workspace do not move the thread). If provider is
+        omitted, the agent's engine is used; an explicit provider overrides
+        the engine for this conversation only. Raises UnknownProvider,
+        UnknownAgent, AgentArchived, or OSError when the agent's folder is gone."""
         destination_db = db
         agent = None
         if agent_id is not None:
@@ -745,9 +754,9 @@ class ThreadRuntime:
                 raise UnknownAgent(agent_id)
             if agent.archived_at is not None:
                 raise AgentArchived(agent_id)
-            if provider is not None and provider != agent.provider:
-                raise AgentProviderMismatch(provider)
-            provider = agent.provider
+            provider = provider or agent.provider
+            if effort is None and provider == agent.provider and (model is None or model == agent.model):
+                effort = agent.effort
         provider = provider or "claude"
         adapter = self.adapters.get(provider)
         if adapter is None:
@@ -1270,6 +1279,33 @@ class ThreadRuntime:
         run.stop_requested = True
         run.ctx.abort()
         return run.turn_id
+
+    async def steer_turn(self, thread_id: int, text: str) -> int:
+        """Send text into a live provider turn that advertises steering."""
+        run = next((r for r in self._runs.values() if r.thread_id == thread_id), None)
+        if run is None:
+            async with self.session() as db:
+                running = await store.running_turn_id(db, thread_id)
+            if running is None:
+                raise NoRunningTurn(thread_id)
+            raise TurnNotHere(thread_id)
+        adapter = self.adapters.get(run.engine_id)
+        if (
+            adapter is None
+            or not capabilities_of(adapter).steering
+            or run.routine_run_id is not None
+            or (run.gate is not None and run.gate.waiting)
+        ):
+            raise TurnNotSteerable(thread_id)
+        steer = getattr(adapter, "steer_turn", None)
+        if not callable(steer):
+            raise TurnNotSteerable(thread_id)
+        result = await steer(run.turn_id, text)
+        if result == "steered":
+            return run.turn_id
+        if result == "indeterminate":
+            raise SteerIndeterminate(thread_id)
+        raise SteerRejected(thread_id)
 
     async def _provider_status(self, adapter: ProviderAdapter, config: dict | None = None) -> ProviderStatus:
         loop = asyncio.get_running_loop()

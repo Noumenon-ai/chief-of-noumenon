@@ -462,7 +462,7 @@ const he = {
   "Test sent!": "התראת הניסיון נשלחה",
   "Tested": "נבדק",
   "Tested by Chief of Noumenon": "נבדק על ידי Chief of Noumenon",
-  "The file is sent only to the local Chief of Noumenon backend for preview and discarded afterward. Only bot names, titles and role text are returned; memories, skills, routines, connections, messages, credentials, tools and other settings are not imported. This option is unavailable on hosted accounts.": "הקובץ נשלח רק לשרת המקומי לתצוגה מקדימה ונמחק לאחר מכן. רק שמות, תפקידים ותיאורי תפקיד של בוטים מוחזרים. זיכרונות, מיומנויות, שגרות, חיבורים, הודעות, סודות, כלים והגדרות אחרות אינם מיובאים. האפשרות אינה זמינה בחשבונות מתארחים.",
+  "The file is sent only to the local Chief of Noumenon backend for preview and discarded afterward. Only bot names, titles and role text are returned; memories, skills, routines, connections, messages, credentials, tools and other settings are not imported.": "הקובץ נשלח רק לשרת המקומי לתצוגה מקדימה ונמחק לאחר מכן. רק שמות, תפקידים ותיאורי תפקיד של בוטים מוחזרים. זיכרונות, מיומנויות, שגרות, חיבורים, הודעות, סודות, כלים והגדרות אחרות אינם מיובאים.",
   "The following fields will be copied to a new bot. It starts on \"Ask first\" with the default model and its own folder.": "השדות הבאים יועתקו לבוט חדש. הוא מתחיל במצב ״לבקש תחילה״ עם מודל ברירת המחדל ותיקייה משלו.",
   "These are the only tools bots get for": "אלו הכלים היחידים שבוטים מקבלים עבור",
   "This listing is no longer in the current catalog. You can still manage or disconnect the installed copy.": "הכלי אינו מופיע עוד בקטלוג. אפשר עדיין לנהל או לנתק את העותק המותקן.",

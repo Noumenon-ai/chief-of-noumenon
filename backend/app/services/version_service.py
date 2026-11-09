@@ -16,13 +16,38 @@ from typing import Mapping
 
 import httpx
 
-APP_VERSION = "0.8.1"
-RELEASES_URL = "https://api.github.com/repos/Anil-matcha/open-duet/releases?per_page=10"
+APP_VERSION = "0.8.4"
+RELEASES_URL = "https://api.github.com/repos/Noumenon-ai/chief-of-noumenon/releases?per_page=10"
 CACHE_TTL_SECONDS = 3600  # 1 hour in-memory cache
 
 SEMVER_REGEX = re.compile(
     r"^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$"
 )
+
+
+def get_current_version() -> str:
+    """Reads current app version from desktop/package.json or CHANGELOG.md if present, else APP_VERSION."""
+    root = find_project_root()
+    if root:
+        pkg = root / "desktop" / "package.json"
+        if pkg.is_file():
+            try:
+                import json
+                data = json.loads(pkg.read_text(encoding="utf-8"))
+                if isinstance(data.get("version"), str) and data["version"].strip():
+                    return data["version"].strip()
+            except Exception:
+                pass
+        changelog = root / "CHANGELOG.md"
+        if changelog.is_file():
+            try:
+                for line in changelog.read_text(encoding="utf-8").splitlines():
+                    m = re.match(r"^##\s+(\d+\.\d+\.\d+)", line)
+                    if m:
+                        return m.group(1)
+            except Exception:
+                pass
+    return APP_VERSION
 
 
 def parse_version(text: str | None) -> tuple[tuple[int, int, int], list[str]] | None:
@@ -135,10 +160,10 @@ def get_update_command(install_kind: str) -> str:
     if install_kind == "docker":
         return "git pull && docker compose build && docker compose up -d"
     elif install_kind == "service":
-        return "git pull && uv sync && (cd frontend && npm run build) && sudo systemctl restart open-dots"
+        return "git pull && bash scripts/install.sh && systemctl --user restart chief-of-noumenon.service"
     elif install_kind == "git":
-        return "git pull && uv sync && (cd frontend && npm run build)"
-    return "git pull && uv sync && (cd frontend && npm run build)"
+        return "git pull && (cd backend && uv sync --frozen) && (cd frontend && npm ci && npm run build)"
+    return "git pull && (cd backend && uv sync --frozen) && (cd frontend && npm ci && npm run build)"
 
 
 @dataclass
@@ -171,7 +196,7 @@ async def fetch_latest_release(
         resp = await client.get(
             RELEASES_URL,
             headers={
-                "User-Agent": "open-duet-version-checker",
+                "User-Agent": "chief-of-noumenon-version-checker",
                 "Accept": "application/vnd.github.v3+json",
             },
         )
@@ -219,6 +244,7 @@ async def get_version_info(
         if isinstance(cached_info, VersionInfo):
             return cached_info
 
+    current_ver = get_current_version()
     install_kind = detect_install_kind(environ)
     commit = get_git_commit()
     update_command = get_update_command(install_kind)
@@ -226,20 +252,19 @@ async def get_version_info(
     latest_tag, release_url = await fetch_latest_release(client)
 
     if latest_tag:
-        update_available = compare_versions(latest_tag, APP_VERSION) > 0
+        update_available = compare_versions(latest_tag, current_ver) > 0
         latest_version = latest_tag
         notes_url = (
-            release_url
-            or f"https://github.com/Anil-matcha/open-duet/releases/tag/v{latest_tag}"
+            release_url if release_url and release_url.startswith("https://github.com/Noumenon-ai/chief-of-noumenon/releases/") else f"https://github.com/Noumenon-ai/chief-of-noumenon/releases/tag/v{latest_tag}"
         )
     else:
         # If GitHub is unreachable, fallback safely
         latest_version = None
         update_available = False
-        notes_url = "https://github.com/Anil-matcha/open-duet/releases"
+        notes_url = "https://github.com/Noumenon-ai/chief-of-noumenon/releases"
 
     info = VersionInfo(
-        current_version=APP_VERSION,
+        current_version=current_ver,
         commit=commit,
         latest_version=latest_version,
         update_available=update_available,

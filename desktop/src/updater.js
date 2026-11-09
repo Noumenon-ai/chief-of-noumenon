@@ -9,7 +9,7 @@ const path = require("node:path");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 
-const RELEASES_URL = "https://api.github.com/repos/Anil-matcha/open-duet/releases?per_page=30";
+const RELEASES_URL = "https://api.github.com/repos/Noumenon-ai/chief-of-noumenon/releases?per_page=30";
 const ASSET_NAME = /^[A-Za-z0-9._-]{1,120}$/;
 
 function parseVersion(text) {
@@ -94,7 +94,7 @@ function createUpdater({ currentVersion, platform, arch, fetchImpl = fetch, cach
     // A quiet background check keeps what the window shows until it has an answer.
     if (manual) set({ status: "checking", message: undefined });
     try {
-      const response = await fetchImpl(RELEASES_URL, { headers: { Accept: "application/vnd.github+json", "User-Agent": "open-duet-desktop" } });
+      const response = await fetchImpl(RELEASES_URL, { headers: { Accept: "application/vnd.github+json", "User-Agent": "chief-of-noumenon-desktop" } });
       if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
       const newest = newestRelease(await response.json());
       if (!newest || compareVersions(newest.tag_name, currentVersion) <= 0) {
@@ -132,7 +132,7 @@ function createUpdater({ currentVersion, platform, arch, fetchImpl = fetch, cach
       if (!githubHost(asset.browser_download_url)) throw new Error("The installer is not hosted on GitHub.");
       set({ status: "downloading", percent: 0, message: undefined });
       fsImpl.mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
-      const response = await fetchImpl(asset.browser_download_url, { headers: { "User-Agent": "open-duet-desktop" } });
+      const response = await fetchImpl(asset.browser_download_url, { headers: { "User-Agent": "chief-of-noumenon-desktop" } });
       if (!response.ok || !response.body) throw new Error(`GitHub answered ${response.status}`);
       if (response.url && !githubHost(response.url)) throw new Error("The download was redirected away from GitHub.");
       const hash = crypto.createHash("sha256");

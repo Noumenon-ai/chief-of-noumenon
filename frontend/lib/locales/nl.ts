@@ -1,6 +1,7 @@
 import type { MessageKey } from "../i18n";
 
 export const nl: Record<MessageKey, string> = {
+  "updates.available": "Update beschikbaar",
   "theme.label": "Thema",
   "theme.system": "Systeem",
   "theme.light": "Licht",
@@ -55,6 +56,7 @@ export const nl: Record<MessageKey, string> = {
   "time.now": "zojuist",
   "time.minutes": "{n} min geleden",
   "time.hours": "{n} u geleden",
+  "time.today": "vandaag",
   "time.yesterday": "gisteren",
   "time.days": "{n} dagen geleden",
   "palette.title": "Ga naar",

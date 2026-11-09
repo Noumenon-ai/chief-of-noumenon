@@ -20,6 +20,8 @@ import { Markdown } from "./Markdown";
 import { copyToClipboard } from "@/lib/clipboard";
 import { ComputerThumbnail } from "./ComputerThumbnail";
 import { MessageAttachments } from "./Attachments";
+import { formatDateDivider, formatMessageTime } from "@/lib/relative-time";
+export { formatDateDivider, formatMessageTime };
 
 type Item<K extends TranscriptItem["kind"]> = Extract<TranscriptItem, { kind: K }>;
 
@@ -49,12 +51,21 @@ function LongText({ value }: { value: string }) {
   );
 }
 
-// Copies a message's text. Revealed on hover or keyboard focus, and always visible on touch screens.
-export function formatMessageTime(ts?: string | null): string | null {
-  if (!ts) return null;
-  const date = new Date(ts);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleTimeString(typeof document === "undefined" ? undefined : document.documentElement.lang || undefined, { hour: "numeric", minute: "2-digit" });
+
+export function DateDivider({ ts }: { ts: string }) {
+  const t = useT();
+  const label = formatDateDivider(ts, t);
+  if (!label) return null;
+  return (
+    <div className="relative my-3 flex items-center justify-center select-none" role="separator" aria-label={label}>
+      <div className="absolute inset-0 flex items-center" aria-hidden="true">
+        <div className="w-full border-t border-line/60" />
+      </div>
+      <span className="relative rounded-full border border-line bg-surface px-2.5 py-0.5 text-[11px] font-medium text-muted shadow-2xs">
+        {label}
+      </span>
+    </div>
+  );
 }
 
 function CopyButton({ text, className }: { text: string; className?: string }) {
@@ -89,7 +100,8 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
 }
 
 export function UserMessage({ item, threadId = null }: { item: Item<"user">; threadId?: number | null }) {
-  const timeStr = formatMessageTime(item.ts);
+  const t = useT();
+  const timeStr = formatMessageTime(item.ts, t);
   return (
     <div className="group/msg flex flex-col items-end gap-1">
       <MessageAttachments threadId={threadId} items={item.attachments ?? []} />
@@ -125,6 +137,8 @@ export function AssistantMessage({
   reaction = null,
   onReact,
   disabled = false,
+  threadId = null,
+  workspacePath = null,
 }: {
   text: string;
   incomplete?: boolean;
@@ -133,13 +147,15 @@ export function AssistantMessage({
   reaction?: ReactionKind | null;
   onReact?: (reaction: ReactionKind) => void;
   disabled?: boolean;
+  threadId?: number | null;
+  workspacePath?: string | null;
 }) {
   const t = useT();
-  const timeStr = formatMessageTime(ts);
+  const timeStr = formatMessageTime(ts, t);
   return (
     <div className="message-bubble bot-bubble group/msg max-w-full text-[15px] leading-relaxed">
       <div dir="auto">
-      <Markdown text={text} /></div>
+      <Markdown text={text} threadId={live ? null : threadId} workspacePath={live ? null : workspacePath} /></div>
       {live && <span aria-hidden="true" className="animate-pulse text-muted motion-reduce:animate-none">▍</span>}
       {!live && text && (
         <div className="-ml-1 mt-1 flex flex-wrap items-center gap-1.5">

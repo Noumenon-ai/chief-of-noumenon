@@ -21,7 +21,7 @@ import {
   type SchedulePreview,
 } from "@/lib/api";
 import type { ComposioAccount } from "@/lib/connected-apps";
-import { activeAgents, APPROVAL_MODES } from "@/lib/agents";
+import { activeAgents, approvalModesForProvider } from "@/lib/agents";
 import {
   curlExample,
   DAY_LABELS,
@@ -30,6 +30,7 @@ import {
   formatWhen,
   isActiveRun,
   nextRunText,
+  routineStatus,
   runStateLabel,
   runStateTone,
   SCHEDULE_KINDS,
@@ -47,7 +48,7 @@ type RoutineMessageKey = keyof typeof knowledgeRoutinesMessages.en;
 function useRoutineT() {
   const fallback = useT();
   const locale = useLanguageChoice();
-  return useCallback((key: RoutineMessageKey) => knowledgeRoutinesMessages[locale][key] ?? fallback(key), [fallback, locale]);
+  return useCallback((key: RoutineMessageKey) => (knowledgeRoutinesMessages[locale] as Record<string, string>)[key] ?? fallback(key), [fallback, locale]);
 }
 
 const REFRESH_MS = 5_000;
@@ -87,11 +88,14 @@ const ROUTINE_READ_TOOLS = [
     ["github_list_issues", "List repository issues"], ["github_get_issue", "Read an issue"],
     ["github_list_issue_comments", "Read issue comments"], ["github_list_pull_requests", "List pull requests"],
     ["github_get_pull_request", "Read a pull request"], ["github_list_pull_request_files", "List pull request files"],
+    ["github_list_pull_request_reviews", "Read pull request reviews"], ["github_list_pull_request_review_comments", "Read inline review comments"],
     ["github_list_commits", "List commits"], ["github_list_branches", "List branches"],
     ["github_get_file", "Read repository files"], ["github_search_issues", "Search issues and pull requests"],
     ["github_list_workflow_runs", "List workflow runs"],
   ], writes: [
+    ["github_fork_repository", "Fork a public repository"],
     ["github_create_branch", "Create a campaign/ branch"], ["github_commit_file", "Commit one file to a campaign/ branch"],
+    ["github_create_pull_request", "Open a pull request from a campaign/ branch (cannot merge)"],
   ] },
   { app: "gmail", label: "Gmail", tools: [
     ["gmail_fetch_emails", "Search messages"], ["gmail_fetch_message", "Read a message"],
@@ -102,6 +106,10 @@ const ROUTINE_READ_TOOLS = [
   ], writes: [] },
 ] as const;
 
+const ROUTINE_APP_TOOL_NAMES = new Set<string>(ROUTINE_READ_TOOLS.flatMap((group) =>
+  [...group.tools, ...group.writes].map(([tool]) => tool),
+));
+
 function newDraft(agents: Agent[]): Draft {
   return {
     id: null, name: "", agentId: agents[0]?.id ?? null, prompt: "", schedule: emptySchedule(),
@@ -110,11 +118,12 @@ function newDraft(agents: Agent[]): Draft {
   };
 }
 
-function draftOf(routine: Routine): Draft {
+function draftOf(routine: Routine, provider?: string): Draft {
   return {
     id: routine.id, name: routine.name, agentId: routine.agent_id, prompt: routine.prompt,
     schedule: scheduleDraftOf(routine), runLimit: String(routine.run_limit_minutes),
-    approvalMode: routine.approval_mode, approvalWait: String(routine.approval_timeout_minutes),
+    approvalMode: routine.approval_mode === "approve_for_me" && !approvalModesForProvider(provider).some((mode) => mode.value === "approve_for_me") ? "ask" : routine.approval_mode,
+    approvalWait: String(routine.approval_timeout_minutes),
     catchUp: String(routine.catch_up_minutes), retryLimit: String(routine.retry_limit),
     quietReporting: routine.quiet_reporting ?? false,
     retryDelay: String(routine.retry_delay_minutes),
@@ -358,6 +367,35 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
       names.has(grant.tool) ? { ...grant, account_id: accountId } : grant) });
   };
 
+  const setAllRoutineGrants = (selected: boolean) => {
+    if (!draft) return;
+    if (!selected) {
+      setDraft({ ...draft, connectedAppGrants: draft.connectedAppGrants.filter((grant) => !ROUTINE_APP_TOOL_NAMES.has(grant.tool)) });
+      return;
+    }
+    if (!connectedAccounts) return;
+    const agent = agents.find((item) => item.id === draft.agentId);
+    if (!agent) return;
+    const grants = new Map<string, ConnectedAppGrant>(draft.connectedAppGrants.map((grant) => [grant.tool, grant] as const));
+    for (const group of ROUTINE_READ_TOOLS) {
+      const scope = agent.connector_scopes?.[group.app];
+      const hasReadScope = scope === "read" || scope === "write";
+      const allowedIds = agent.connector_account_scopes?.[group.app] ?? [];
+      const available = connectedAccounts.filter((account) => account.toolkit === group.app && account.status === "ACTIVE"
+        && hasReadScope && allowedIds.includes(account.id));
+      if (available.length === 0) continue;
+      const firstAvailable = available[0];
+      if (!firstAvailable) continue;
+      const tools = [...group.tools, ...(scope === "write" ? group.writes : [])];
+      const current = tools.map(([tool]) => grants.get(tool)).find((grant): grant is ConnectedAppGrant => Boolean(grant));
+      const accountId = available.find((account) => account.id === current?.account_id)?.id ?? firstAvailable.id;
+      for (const [tool] of tools) {
+        grants.set(tool, { tool, account_id: accountId });
+      }
+    }
+    setDraft({ ...draft, connectedAppGrants: Array.from(grants.values()) });
+  };
+
   const act = async (work: () => Promise<unknown>, fallback: string) => {
     setBusy(true);
     setError(null);
@@ -385,6 +423,20 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
 
   const agentName = (id: number) => agents.find((agent) => agent.id === id)?.name ?? `Bot ${id}`;
   const heading = draft ? (draft.id === null ? tx("New routine") : tx("Edit routine")) : tx("Routines");
+  const routineAgent = draft ? agents.find((agent) => agent.id === draft.agentId) : undefined;
+  const selectableRoutineToolNames = new Set<string>(routineAgent && connectedAccounts
+    ? ROUTINE_READ_TOOLS.flatMap((group) => {
+      const scope = routineAgent.connector_scopes?.[group.app];
+      const hasReadScope = scope === "read" || scope === "write";
+      const allowedIds = routineAgent.connector_account_scopes?.[group.app] ?? [];
+      const hasAvailableAccount = connectedAccounts.some((account) => account.toolkit === group.app && account.status === "ACTIVE"
+        && hasReadScope && allowedIds.includes(account.id));
+      if (!hasAvailableAccount) return [];
+      return [...group.tools, ...(scope === "write" ? group.writes : [])].map(([tool]) => tool);
+    })
+    : []);
+  const hasRoutineAppGrants = draft?.connectedAppGrants.some((grant) => ROUTINE_APP_TOOL_NAMES.has(grant.tool)) ?? false;
+  const availableApprovalModes = approvalModesForProvider(routineAgent?.provider);
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }} title={heading} size="wide">
@@ -396,7 +448,8 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
             <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void save(); }}>
               <label className="block text-xs text-muted">{tx("Name")}<input aria-label={tx("Routine name")} required maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className={input} />
               </label>
-              <label className="block text-xs text-muted">{tx("Bot")}<Select aria-label={tx("Bot")} value={draft.agentId ?? ""} onChange={(e) => setDraft({ ...draft, agentId: Number(e.target.value) })} className={input}>
+              <label className="block text-xs text-muted">{tx("Bot")}
+                <Select aria-label={tx("Bot")} value={draft.agentId ?? ""} onChange={(e) => { const agentId = Number(e.target.value); const provider = agents.find((agent) => agent.id === agentId)?.provider; setDraft({ ...draft, agentId, approvalMode: approvalModesForProvider(provider).some((mode) => mode.value === draft.approvalMode) ? draft.approvalMode : "ask" }); }} className={input}>
                   {live.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
                 </Select>
               </label>
@@ -414,6 +467,10 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
                 <div>
                   <h3 id="routine-app-access-title" className="text-sm font-medium">{t("knowledgeRoutines.connectedAppAccess")}</h3>
                   <p className="mt-1 text-xs text-muted">{t("knowledgeRoutines.connectedAppAccessHelp")}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button type="button" disabled={selectableRoutineToolNames.size === 0} onClick={() => setAllRoutineGrants(true)} className={button}>{t("knowledgeRoutines.selectAllActions")}</button>
+                    <button type="button" disabled={!hasRoutineAppGrants} onClick={() => setAllRoutineGrants(false)} className={button}>{t("knowledgeRoutines.clearAllActions")}</button>
+                  </div>
                 </div>
                 {connectedAccounts === null ? <p role="status" className="text-xs text-muted">{tx("Loading connected accounts…")}</p> : ROUTINE_READ_TOOLS.map((group) => {
                   const agent = agents.find((item) => item.id === draft.agentId);
@@ -479,7 +536,7 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
                   <label>{tx("Retries after a failure")}<input type="number" min={0} max={3} value={draft.retryLimit} onChange={(e) => setDraft({ ...draft, retryLimit: e.target.value })} className={input} /></label>
                   <label>{tx("Retry after (minutes)")}<input type="number" min={1} max={1440} value={draft.retryDelay} onChange={(e) => setDraft({ ...draft, retryDelay: e.target.value })} className={input} /></label>
                   <label>{tx("Approval mode")}<Select value={draft.approvalMode} onChange={(e) => setDraft({ ...draft, approvalMode: e.target.value as ApprovalMode })} className={input}>
-                      {APPROVAL_MODES.map((mode) => <option key={mode.value} value={mode.value}>{tx(mode.label)}</option>)}
+                      {availableApprovalModes.map((mode) => <option key={mode.value} value={mode.value}>{tx(mode.label)}</option>)}
                     </Select>
                   </label>
                 </div>
@@ -506,12 +563,19 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
                 <ul className="space-y-2">
                   {routines.map((routine) => {
                     const active = isActiveRun(routine.latest_run);
+                    const status = routineStatus(routine);
                     return (
                       <li key={routine.id} className="rounded-md border border-line p-3" aria-label={routine.name}>
                         <div className="flex flex-wrap items-baseline gap-2">
                           <p className="truncate text-sm font-medium">{routine.name}</p>
                           <span className="text-xs text-muted">{agentName(routine.agent_id)}</span>
-                          {routine.paused && <span className="rounded bg-hover px-1.5 text-xs">{tx("paused")}</span>}
+                          {status === "done" ? (
+                            <span className="rounded bg-hover px-1.5 text-xs font-medium text-muted">{tx("Done")}</span>
+                          ) : status === "off" ? (
+                            <span className="rounded bg-hover px-1.5 text-xs font-medium text-muted">{tx("Off")}</span>
+                          ) : (
+                            <span className="rounded bg-success/15 px-1.5 text-xs font-medium text-success">{tx("On")}</span>
+                          )}
                           {routine.webhook_enabled && <span className="rounded bg-hover px-1.5 text-xs">{tx("webhook")}</span>}
                         </div>
                         <p className="text-xs text-muted">{routine.schedule_kind === "manual" ? routine.summary : `${routine.summary} · ${nextRunText(routine)}`}</p>
@@ -534,9 +598,13 @@ export function RoutinesPanel({ agents, onClose, routineId = null }: { agents: A
                           </div>
                         )}
                         <div className="mt-2 flex flex-wrap gap-1">
-                          <button disabled={busy || active} title={active ? tx("A run is in progress") : undefined} onClick={() => void act(() => api.runRoutineNow(routine.id), "Could not start the routine.")} className={button}>{tx("Run now")}</button>
-                          <button disabled={busy} onClick={() => void act(() => (routine.paused ? api.resumeRoutine(routine.id) : api.pauseRoutine(routine.id)), "Could not change the routine.")} className={button}>{routine.paused ? tx("Resume") : tx("Pause")}</button>
-                          <button disabled={busy} onClick={() => { setValidPreviewKey(null); setDraft(draftOf(routine)); }} className={button}>{tx("Edit")}</button>
+                          <button disabled={busy || active} title={active ? "A run is in progress" : undefined} onClick={() => void act(() => api.runRoutineNow(routine.id), "Could not start the routine.")} className={button}>{tx("Run now")}</button>
+                          {status === "done" ? (
+                            <button disabled title={tx("Completed one-time schedule. Edit date and time to re-arm.")} className={button}>{tx("Done")}</button>
+                          ) : (
+                            <button disabled={busy} onClick={() => void act(() => (status === "off" ? api.resumeRoutine(routine.id) : api.pauseRoutine(routine.id)), "Could not change the routine.")} className={button}>{status === "off" ? tx("Turn on") : tx("Turn off")}</button>
+                          )}
+                          <button disabled={busy} onClick={() => { setValidPreviewKey(null); setDraft(draftOf(routine, agents.find((agent) => agent.id === routine.agent_id)?.provider)); }} className={button}>{tx("Edit")}</button>
                           <button disabled={busy} onClick={() => setHistory(routine)} className={button}>{tx("History")}</button>
                           <button disabled={busy} onClick={() => void act(async () => {
                             const result = await api.enableRoutineWebhook(routine.id);

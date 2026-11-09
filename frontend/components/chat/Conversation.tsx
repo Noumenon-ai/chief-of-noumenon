@@ -1,7 +1,9 @@
 "use client";
 
+import { DateDivider } from "./items";
+
 import { ArrowDown } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatReactionReply, isLatestAssistantMessage, loadThreadReactions, saveThreadReaction, type ReactionKind, type ReactionsMap } from "@/lib/reactions";
 import type { Transcript, TranscriptItem } from "@/lib/transcript";
 import { announcement, groupToolRuns, mergeReceipts } from "@/lib/transcript-view";
@@ -33,6 +35,28 @@ import { RoutineChangeCard } from "./RoutineChangeCard";
 import { DelegationCard, AgentCreatedCard, TeamNoticeCard, TeamSetupCard } from "./TeamCards";
 
 const STICK_DISTANCE_PX = 80;
+
+function findDateDividerItemKeys(items: readonly { key: string; [k: string]: unknown }[]): Set<string> {
+  let lastDateKey: string | null = null;
+  const dividerKeys = new Set<string>();
+  for (const item of items) {
+    const ts = "ts" in item && typeof item.ts === "string" ? item.ts : null;
+    if (ts) {
+      const d = new Date(ts);
+      if (!Number.isNaN(d.getTime())) {
+        const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        if (dateKey !== lastDateKey) {
+          lastDateKey = dateKey;
+          dividerKeys.add(item.key);
+        }
+      }
+    }
+  }
+  return dividerKeys;
+}
+
+
+
 
 // Says the few things worth hearing (an approval waiting, a finished answer, a failure) once,
 // in a visually hidden polite region. The transcript itself is not live: it would be re-read on
@@ -70,6 +94,7 @@ export function Conversation({
   undoneRules = [],
   onUndo,
   threadId = null,
+  workspacePath = null,
   emptyHint,
   emptyAction,
   onStarter,
@@ -81,6 +106,7 @@ export function Conversation({
   onTakeOver?: () => void;
   // The conversation the transcript belongs to: attachments are fetched from it.
   threadId?: number | null;
+  workspacePath?: string | null;
   // What to say when there is nothing yet (depends on whether an engine is ready).
   emptyHint?: string;
   onStarter?: (text: string) => void;
@@ -180,6 +206,8 @@ export function Conversation({
     }).catch(() => { /* Generic suggestions remain useful when bots cannot be read. */ });
     return () => controller.abort();
   }, [empty, agentId]);
+  const groupedItems = groupToolRuns(mergeReceipts(transcript.items));
+  const dividerKeys = findDateDividerItemKeys(groupedItems);
   const starters = chatStarters(starterBots && starterBots.agentId === agentId ? starterBots.bots : [], agentId ?? null);
   return (
     <div className="conversation-frame relative flex min-h-0 flex-1 flex-col">
@@ -213,32 +241,34 @@ export function Conversation({
             </div>
           )}
 
-          {groupToolRuns(mergeReceipts(transcript.items)).map((item) => {
+          {groupedItems.map((item) => {
+            const ts = "ts" in item && typeof item.ts === "string" ? item.ts : null;
+            let node: React.ReactNode = null;
             switch (item.kind) {
               case "chat_card":
-                return threadId !== null ? <ChatCard key={item.key} item={item} threadId={threadId} agentId={agent?.id} running={transcript.runningTurnId !== null} /> : null;
+                node = threadId !== null ? <ChatCard key={item.key} item={item} threadId={threadId} agentId={agent?.id} running={transcript.runningTurnId !== null} /> : null; break;
               case "needs_you":
-                return <NeedsYouCard key={item.key} item={item} />;
+                node = <NeedsYouCard key={item.key} item={item} />; break;
               case "team_job":
-                return <DelegationCard key={item.key} item={item} />;
+                node = <DelegationCard key={item.key} item={item} />; break;
               case "team_notice":
-                return <TeamNoticeCard key={item.key} item={item} />;
+                node = <TeamNoticeCard key={item.key} item={item} />; break;
               case "team_setup":
-                return <TeamSetupCard key={item.key} item={item} />;
+                node = <TeamSetupCard key={item.key} item={item} />; break;
               case "routine_change":
-                return <RoutineChangeCard key={item.key} item={item} />;
+                node = <RoutineChangeCard key={item.key} item={item} />; break;
               case "agent_created":
-                return <AgentCreatedCard key={item.key} item={item} />;
+                node = <AgentCreatedCard key={item.key} item={item} />; break;
               case "tool_run":
-                return <ToolRun workspace={workspace} key={item.key} tools={item.tools as Extract<TranscriptItem, { kind: "tool" }>[]} />;
+                node = <ToolRun workspace={workspace} key={item.key} tools={item.tools as Extract<TranscriptItem, { kind: "tool" }>[]} />; break;
               case "user":
-                return <UserMessage key={item.key} item={item} threadId={threadId} />;
+                node = <UserMessage key={item.key} item={item} threadId={threadId} />; break;
               case "assistant": {
                 const canReplyToMessage = !item.incomplete && isLatestAssistantMessage(item.key, transcript.items);
-                return (
+                node = (
                   <AssistantMessage
                     key={item.key}
-                    text={item.text}
+                    text={item.text} threadId={threadId} workspacePath={workspacePath}
                     incomplete={item.incomplete}
                     ts={item.ts}
                     reaction={reactions[item.key] ?? null}
@@ -246,11 +276,12 @@ export function Conversation({
                     disabled={answering !== null || sendingReactionReplyDisabled}
                   />
                 );
+                break;
               }
               case "tool":
-                return <ToolStep workspace={workspace} key={item.key} item={item} />;
+                node = <ToolStep workspace={workspace} key={item.key} item={item} />; break;
               case "approval":
-                return (
+                node = (
                   <ApprovalCard
                     workspace={workspace}
                     botName={agent?.name}
@@ -265,18 +296,19 @@ export function Conversation({
                     undoneRules={undoneRules}
                     onUndo={onUndo}
                   />
-                );
+                ); break;
               case "turn_end":
-                return <TurnEnd key={item.key} item={item} />;
+                node = <TurnEnd key={item.key} item={item} />; break;
               case "session_reset":
-                return <SessionReset key={item.key} item={item} />;
+                node = <SessionReset key={item.key} item={item} />; break;
               case "recalled":
-                return <RecalledChip key={item.key} item={item} />;
+                node = <RecalledChip key={item.key} item={item} />; break;
               case "compacted":
-                return <CompactedMarker key={item.key} item={item} />;
+                node = <CompactedMarker key={item.key} item={item} />; break;
               case "engine_switched":
-                return <EngineSwitched key={item.key} item={item} />;
+                node = <EngineSwitched key={item.key} item={item} />; break;
             }
+            return <Fragment key={item.key}>{dividerKeys.has(item.key) && ts && <DateDivider ts={ts} />}{node}</Fragment>;
           })}
 
           {transcript.typing !== null && transcript.typing !== "" && <AssistantMessage text={transcript.typing} live />}
