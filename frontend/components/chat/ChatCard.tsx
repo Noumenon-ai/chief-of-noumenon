@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { request } from "@/lib/api";
 import type { ChatCardItem } from "@/lib/transcript";
+import { callHref, formatCallNumber } from "@/lib/call-card";
 import { useT } from "@/lib/use-i18n";
 import { useSession } from "@/components/AuthGate";
 import { UserMessage } from "./items";
@@ -23,6 +24,7 @@ export function ChatCard({ item, threadId, agentId, running }: { item: ChatCardI
   const [answered, setAnswered] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+  const [copyStatus, setCopyStatus] = useState("");
   const lock = useRef(false);
   const lastAttempt = useRef<{ choice: number | null; label: string } | null>(null);
   const onConnected = useCallback((connection: AppConnection) => { setAccount(connection); setOpen(false); }, []);
@@ -55,10 +57,31 @@ export function ChatCard({ item, threadId, agentId, running }: { item: ChatCardI
   };
   const receipt = item.answer || answered;
   if (receipt && item.cardKind === "welcome" && receipt !== "Dismissed" && receipt !== t("Dismissed")) return <UserMessage item={{ kind: "user", key: item.key, turnId: null, text: t(receipt), attachments: [] }} threadId={threadId} />;
-  if (receipt) return <p className="rounded-field border border-line px-3 py-2 text-sm" data-testid="answered-card">{item.cardKind === "connect" ? t("Connected") : t(receipt)}</p>;
+  if (receipt && item.cardKind !== "call") return <p className="rounded-field border border-line px-3 py-2 text-sm" data-testid="answered-card">{item.cardKind === "connect" ? t("Connected") : t(receipt)}</p>;
   const choices = item.cardKind === "welcome" ? [t("Connect Gmail"), t("Set up a daily brief"), t("Just chat")] : item.cardKind === "brief" ? [t("Every morning at 8"), t("Not now")] : item.options;
-  const disabled = busy || running || (item.cardKind !== "question" && !admin);
-  return <article className="chat-choice-card space-y-3 rounded-card border border-line bg-surface p-4" aria-label={t(item.cardKind === "connect" ? "Connect app" : item.cardKind === "brief" ? "A daily brief" : item.cardKind === "welcome" ? "Welcome" : "Chat question")} data-testid={`chat-${item.cardKind}`}>
+  const disabled = busy || running || (item.cardKind !== "question" && item.cardKind !== "call" && !admin);
+  const href = callHref(item.phoneNumber);
+  return <article className="chat-choice-card min-w-0 space-y-3 rounded-card border border-line bg-surface p-4" aria-label={t(item.cardKind === "call" ? "Prepared call" : item.cardKind === "connect" ? "Connect app" : item.cardKind === "brief" ? "A daily brief" : item.cardKind === "welcome" ? "Welcome" : "Chat question")} data-testid={`chat-${item.cardKind}`}>
+    {item.cardKind === "call" && <div className="space-y-3 [overflow-wrap:anywhere]">
+      <h2 dir="auto" className="font-semibold">{item.name}</h2>
+      <p dir="ltr" className="text-sm">{formatCallNumber(item.phoneNumber || "")}</p>
+      <p dir="auto" className="text-sm">{item.purpose}</p>
+      <ul className="list-inside list-disc space-y-1 text-sm">{item.talkingPoints?.map((point, index) => <li dir="auto" key={index}>{point}</li>)}</ul>
+      {item.details && <div className="text-sm"><h3 className="font-medium">{t("Details to give")}</h3><p dir="auto">{item.details}</p></div>}
+      <p className="text-sm text-muted">{t("Opens your phone’s dialer. You place the call and talk.")}</p>
+      {href ? <div className="space-y-2">
+        <a href={href} className="inline-flex min-h-11 w-full items-center justify-center rounded-field bg-accent px-4 py-3 text-sm font-medium text-accent-fg hover:opacity-90">{t("Call")}</a>
+        <Button className="min-h-11 w-full" onClick={async () => {
+          try { await navigator.clipboard.writeText(item.phoneNumber!); setCopyStatus(t("Copied")); }
+          catch { setCopyStatus(t("Could not copy the number. Select it and copy.")); }
+        }}>{t("Copy number")}</Button>
+        {copyStatus && <p role="status" className="text-sm">{copyStatus}</p>}
+      </div> : <p className="text-sm text-danger">{t("Invalid phone number. Ask the bot to prepare the card again.")}</p>}
+      {receipt ? <p data-testid="answered-card" className="text-sm">{t(receipt === "Didn't reach them" ? "Didn’t reach them" : receipt)}</p> : <div className="flex flex-wrap gap-2">
+        <Button disabled={disabled} onClick={() => void answer(0, t("Done"))}>{t("Done")}</Button>
+        <Button disabled={disabled} onClick={() => void answer(1, t("Didn’t reach them"))}>{t("Didn’t reach them")}</Button>
+      </div>}
+    </div>}
     {item.cardKind === "welcome" && <>
       <h2 className="font-semibold">{t("Hello, I’m {name}.", { name: item.name })}</h2>
       <p className="text-sm">{t("I can help plan your day, summarize a PDF, or draft a reply. What would you like to do first?")}</p>
@@ -79,7 +102,7 @@ export function ChatCard({ item, threadId, agentId, running }: { item: ChatCardI
         <Button variant="primary" disabled={disabled} onClick={() => void answer(null, t("Connected"))}>{t("Save access and continue")}</Button>
       </> : <Button variant="primary" disabled={disabled || !available} onClick={() => setOpen(true)}>{t("Connect")}</Button>}
       <Dialog focusFirstField open={open} onOpenChange={setOpen} title={`${t("Connect")} ${item.name}`}><LocalApps onlyProvider={item.provider} onConnected={onConnected} onCancel={() => setOpen(false)} /></Dialog>
-    </> : <>
+    </> : item.cardKind !== "call" && <>
       <div className="space-y-2">{choices.map((option, index) => <button type="button" key={index} disabled={disabled} onClick={() => void answer(index, option)} className="flex min-h-11 w-full items-start gap-3 rounded-field border border-line px-3 py-3 text-start text-sm hover:bg-hover disabled:opacity-50"><span className="font-mono" aria-hidden="true">{String.fromCharCode(65 + index)}</span><span dir="auto" className="min-w-0 break-words">{option}</span></button>)}</div>
       {item.cardKind === "question" && <p className="text-sm text-muted">{t("or answer below")}</p>}
       {item.cardKind === "welcome" && <div className="flex justify-end border-t border-line pt-2"><Button size="sm" className="text-xs text-muted" variant="ghost" disabled={disabled} onClick={() => void answer(-1, t("Dismissed"))}>{t("Dismiss")}</Button></div>}

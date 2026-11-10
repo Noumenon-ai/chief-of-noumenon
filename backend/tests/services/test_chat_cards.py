@@ -139,7 +139,7 @@ def test_question_schema_rejects_credentials_and_bad_choices(args):
 def test_cli_and_local_mcp_share_card_definitions(tmp_path):
     from app.team.mcp_server import Server
     assert Server(tmp_path, cards_only=True).tools == definitions()
-    assert {'ask_question', 'suggest_connect', 'offer_daily_brief'} <= {d['name'] for d in Server(tmp_path).tools}
+    assert {'ask_question', 'suggest_connect', 'offer_daily_brief', 'prepare_call'} <= {d['name'] for d in Server(tmp_path).tools}
 
 
 async def test_explicit_connect_request_is_local_catalog_only_and_grants_nothing(rt, monkeypatch):
@@ -157,7 +157,7 @@ async def test_explicit_connect_request_is_local_catalog_only_and_grants_nothing
 def test_card_credential_input_is_redacted_before_durable_events_or_logs():
     from app.computers.native import durable_input
     secret = 'GOCSPX-' + 'a' * 24
-    for name in ('ask_question', 'suggest_connect', 'offer_daily_brief'):
+    for name in ('ask_question', 'suggest_connect', 'offer_daily_brief', 'prepare_call'):
         safe = durable_input('mcp__team__' + name, {'question': secret, 'clientSecret': 'private-client-value'})
         assert secret not in json.dumps(safe)
         assert 'private-client-value' not in json.dumps(safe)
@@ -173,3 +173,101 @@ async def test_greeting_for_first_helper_without_silently_creating_a_team(rt):
         assert await db.scalar(select(Team).where(Team.owner_id == rt.owner_id)) is None
         assert (await store.list_all_events(db, first['thread_id']))[0].data['name'] == rt.agent.name
     rt.send_turn.assert_not_called()
+
+
+CALL = {'phone_number': '+1 305 555 0100', 'name': 'Restaurant', 'purpose': 'Book a table; number supplied by the owner.', 'talking_points': ['Ask for a table for two at 7.'], 'details': 'Booking name: Alex'}
+
+
+@pytest.mark.parametrize(('number', 'normalized'), [('+1 305 555 0100', '+13055550100'), ('(305) 555-0100', '3055550100'), ('0501234567', '0501234567'), ('+1.305.555.0100', '+13055550100'), ('1234567', '1234567'), ('+' + '1' * 15, '+' + '1' * 15)])
+def test_call_normalizes_number(number, normalized):
+    args = {**CALL, 'phone_number': number}
+    assert chat_cards.validate('prepare_call', args)['phone_number'] == normalized
+    assert args['phone_number'] == number
+
+
+@pytest.mark.parametrize('number', ['letters', '123', '3055550100;1', '3055550100#', '*3055550100', '3055550100,1', '3055550100p1', '3055550100w1', '1' * 20, '', '3055550100P1', '3055550100W1', '305+5550100', '++13055550100', 'tel:+13055550100', '１２３４５６７', '3055550100\n', '3055550100\t', '3055550100\x00', '+  ( )', ' ' * 65 + '3055550100', None, 3055550100])
+def test_call_rejects_unsafe_numbers(number):
+    with pytest.raises(ValueError, match='phone_number'):
+        chat_cards.validate('prepare_call', {**CALL, 'phone_number': number})
+
+
+@pytest.mark.parametrize(('field', 'limit'), [('name', 80), ('purpose', 200), ('talking_points', 160), ('details', 300)])
+def test_call_text_bounds(field, limit):
+    def args(value):
+        return {**CALL, field: [value] if field == 'talking_points' else value}
+    chat_cards.validate('prepare_call', args('x' * limit))
+    chat_cards.validate('prepare_call', args('\U00020000' * limit))
+    for value in ['x' * (limit + 1), None, 123, *(['', '   '] if field != 'details' else [])]:
+        with pytest.raises(ValueError, match=field):
+            chat_cards.validate('prepare_call', args(value))
+
+
+@pytest.mark.parametrize('field', ['name', 'purpose', 'talking_points', 'details'])
+@pytest.mark.parametrize('control', ['\n', '\r', '\t', '\0', '\x1b', '\x7f', '\x85', '\u202e', '\u200b', '\ud800'])
+def test_call_text_controls(field, control):
+    value = 'Text' + control
+    with pytest.raises(ValueError, match=field + ' must not contain control characters'):
+        chat_cards.validate('prepare_call', {**CALL, field: [value] if field == 'talking_points' else value})
+
+
+@pytest.mark.parametrize('points', [[], ['x'] * 7, 'Ask', [None]])
+def test_call_point_list_bounds(points):
+    with pytest.raises(ValueError, match='talking_points'):
+        chat_cards.validate('prepare_call', {**CALL, 'talking_points': points})
+
+
+def test_call_required_optional_and_unknown_fields():
+    for field in ['phone_number', 'name', 'purpose', 'talking_points']:
+        with pytest.raises(ValueError, match=field):
+            chat_cards.validate('prepare_call', {k: v for k, v in CALL.items() if k != field})
+    chat_cards.validate('prepare_call', {k: v for k, v in CALL.items() if k != 'details'})
+    chat_cards.validate('prepare_call', {**CALL, 'details': '', 'talking_points': ['Ask'] * 6})
+    with pytest.raises(ValueError):
+        chat_cards.validate('prepare_call', {**CALL, 'url': 'tel:911'})
+
+
+async def test_call_event_payload_and_no_turn_until_outcome(rt):
+    thread, _ = await new_card(rt)
+    async def emit(kind, data):
+        async with rt.session() as db:
+            await store.append_event(db, thread.id, kind, data)
+        return True
+    run = SimpleNamespace(thread_id=thread.id, agent_id=rt.agent.id, ctx=SimpleNamespace(aborted=False, draft_only=False, media_review_only=False, chat_cards_allowed=True), recorder=SimpleNamespace(emit=emit))
+    assert (await chat_cards.suggest(rt, run, 'prepare_call', CALL))['shown']
+    rt.send_turn.assert_not_called()
+    async with rt.session() as db:
+        events = await store.list_all_events(db, thread.id)
+        card = events[-1].data
+        assert events[-1].type == 'chat.card'
+        assert len(card['id']) == 32
+        assert card == {'id': card['id'], 'kind': 'call', **CALL, 'phone_number': '+13055550100'}
+        assert not list(await db.scalars(select(Turn)))
+    for choice in [None, -1, 2]:
+        with pytest.raises(ValueError, match='Choose Done'):
+            await chat_cards.respond(rt, thread.id, card['id'], choice, admin=True)
+
+
+async def test_call_outcome_from_paired_phone_grants_no_configuration(rt):
+    # A call outcome is a plain answer, like a question card: a paired phone may record it.
+    thread, card = await new_card(rt, 'call', **CALL)
+    await chat_cards.respond(rt, thread.id, card['id'], 0)
+    rt.send_turn.assert_awaited_once_with(thread.id, 'Done', card_answer=(card['id'], 'Done'), configuration_allowed=False)
+
+
+@pytest.mark.parametrize(('choice', 'answer'), [(0, 'Done'), (1, "Didn't reach them")])
+async def test_call_outcome_is_persisted_once_and_sent_to_bot(rt, choice, answer):
+    thread, card = await new_card(rt, 'call', **CALL)
+    await chat_cards.respond(rt, thread.id, card['id'], choice, admin=True)
+    rt.send_turn.assert_awaited_once_with(thread.id, answer, card_answer=(card['id'], answer), configuration_allowed=True)
+    async with rt.session() as db:
+        events = await store.list_all_events(db, thread.id)
+        assert [e.data for e in events if e.type == 'chat.card.answered'] == [{'id': card['id'], 'answer': answer}]
+        assert (await db.scalar(select(Turn))).prompt_text == answer
+    with pytest.raises(ValueError):
+        await chat_cards.respond(rt, thread.id, card['id'], choice, admin=True)
+
+
+def test_call_tool_description_requires_source_and_owner_dialing():
+    description = next(d['description'] for d in definitions() if d['name'] == 'prepare_call')
+    for text in ['Never invent', 'owner, his contacts or a web lookup', 'source in purpose or details', 'places the call himself', 'bot never dials or talks']:
+        assert text in description

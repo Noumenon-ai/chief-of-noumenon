@@ -7,6 +7,7 @@
 import type { ThreadEvent } from "./api";
 import type { RecalledNote, RecalledPassage } from "./memory";
 import type { NeedsYouRow } from "./needs-you";
+import { validCallPayload } from "./call-card.ts";
 
 export type ApprovalStatus = "pending" | "allowed" | "denied" | "expired" | "cancelled";
 
@@ -19,7 +20,7 @@ export type TeamJobItem = { kind: "team_job"; key: string; turnId: number | null
 
 export type NeedsYouItem = { kind: "needs_you"; key: string; turnId: number | null; cardId: string; revision: number; title: string; subtitle: string; emptyText: string; more: number; checkedAt?: string; providerCheckedAt?: string; timeZone?: string; sources?: Record<string, string>; rows: NeedsYouRow[] };
 
-export type ChatCardItem = { kind: "chat_card"; key: string; turnId: number | null; cardId: string; cardKind: "question" | "connect" | "welcome" | "brief"; question: string; options: string[]; provider: string; name: string; brief: boolean; answer: string | null };
+export type ChatCardItem = { kind: "chat_card"; key: string; turnId: number | null; cardId: string; cardKind: "question" | "connect" | "welcome" | "brief" | "call"; question: string; options: string[]; provider: string; name: string; brief: boolean; answer: string | null; phoneNumber?: string; purpose?: string; talkingPoints?: string[]; details?: string };
 
 export type TranscriptItem =
   | ChatCardItem
@@ -192,10 +193,12 @@ export function applyEvent(state: Transcript, event: ThreadEvent): Transcript {
 
   switch (event.type) {
     case "chat.card": {
-      if (typeof data.id !== "string" || !/^[0-9a-f]{32}$/.test(data.id) || !["question", "connect", "welcome", "brief"].includes(text(data.kind))) return base;
+      if (typeof data.id !== "string" || !/^[0-9a-f]{32}$/.test(data.id) || !["question", "connect", "welcome", "brief", "call"].includes(text(data.kind))) return base;
       const options = Array.isArray(data.options) ? data.options.filter((v): v is string => typeof v === "string" && v.length > 0 && v.length <= 200) : [];
       if (data.kind === "question" && (options.length < 2 || options.length > 5)) return base;
-      return { ...base, items: [...state.items, { kind: "chat_card", key, turnId: id, cardId: data.id, cardKind: data.kind as ChatCardItem["cardKind"], question: text(data.question), options, provider: text(data.provider), name: text(data.name), brief: data.brief === true, answer: null }] };
+      if (data.kind === "call" && !validCallPayload(data)) return base;
+      const call = data.kind === "call" ? { phoneNumber: text(data.phone_number), purpose: text(data.purpose), talkingPoints: data.talking_points as string[], details: text(data.details) } : {};
+      return { ...base, items: [...state.items, { kind: "chat_card", key, turnId: id, cardId: data.id, cardKind: data.kind as ChatCardItem["cardKind"], question: text(data.question), options, provider: text(data.provider), name: text(data.name), brief: data.brief === true, answer: null, ...call }] };
     }
     case "chat.card.answered":
       return { ...base, items: state.items.map(item => item.kind === "chat_card" && item.cardId === data.id && item.answer === null ? { ...item, answer: text(data.answer) } : item) };

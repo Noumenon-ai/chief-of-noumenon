@@ -38,6 +38,7 @@ before claiming to have erased an instance. Disk deletion is not secure erasure.
 
 Conversation cards use existing thread `Event` rows (`chat.card`,
 `chat.card.answered`, and `user.message` for an explicit connect request).
+Call cards (`prepare_call`) store a normalized phone number, name, purpose, talking points and optional details; the owner opens a `tel:` link and calls himself. Only an explicit outcome answer starts a bot turn. Chat cards are not mirrored to Telegram.
 They store bounded question text/options, a catalog provider/name, a random card
 ID and a person's answer. They contain no API keys, OAuth client fields or tokens.
 They follow the conversation's deletion/export lifecycle. A question answer is

@@ -151,3 +151,33 @@ async def test_question_catalog_and_system_rule_for_every_engine_and_role(engine
     else:
         assert any(t['function']['name'] == 'mcp__team__ask_question' for t in fake.body()['tools'])
         assert QUESTION_RULE in json.dumps(fake.body()['messages'])
+
+
+@pytest.mark.parametrize('engine', ['claude', 'codex', 'api'])
+async def test_prepare_call_tool_emits_normalized_event_and_receives_outcome(engine, sessions, owner, cli, rt, codex, crt, ort, endpoint, monkeypatch):
+    from tests.services.test_chat_cards import CALL
+    monkeypatch.setattr(settings, 'LOCAL_TOOLS_ENABLED', True)
+    runtime = {'claude': rt, 'codex': crt, 'api': ort}[engine]
+    provider = 'openai_compat' if engine == 'api' else engine
+    async with sessions() as db:
+        agent = await agent_store.create_agent(db, owner_id=owner, name='Call helper', provider=provider, memory_enabled=False)
+    thread = await runtime.create_thread(provider=provider, agent_id=agent.id)
+    if engine == 'claude': cli.script({'type': 'tool', 'tool_name': 'mcp__team__prepare_call', 'tool_input': CALL})
+    elif engine == 'codex': codex.plan({'type': 'team', 'server': 'team', 'tool': 'prepare_call', 'arguments': CALL})
+    else: script(endpoint, tool('mcp__team__prepare_call', CALL), delta('Your call is ready.', 'stop'))
+    await runtime.send_turn(thread.id, 'Help me call the restaurant')
+    await finished(sessions, thread.id)
+    events = await events_of(sessions, thread.id)
+    assert not [e for e in events if e.type == 'turn.failed'], [(e.type, e.data) for e in events]
+    cards = [e.data for e in events if e.type == 'chat.card']
+    assert len(cards) == 1
+    assert cards[0] == {'id': cards[0]['id'], 'kind': 'call', **CALL, 'phone_number': '+13055550100'}
+    assert not [e for e in events if e.type == 'chat.card.answered']
+    if engine == 'claude': cli.script({'type': 'chat', 'text': 'Outcome recorded.'})
+    elif engine == 'codex': codex.plan({'type': 'chat', 'text': 'Outcome recorded.'})
+    else: script(endpoint, delta('Outcome recorded.', 'stop'))
+    await chat_cards.respond(runtime, thread.id, cards[0]['id'], 1, admin=True)
+    await finished(sessions, thread.id, 2)
+    events = await events_of(sessions, thread.id)
+    assert [e.data['prompt_text'] for e in events if e.type == 'turn.started'][-1] == "Didn't reach them"
+    assert len([e for e in events if e.type == 'chat.card.answered']) == 1

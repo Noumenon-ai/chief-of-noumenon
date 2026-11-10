@@ -1,5 +1,13 @@
 // Plain interface copy; model and provider text is rendered as text.
 const he = {
+  "Prepared call": "שיחה מוכנה",
+  "Call": "חיוג",
+  "Copy number": "העתקת מספר",
+  "Details to give": "פרטים למסירה",
+  "Didn’t reach them": "לא הצלחתי להשיג אותם",
+  "Opens your phone’s dialer. You place the call and talk.": "פותח את החייגן בטלפון שלכם. אתם מחייגים ומשוחחים.",
+  "Could not copy the number. Select it and copy.": "לא הצלחנו להעתיק את המספר. סמנו אותו והעתיקו.",
+  "Invalid phone number. Ask the bot to prepare the card again.": "מספר הטלפון אינו תקין. בקשו מהבוט להכין את הכרטיס מחדש.",
   "API key or token": "מפתח API או אסימון",
   "API Key": "מפתח API",
 

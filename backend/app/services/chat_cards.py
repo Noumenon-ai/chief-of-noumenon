@@ -1,5 +1,6 @@
 """Conversation suggestions are data, never approval or configuration authority."""
 import re
+import unicodedata
 from uuid import uuid4
 from sqlalchemy import select
 from app.db.models import Agent, AppSetting, Event, Thread
@@ -10,11 +11,45 @@ from app.services import thread_store as store
 from app.services.chat_card_schema import TOOLS, NOTE, definitions
 
 
+def normalize_call_number(value):
+    if not isinstance(value, str) or len(value) > 64 or not re.fullmatch(r'\+?[0-9 ().-]+', value):
+        raise ValueError('phone_number must contain only ASCII digits, an optional leading +, spaces, dashes, dots or parentheses; no extensions or pause characters.')
+    number = re.sub(r'[ ().-]', '', value)
+    if not re.fullmatch(r'\+?[0-9]{7,15}', number):
+        raise ValueError('phone_number must have 7 to 15 digits after formatting is removed. Short codes must be dialed by the owner.')
+    return number
+
+
+def validate_call(args):
+    if not isinstance(args, dict):
+        raise ValueError('prepare_call requires an object with phone_number, name, purpose and talking_points.')
+    number = normalize_call_number(args.get('phone_number'))
+
+    def field(key, value, limit, required=True):
+        if not isinstance(value, str) or len(value) > limit or (required and not value.strip()):
+            raise ValueError(f'{key} must be {"a non-empty" if required else "a"} string of at most {limit} characters.')
+        if any(unicodedata.category(ch) in ('Cc', 'Cf', 'Cs') for ch in value):
+            raise ValueError(f'{key} must not contain control characters.')
+
+    field('name', args.get('name'), 80)
+    field('purpose', args.get('purpose'), 200)
+    points = args.get('talking_points')
+    if not isinstance(points, list) or not 1 <= len(points) <= 6:
+        raise ValueError('talking_points must be a list of 1 to 6 short strings, each at most 160 characters.')
+    for point in points:
+        field('talking_points', point, 160)
+    if 'details' in args:
+        field('details', args['details'], 300, required=False)
+    return {**args, 'phone_number': number}
+
+
 def validate(name, args):
     from app.community_mcp import McpError, validate_arguments
     definition = next((d for d in definitions() if d['name'] == name), None)
     if definition is None:
         raise ValueError('Unknown chat card.')
+    if name == 'prepare_call':
+        args = validate_call(args)
     try:
         validate_arguments(definition['inputSchema'], args)
     except McpError:
@@ -22,6 +57,7 @@ def validate(name, args):
     policy.validate_input(args)
     if name == 'suggest_connect' and not re.fullmatch(r'[a-z0-9_-]{1,200}', args['provider']):
         raise ValueError('Choose an app from the local catalog.')
+    return args
 
 
 async def provider(db, owner, identifier):
@@ -44,7 +80,7 @@ async def add(db, thread_id, data, turn_id=None):
 
 
 async def suggest(rt, run, name, args):
-    validate(name, args)
+    args = validate(name, args)
     if run.ctx.aborted or run.ctx.draft_only or run.ctx.media_review_only or not getattr(run.ctx, 'chat_cards_allowed', False):
         raise ValueError('This turn cannot suggest cards.')
     async with rt.session() as db:
@@ -59,6 +95,8 @@ async def suggest(rt, run, name, args):
                 return {'shown': False, 'message': 'Already offered. Do not offer again.'}
             await prefs.put_value(db, rt.owner_id, section, {'offered': True})
             card = {'kind': 'brief'}
+        elif name == 'prepare_call':
+            card = {'kind': 'call', **args}
         elif app:
             card = {'kind': 'connect', 'provider': app['service'], 'name': app['displayName']}
         else:
@@ -149,12 +187,16 @@ async def respond(rt, thread_id, identifier, choice, connection_id=None, timezon
             if await store.running_turn_id(db, thread_id):
                 raise ValueError('Wait for the bot to finish before answering.')
             kind = card['kind']
-            if kind != 'question' and not admin:
+            if kind not in ('question', 'call') and not admin:
                 raise PermissionError('Open this card in your owner browser.')
             if kind == 'question':
                 if choice is None or choice < 0 or choice >= len(card['options']):
                     raise ValueError('Choose one of the answers.')
                 answer = card['options'][choice]
+            elif kind == 'call':
+                if choice not in (0, 1):
+                    raise ValueError('Choose Done or Didn\'t reach them.')
+                answer = 'Done' if choice == 0 else "Didn't reach them"
             elif kind == 'connect':
                 await provider(db, rt.owner_id, card['provider'])
                 grants = await connector.grants(db, rt.owner_id, thread.agent_id)
@@ -195,7 +237,7 @@ async def respond(rt, thread_id, identifier, choice, connection_id=None, timezon
                             break
             else:
                 raise ValueError('Unknown card.')
-        if kind in ('question', 'connect'):
+        if kind in ('question', 'connect', 'call'):
             # The card answer and new turn are persisted in one transaction. A
             # double tap, reconnect or concurrent request can start only one turn.
             await rt.send_turn(thread_id, answer, card_answer=(identifier, answer), configuration_allowed=admin)
